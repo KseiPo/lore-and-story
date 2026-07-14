@@ -181,9 +181,23 @@ both are valid and the bridge treats them the same.
 # <Scene Title>
 <!-- scene ⇄ passage: "Selena - Echoes of the Past" · lang: en -->
 
-Plain readable prose. Dialogue as normal lines, no SugarCube macros,
-no HTML, no game logic.
+Plain readable prose. No SugarCube macros, no HTML, no game logic —
+twee exists only in the final passages.
 ```
+
+**Prose conventions** (enforced across lore 2026-07-14):
+
+- Dialogue: `Name (emotion): phrase.` — e.g. `Селена (спокойно): Иногда
+  техника чувствует, когда на неё злятся.` Emotion is optional.
+- Inner monologue: `Мысль: …` (RU) / `*Thought:* …` (EN).
+- Variable placeholders: readable square brackets — `[имя героя]`,
+  `[награда]`, `[станция назначения]` — never `<<=$var>>`.
+- Player choices: bold text, optionally with the target passage as a note —
+  `**Начать атаку**`, `**Перелезть** *(→ At Spaceport)*`.
+- Authoring conditionals: em-dash markers — `— если игрок знаком с доктором
+  Джулией — … — иначе — … — конец условия —`.
+- `[[Wikilinks]]` are reserved for lore entity references (cards/overviews);
+  they are never passage jumps.
 
 - **Bilingual scenes are paired files:** `echoes-of-the-past.ru.md` +
   `echoes-of-the-past.en.md` (decision 2026-07-14). A missing `.en.md` is a
