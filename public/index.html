@@ -2,37 +2,61 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Lore &amp; Story — flow POC</title>
+<title>Lore &amp; Story — POC</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
   <h1>Lore &amp; Story <span class="badge">POC</span></h1>
-  <input id="search" type="search" placeholder="Search passages… (Enter = zoom to hit)">
-  <label class="toggle"><input type="checkbox" id="storyOnly"> <span>[story] tag only</span></label>
-  <select id="rankdir" title="Layout direction">
-    <option value="TB">Layout: top→down</option>
-    <option value="LR">Layout: left→right</option>
-  </select>
-  <button id="fit" title="Fit graph to view">Fit</button>
+  <nav id="tabs">
+    <button data-view="story" class="active">Story flow</button>
+    <button data-view="lore">Lore</button>
+  </nav>
+  <span class="controls" id="storyControls">
+    <input id="search" type="search" placeholder="Search passages…">
+    <label class="toggle"><input type="checkbox" id="storyOnly"> <span>[story] only</span></label>
+    <select id="rankdir" title="Layout direction">
+      <option value="TB">top→down</option>
+      <option value="LR">left→right</option>
+    </select>
+    <button id="fit">Fit</button>
+  </span>
+  <span class="controls hidden" id="loreControls">
+    <input id="loreSearch" type="search" placeholder="Search lore…">
+    <label class="toggle"><input type="checkbox" id="showMentions" checked> <span>mention edges</span></label>
+    <label class="toggle"><input type="checkbox" id="showSubs" checked> <span>sub-entries</span></label>
+    <button id="loreFit">Fit</button>
+  </span>
   <button id="rescan" title="Re-parse files">Rescan</button>
   <span id="live" class="live" title="Watching files for changes">●</span>
   <span id="stats"></span>
 </header>
-<div id="layout">
-  <aside id="sidebar">
+
+<div id="story-view" class="view">
+  <aside class="sidebar">
     <section id="issues"></section>
     <section id="folders"></section>
-    <section id="lore"></section>
   </aside>
-  <main id="graph"></main>
-  <aside id="detail" class="hidden"></aside>
+  <main id="graph" class="graph-pane"></main>
+  <aside id="detail" class="detail hidden"></aside>
 </div>
+
+<div id="lore-view" class="view hidden">
+  <aside class="sidebar">
+    <section id="loreTree"></section>
+  </aside>
+  <main id="loreGraph" class="graph-pane"></main>
+  <aside id="loreDetail" class="detail hidden"></aside>
+</div>
+
 <script src="vendor/cytoscape.min.js"></script>
 <script src="vendor/dagre.min.js"></script>
 <script src="vendor/cytoscape-dagre.js"></script>
 <script src="vendor/marked.min.js"></script>
+<script src="graph-view.js"></script>
+<script src="story-view.js"></script>
+<script src="lore-view.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

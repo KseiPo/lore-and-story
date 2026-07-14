@@ -44,14 +44,23 @@ Last updated: 2026-07-14.*
    propagated by an AI-assisted, review-first bridge — never silently (§3.3).
    The author edits *real* files on both layers; there is no separate
    "drafts" staging area.
+9. **Story and lore are separate views over one data layer.** The passage-flow
+   view and the lore view are independent UIs (own sidebar, graph, detail
+   panel) that a shared coordinator switches between; they may later become two
+   apps. They stay connected by cross-view links (a passage's lore mentions
+   jump to the lore view; a lore entity's passage mentions jump to the story
+   view) and by the shared graph engine (ADR 6). Neither view owns the data —
+   both render the same `/api/data` payload.
 
 ## 2. Components & technology
 
 | Component | Status | Technology | Notes |
 |---|---|---|---|
 | Core: twee parser + analysis | working (POC) | Node.js, plain CommonJS, zero deps | `lib/twee-parser.js` |
-| Core: lore model + mentions | working (POC) | Node.js, plain CommonJS | `lib/lore.js` |
-| Core: graph-view library | planned | Cytoscape.js + dagre (browser) | extracted from POC UI; serves story-flow AND lore-graph views |
+| Core: lore model + graph | working (POC) | Node.js, plain CommonJS | `lib/lore.js` — entity folders, sub-entries, mention + wikilink edges |
+| Core: graph-view library | working (POC) | Cytoscape.js + dagre/cose (browser) | `public/graph-view.js` — shared by both views (ADR 6) |
+| UI: story-flow view | working (POC) | vanilla JS module | `public/story-view.js` |
+| UI: lore view | working (POC) | vanilla JS module | `public/lore-view.js` — entity graph + markdown detail |
 | Core: scene↔passage bridge | planned | AI-assisted diff + propagation | extraction (twee → scene md) first; drift sync later; always review-first |
 | Desktop app | POC | Express server + vanilla JS/HTML/CSS, SSE for live reload | later: same UI wrapped in Tauri for folder picker / tray / installer |
 | Mobile app | planned | Flutter (Android first) | writes/edits lore + scene markdown; twee read-only; no shared UI code |
@@ -75,16 +84,23 @@ The tool adapts to existing projects; nothing below is mandatory except
   src/scripts/         # game code; scanned read-only for passage references
   lore/                # the lore base (§3.2)
     characters/
-    locations/
-    factions/
-    glossary/
+      mira.md          # simple entity: one file
+      selena/          # entity folder: card + attached sub-entries
+        selena.md      # the entity card (matches folder name; or index.md)
+        media/         # images referenced by the card/sub-entries
+        quests/
+          relationship-quest-1.md   # sub-entry, group "quests"
+    stations/
+    races/
+    world/
   scenes/              # plain-prose scene files mirroring passages (§3.3)
   lore-story.json      # per-project tool config (§3.4)
 ```
 
 ### 3.2 Lore entry contract
 
-One entity = one markdown file. Category = folder path relative to `lore/`.
+An entity is either **one markdown file** or an **entity folder**. Category =
+folder path (relative to `lore/`) up to the entity.
 
 ```markdown
 # Display Title
@@ -94,28 +110,89 @@ Free markdown body. May reference other entries as [[Display Title]]
 (wikilink) — these become explicit edges in the lore graph.
 ```
 
-- `# Title` (first heading) is the canonical name; filename is a slug of it.
-- `aliases:` line (optional, anywhere before the body) extends mention
-  detection.
+**Entity resolution rules** (how the loader walks `lore/`):
+
+- A `.md` file in a category folder is a **simple entity**.
+- A folder containing `index.md` **or** `<folder-name>.md` is an **entity
+  folder**: that file is the entity *card*; every other `.md` inside it
+  (recursively) is a **sub-entry** attached to the entity. The sub-entry's
+  *group* is its subfolder path (`quests/`, `events/`, …) — used to organize
+  the detail panel and, later, the editor.
+- A folder **without** such an index file is just a (sub)category; the walk
+  descends into it.
+- `media/` folders are skipped by the walker and served as static assets.
+
+This is how "a character has a card plus folders of related content (events,
+relationship quests…)" is expressed — structurally, with no schema. A simple
+`mira.md` and a full `selena/` folder are the same kind of thing to every
+consumer; growing one into the other is just `mkdir` + move.
+
+- `# Title` (first heading) is the canonical name; filename/folder is a slug.
+- `aliases:` line (optional) extends mention detection; include foreign-language
+  names (the imported lore carries RU + EN aliases).
 - **Mention detection** (implicit edges): case-insensitive word-boundary match
-  of title + aliases against passage text and other lore bodies.
-- **Wikilinks** (explicit edges): `[[Title]]` between lore entries.
+  of title + aliases against passage text and other lore cards.
+- **Wikilinks** (explicit edges): `[[Title]]` anywhere in the entity (card or
+  sub-entries) → edge between entities.
 - Anything else is free-form. No frontmatter unless a concrete feature
   requires it.
 
+### 3.2a Derived lore model (API shape)
+
+`GET /api/data` also returns `lore` and `loreEdges`:
+
+- `lore[]`: `id, title, aliases, category, file, relDir, text, children[],
+  mentionedIn[]` — where `children[]` are `{id, title, group, file, text}`
+  and `mentionedIn[]` are passage names.
+- `loreEdges[]`: `{source, target, kind}` with `kind` ∈ `link` (wikilink) |
+  `mention` (card text contains another entity's alias).
+
+### 3.2b Character content taxonomy (worked example)
+
+Imported character docs fuse **three** kinds of content that must be separated
+(pilot: Selena, 2026-07-14 — 132 KB file → 6.5 KB card + design + 14 scenes):
+
+1. **Card** (`selena.md`) — the character *bible*: profile block (type,
+   faction, age, occupation, location, want/need/fear), character, past,
+   memories, portrait prompt. Compact; this is what the lore node/detail shows.
+2. **Design** (`arc.md`, a root sub-entry) — relationship-level progression,
+   planned events, quest outlines. Reference the author reads while writing;
+   not prose, not bible.
+3. **Events** (`events/*.md`) — the written prose of standalone relationship
+   interactions. "Events" is this VN's domain term for what §3.3 calls scenes.
+4. **Quests** (`quests/<quest>/…`) — an ordered chain of scenes. A quest is a
+   subfolder with an overview card (`<quest>.md`) and one file per stage; stages
+   are scenes like any other. Selena's pilot: `quests/relationship-quest-1/`
+   with `relationship-quest-1.md` (overview) + `01-…` … `08-…` stage files.
+
+Sub-entries nest arbitrarily: a subfolder's own `<name>.md`/`index.md` is that
+section's overview; folder names become section headings (`events/` → "Events").
+The same split applies to locations (card + description + events) and any entity
+that accumulates written content.
+
 ### 3.3 Scene files contract (plain-prose story layer)
 
-One passage = one scene file. `scenes/` mirrors the folder structure of
-`storyDir` so the two trees stay visually parallel.
+One authored scene = one scene file. Scenes may live **under their entity**
+(`characters/selena/scenes/…`, the pilot's choice — keeps a character's
+material together) **or** in a top-level `scenes/` tree mirroring `storyDir`;
+both are valid and the bridge treats them the same.
 
 ```markdown
-# <Passage Name>
+# <Scene Title>
+<!-- scene ⇄ passage: "Selena - Echoes of the Past" · lang: en -->
 
-Plain readable prose. Dialogue as normal lines ("Zoey: Welcome to the
-station."), no SugarCube macros, no HTML, no game logic.
+Plain readable prose. Dialogue as normal lines, no SugarCube macros,
+no HTML, no game logic.
 ```
 
-- The first heading is the passage name — that is the whole mapping; no IDs.
+- **Bilingual scenes are paired files:** `echoes-of-the-past.ru.md` +
+  `echoes-of-the-past.en.md` (decision 2026-07-14). A missing `.en.md` is a
+  visible "needs translation" signal — exactly the AI-translation workflow.
+  The model merges the pair into one item titled `<ru> — <en>` (original
+  language first); the UI shows one row with a RU/EN toggle, RU default.
+- The `scene ⇄ passage` comment is the explicit link to the twee passage —
+  the seed of the M3 bridge. Where absent, the first heading / filename maps
+  by name.
 - **Origin, either direction:** written first as prose and later transformed
   into a passage, or *recovered* from an existing passage by stripping markup
   (macros, HTML, code) — how the layer gets bootstrapped for a story that

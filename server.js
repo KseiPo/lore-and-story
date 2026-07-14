@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { buildStoryModel } = require('./lib/twee-parser');
-const { loadLore, findMentions } = require('./lib/lore');
+const { loadLore, findMentions, buildLoreGraph } = require('./lib/lore');
 
 // Project config: which story to visualize and project-specific link widgets.
 // Re-read on every request, so editing config.json + Rescan in the UI is
@@ -84,6 +84,9 @@ for (const [route, mod] of Object.entries(vendor)) {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve lore files (images referenced from entries) from the configured dir.
+app.use('/lore-files', (req, res, next) => express.static(readConfig().loreDir)(req, res, next));
+
 function collectTweeFiles(dir) {
   if (!fs.existsSync(dir)) return [];
   const files = [];
@@ -115,8 +118,10 @@ app.get('/api/data', (req, res) => {
       dynamicTags: cfg.dynamicTags,
       codeLiterals: collectCodeLiterals(cfg.codeDirs, tweeFiles),
     });
-    const lore = findMentions(loadLore(cfg.loreDir), story.passages);
-    res.json({ story, lore, storyDir: cfg.storyDir, loreDir: cfg.loreDir, parseMs: Date.now() - t0 });
+    const loreEntries = loadLore(cfg.loreDir);
+    const lore = findMentions(loreEntries, story.passages);
+    const loreEdges = buildLoreGraph(loreEntries);
+    res.json({ story, lore, loreEdges, storyDir: cfg.storyDir, loreDir: cfg.loreDir, parseMs: Date.now() - t0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
