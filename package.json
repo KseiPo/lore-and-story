@@ -1,0 +1,16 @@
+{
+  "name": "lore-and-story",
+  "version": "0.1.0",
+  "description": "POC: visual story-flow + lore browser for file-based Twine/SugarCube projects",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cytoscape": "^3.28.1",
+    "cytoscape-dagre": "^2.5.0",
+    "dagre": "^0.8.5",
+    "express": "^4.19.2",
+    "marked": "^12.0.2"
+  }
+}

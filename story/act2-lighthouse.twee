@@ -1,0 +1,33 @@
+:: Lighthouse Gate [act2]
+The cliff path ends at an iron gate stamped with a spiral. Beyond it the tower rises, white stone gone grey, windows dark. The gate is unlocked. Mira's keys hang from the latch, as if she meant for someone to follow.
+
+<<if $knowsRumor>>You think of the fisherman's words: //it doesn't burn oil.//<</if>>
+
+[[Enter the tower|Tower Hall]]
+
+:: Tower Hall [act2]
+Salt crusts the floor in patterns too regular to be chance. Mira's journal lies open on the desk, its last entry a single line: "The Light is hungry again."
+
+A storm is rising outside. The stairs spiral up into the dark.
+
+<<goto $stormPath>>
+
+:: Beacon [act2]
+The lamp room. The great lens is intact but cold, and in its thousand facets you see the harbor, the tavern, the cellar — and something pale moving beneath the waves toward Saltmere.
+
+The Light is not a machine. It is a covenant, and it is waiting for a keeper's answer.
+
+[[Light the beacon|Ending Keeper]]
+[[Smash the lens|Ending Dark Tide]]
+
+:: Ending Keeper [act2 ending]
+Flame takes the wick — and the Light takes something from you, gently, the way the tide takes a footprint. The beam sweeps out over the water and the pale thing sinks back into the deep.
+
+Saltmere sleeps. You begin the first entry of your own journal.
+
+//THE KEEPER — end one of two//
+
+:: Ending Dark Tide [act2 ending]
+The lens shatters like a promise. For one silent moment the sea is still — and then every bell in Saltmere begins to ring at once.
+
+//THE DARK TIDE — end two of two//

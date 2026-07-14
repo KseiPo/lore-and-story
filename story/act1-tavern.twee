@@ -1,0 +1,24 @@
+:: Tavern [act1]
+The Rusted Anchor smells of tar, wet wool and yesterday's chowder. Conversations die when you enter, then resume at half volume. Saltmere does not love strangers.
+
+[[Ask about the lighthouse|Rumors]]
+[[Order a drink and listen|Drink]]
+[[Ask the barkeep about Mira|Barkeep]]
+
+:: Rumors [act1]
+"The Light doesn't burn oil," mutters a fisherman into his cup. "Never has. Old keeper families knew what it really burns. Why d'you think Mira never took an apprentice?"
+
+<<set $knowsRumor to true>>
+
+[[Head for the lighthouse|Lighthouse Gate]]
+[[Back to the bar|Tavern]]
+
+:: Drink [act1]
+The chowder is better than it smells. Around you, Saltmere talks: the herring are gone, the Council raised the mooring fees again, and nobody — nobody — walks the cliff path after dark anymore.
+
+[[Back to the bar|Tavern]]
+
+:: Secret Cellar [act1 secret]
+Behind the barrels, a trapdoor. The cellar below is older than the tavern above it — older, maybe, than Saltmere. On the far wall someone has carved the same spiral that is stamped on the lighthouse door.
+
+[[Climb back up|Tavern]]

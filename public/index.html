@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lore &amp; Story — flow POC</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Lore &amp; Story <span class="badge">POC</span></h1>
+  <input id="search" type="search" placeholder="Search passages… (Enter = zoom to hit)">
+  <label class="toggle"><input type="checkbox" id="storyOnly"> <span>[story] tag only</span></label>
+  <select id="rankdir" title="Layout direction">
+    <option value="TB">Layout: top→down</option>
+    <option value="LR">Layout: left→right</option>
+  </select>
+  <button id="fit" title="Fit graph to view">Fit</button>
+  <button id="rescan" title="Re-parse files">Rescan</button>
+  <span id="live" class="live" title="Watching files for changes">●</span>
+  <span id="stats"></span>
+</header>
+<div id="layout">
+  <aside id="sidebar">
+    <section id="issues"></section>
+    <section id="folders"></section>
+    <section id="lore"></section>
+  </aside>
+  <main id="graph"></main>
+  <aside id="detail" class="hidden"></aside>
+</div>
+<script src="vendor/cytoscape.min.js"></script>
+<script src="vendor/dagre.min.js"></script>
+<script src="vendor/cytoscape-dagre.js"></script>
+<script src="vendor/marked.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

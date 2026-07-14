@@ -1,0 +1,24 @@
+:: Arrival [act1]
+The ferry deposits you on the rain-slick pier of Saltmere just as the last light drains from the sky. Somewhere above the cliffs, the lighthouse stands dark — and it has been dark for nine days.
+
+[[Explore the docks|Docks]]
+[[Head to the Rusted Anchor tavern|Tavern]]
+
+:: Docks [act1]
+Nets hang like drowned ghosts between the pilings. An old man coils rope with hands that know the work better than his eyes do. This must be Tomas, the ferryman Mira wrote about in her letter.
+
+[[Talk to the ferryman|Ferryman]]
+[[Return to the pier|Arrival]]
+
+:: Ferryman [act1]
+"You're the one Mira sent for," Tomas says. It isn't a question. "The Light's been out since she vanished. Council won't pay for a search, but they'll pay for a keeper."
+
+<<link "Accept the keeper's job" "Lighthouse Gate">><<set $trustTomas += 1>><</link>>
+[[Ask about Mira first|Mira Questions]]
+
+:: Mira Questions [act1]
+Tomas's jaw tightens. "Best keeper Saltmere ever had. Kept a journal, kept the Light, kept to herself. Nine days ago the beam just... stopped. Nobody's climbed up there since."
+
+He looks at you sideways. "Nobody who's come back down, anyway."
+
+<<link "Accept the keeper's job" "Lighthouse Gate">><<set $trustTomas += 2>><</link>>

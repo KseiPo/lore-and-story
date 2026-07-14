@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lore-and-story",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js"],
+      "port": 3987
+    }
+  ]
+}

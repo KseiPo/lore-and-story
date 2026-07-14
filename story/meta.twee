@@ -1,0 +1,15 @@
+:: StoryTitle
+The Keeper of Saltmere Light
+
+:: StoryData
+{
+	"ifid": "D1FC44B4-0000-0000-0000-000000000000",
+	"format": "SugarCube",
+	"format-version": "2.36.1",
+	"start": "Arrival"
+}
+
+:: StoryInit
+<<set $trustTomas to 0>>
+<<set $knowsRumor to false>>
+<<set $stormPath to "Beacon">>

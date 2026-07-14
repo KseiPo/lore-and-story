@@ -1,0 +1,91 @@
+* { box-sizing: border-box; margin: 0; }
+:root {
+  --bg: #14161c; --panel: #1c1f28; --panel2: #232734; --border: #2e3342;
+  --text: #d6dae4; --dim: #8a91a3; --accent: #5b9cf5;
+  --orange: #f0a13e; --red: #e05252; --green: #4fc06d; --purple: #a97ff0;
+}
+html, body { height: 100%; }
+body {
+  font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+  background: var(--bg); color: var(--text);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+header h1 { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.badge { font-size: 10px; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 5px; vertical-align: 2px; }
+#search {
+  flex: 0 1 300px; background: var(--panel2); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; padding: 5px 10px; outline: none;
+}
+#search:focus { border-color: var(--accent); }
+.toggle { display: flex; align-items: center; gap: 5px; color: var(--dim); white-space: nowrap; cursor: pointer; }
+select, button {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 10px; cursor: pointer;
+}
+button:hover, select:hover { border-color: var(--accent); }
+.live { color: var(--green); }
+.live.off { color: var(--dim); }
+#stats { color: var(--dim); font-size: 12px; margin-left: auto; white-space: nowrap; }
+
+#layout { flex: 1; display: flex; min-height: 0; }
+#sidebar {
+  flex: 0 0 280px; overflow-y: auto; background: var(--panel);
+  border-right: 1px solid var(--border); padding: 10px;
+}
+#graph { flex: 1; min-width: 0; }
+#detail {
+  flex: 0 0 400px; overflow-y: auto; background: var(--panel);
+  border-left: 1px solid var(--border); padding: 14px;
+}
+#detail.hidden { display: none; }
+
+section { margin-bottom: 16px; }
+section h2 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--dim); margin: 0 0 6px;
+}
+.item {
+  padding: 3px 7px; border-radius: 5px; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; color: var(--text);
+}
+.item:hover { background: var(--panel2); }
+.item .cnt { margin-left: auto; color: var(--dim); font-size: 11px; }
+.item.muted { opacity: .35; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.issue-head { cursor: pointer; user-select: none; padding: 3px 0; font-weight: 600; }
+.issue-head .cnt { font-weight: 400; }
+.issue-list { margin: 2px 0 8px; }
+.issue-list .item { font-size: 12px; padding-left: 14px; }
+.ok { color: var(--green); }
+.warn { color: var(--orange); }
+.err { color: var(--red); }
+.info { color: var(--purple); }
+
+#detail h2 { font-size: 16px; text-transform: none; letter-spacing: 0; color: var(--text); margin-bottom: 4px; }
+#detail .meta { color: var(--dim); font-size: 12px; margin-bottom: 10px; }
+#detail .meta a { color: var(--accent); text-decoration: none; }
+#detail .tag {
+  display: inline-block; background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 4px; font-size: 11px; padding: 0 6px; margin-right: 4px;
+}
+#detail pre {
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; white-space: pre-wrap; word-break: break-word;
+  font: 12px/1.5 Consolas, monospace; color: #c3c9d6; max-height: 45vh; overflow-y: auto;
+}
+#detail h3 { font-size: 12px; color: var(--dim); margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .06em; }
+#detail .linkrow { display: block; padding: 2px 0; color: var(--accent); cursor: pointer; }
+#detail .linkrow:hover { text-decoration: underline; }
+#detail .linkrow .kind { color: var(--dim); font-size: 11px; }
+#detail .md { line-height: 1.55; }
+#detail .md h1 { font-size: 18px; margin: 6px 0; }
+#detail .md h2 { font-size: 14px; margin: 10px 0 4px; }
+#detail .md ul { padding-left: 18px; }
+#detail .md p { margin: 6px 0; }
+#detail .md strong { color: #fff; }
+.closebtn { float: right; }
