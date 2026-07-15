@@ -170,6 +170,20 @@ section's overview; folder names become section headings (`events/` → "Events"
 The same split applies to locations (card + description + events) and any entity
 that accumulates written content.
 
+**Event ownership** (decided 2026-07-14): an event belongs to the **character
+who drives it** (Carrie's "Конец смены" lives under `characters/carrie/events/`
+even though it happens in her bar); a location's own **intro/first-visit scenes
+belong to the station** (`stations/<station>/events/`). Locations never own
+character events — they reference people via staff lists with `[[wikilinks]]`,
+and mention detection links the rest. Secondary characters get **promoted** from
+the `secondary-characters.md` list to their own entity folder the moment they
+accumulate content (Carrie, Marcus) — same category, `Type`/card marks the tier.
+
+**Promotion posts** live in a top-level `lore/promotion/` category — one Patreon
+post per document (paired `.ru.md`/`.en.md` where both languages exist),
+including the station lore articles, which are marketing texts, not station
+canon (station cards keep the factual content only).
+
 ### 3.3 Scene files contract (plain-prose story layer)
 
 One authored scene = one scene file. Scenes may live **under their entity**
