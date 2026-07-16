@@ -110,12 +110,12 @@ Ran the POC in this repo against the author's real story project (367 passages, 
 4. **M2 — AI assist:** proofread / translate / consistency-check on the file being edited, with auto-assembled context packs (mentioned characters' sheets, glossary, style guide) shown before sending. Kills the copy-paste loop.
 5. **M3 — Scene↔passage bridge:** new scene → new passage(s) (split, link, project macros); drift detection between existing scenes and passages; AI-assisted propagation of edits in both directions — always as reviewable diffs.
 6. **M4 — Review maturation:** flow-graph clustering/collapse by folder, story-only polish; flow view moves onto the shared graph-view library.
-7. **M5 — Mobile (Flutter, Android):** edit lore + scenes, read passages; Syncthing/Dropbox folder sync underneath.
+7. **M5 — Mobile (Flutter, Android):** edit lore + scenes, read passages; Syncthing/Dropbox folder sync underneath. *Pulled forward; designed 2026-07-16 — see [MOBILE.md](MOBILE.md) for the ADRs, the v0.1 walking skeleton, and the Dart port scope.*
 8. **Later ideas:** MCP server (`get_lore("Mira")`, `find_broken_links()`) for Claude Code etc.; other formats (Harlowe, Ink, Yarn) via pluggable link extractors; Tauri packaging.
 
 ## Open questions
 
-- Which AI provider/integration shape for v2 (API keys in-app vs. MCP + external agent vs. both)?
+- Which AI provider/integration shape for v2 (API keys in-app vs. MCP + external agent vs. both)? *Answered for mobile (2026-07-16): API key in-app, direct calls — MCP needs an agent runtime the phone lacks ([MOBILE.md](MOBILE.md) §6). Still open for desktop, where MCP + external agent remains viable.*
 - Lore file conventions: how much structure (frontmatter?) before it stops feeling like plain writing?
 - Does the transform step need a dedicated side-by-side draft↔passages UI, or is it an AI conversation with file edits?
 - Tauri vs. local web app vs. Flutter+WebView for desktop shell.

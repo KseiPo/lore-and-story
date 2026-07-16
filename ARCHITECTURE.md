@@ -16,6 +16,12 @@ Last updated: 2026-07-14.*
    underneath. Mobile edits markdown only (lore, scenes) and never twee;
    with a single author and small per-entity files, conflicts are rare and
    surface as the syncer's conflict copies rather than app logic.
+   *Re-examined 2026-07-16 and held, with two caveats worth tracking: the
+   "any folder syncer works" premise is less free than it reads (on Android it
+   forces an all-files-access permission, and Syncthing-Android's maintenance
+   has changed hands twice), and embedding git would drop "never syncs /
+   authenticates" while keeping "never merges" if one-tap commits are ever
+   wanted. Evaluation and trigger conditions: [MOBILE.md](MOBILE.md) §3.1, §3.3.*
 3. **Shallow, config-driven twee parsing.** The parser extracts passage
    headers and link expressions; it never interprets SugarCube beyond that and
    leaves all other text untouched. Project-specific navigation (custom
@@ -63,8 +69,8 @@ Last updated: 2026-07-14.*
 | UI: lore view | working (POC) | vanilla JS module | `public/lore-view.js` — entity graph + markdown detail |
 | Core: scene↔passage bridge | planned | AI-assisted diff + propagation | extraction (twee → scene md) first; drift sync later; always review-first |
 | Desktop app | POC | Express server + vanilla JS/HTML/CSS, SSE for live reload | later: same UI wrapped in Tauri for folder picker / tray / installer |
-| Mobile app | planned | Flutter (Android first) | writes/edits lore + scene markdown; twee read-only; no shared UI code |
-| AI integration | planned | provider-agnostic; context packs assembled from repo files; possibly MCP server over the story model | kills the copy-paste loop |
+| Mobile app | designed, pre-scaffold | Flutter (Android first) | writes/edits lore + scene markdown; twee read-only; no shared UI code. Design + ADRs: **[MOBILE.md](MOBILE.md)** (`apps/mobile/`) |
+| AI integration | planned | provider-agnostic; context packs assembled from repo files; possibly MCP server over the story model | kills the copy-paste loop. On mobile the shape is decided: direct API calls with a user-configured key ([MOBILE.md](MOBILE.md) ADR 7) — MCP needs an agent runtime the phone lacks |
 | Sync | out of scope by design | Syncthing / Dropbox / git — user's choice | see ADR 2 |
 
 Environment: Node.js ≥ 20, no build step for the POC (vendor libs served from
