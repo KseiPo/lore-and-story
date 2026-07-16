@@ -147,11 +147,28 @@ consumer; growing one into the other is just `mkdir` + move.
 
 `GET /api/data` also returns `lore` and `loreEdges`:
 
-- `lore[]`: `id, title, aliases, category, file, relDir, text, children[],
-  mentionedIn[]` — where `children[]` are `{id, title, group, file, text}`
-  and `mentionedIn[]` are passage names.
+- `lore[]`: `id, title, aliases, category, file, relDir, text, tree,
+  children[], mentionedIn[]`, where `mentionedIn[]` are passage names and
+  `children[]` is the entity's sub-entries flattened (for mentions and the
+  wikilink graph): `{id, title, group, text}`. The entity card is **not** among
+  its own children — it is not a sub-entry of itself (§3.2).
+- `tree` — the entity folder's content tree; `null` for a simple entity. This is
+  what the detail panel renders, one node per subfolder:
+  `{name, title, overview, items[], children[]}`
+  - `overview` — that folder's own card (`<folder-name>.md`/`index.md`) as
+    `{id, text, relDir}`, or `null`. On the root node this is `null`, because the
+    entity card is handled by the entry itself.
+  - `items[]` — `{id, title, group, passage, langs}`; `group` is the subfolder
+    path, `passage` the `scene ⇄ passage` target or `null`, and `langs` maps
+    `ru`/`en`/`orig` → `{file, relDir, title, text}` (a §3.3 pair merges into one
+    item titled `<ru> — <en>`).
+  - `children[]` — nested section nodes (`events/`, `quests/<quest>/`, …).
 - `loreEdges[]`: `{source, target, kind}` with `kind` ∈ `link` (wikilink) |
   `mention` (card text contains another entity's alias).
+
+This shape is pinned by golden fixtures (`test/fixtures/lore-model/`, `npm test`)
+that this implementation and the Dart port both assert against — extend the
+fixtures with the contract, not after it.
 
 ### 3.2b Character content taxonomy (worked example)
 
@@ -261,16 +278,28 @@ POC keeps a global `config.json` in the tool repo — to be migrated).
 
 ### 3.5 Derived story model (API shape, informal)
 
-`GET /api/data` returns `{ story, lore, parseMs }` where `story` contains:
+`GET /api/data` returns
+`{ story, lore, loreEdges, storyDir, loreDir, parseMs }` — `lore` and
+`loreEdges` are §3.2a; `storyDir`/`loreDir` are the resolved absolute roots.
+`story` contains:
 
-- `passages[]`: `name, tags, file, rel, folder, line, text, words`
+- `start`: the start passage name, taken from `StoryData`'s JSON, defaulting to
+  `Start`.
+- `passages[]`: `name, tags, file, rel, folder, line, text, words` — **story
+  passages only** (`text` is trimmed; `words` counts whitespace-separated tokens).
+- `specials[]`: `{name, file, line}` — everything excluded from `passages[]`:
+  SugarCube special passages (`StoryTitle`, `StoryData`, `StoryInit`,
+  `PassageHeader`, …) and anything tagged `script`, `stylesheet`, `widget` or
+  `Twine.private`. Their links are still extracted — widgets and specials
+  navigate too (§4 layer 1).
 - `edges[]`: `source, target, kind, utilitySource, broken`
   - `kind`: `link` (wiki), `macro` (`<<link>>`/`<<button>>`/custom), `goto`,
     `include`, `stored` (assignment of a passage name to a variable),
     `dynamic` (unresolvable expression)
 - `issues`: `orphans, broken, dynamic, endings, dynamicTagged, composed,
   codeReferenced`
-- `codeRefs`: passage → referencing script files
+- `codeRefs`: passage name → the files whose string literals reference it —
+  `codeDirs` sources **and** twee source (§4 layer 3), not scripts only.
 
 This shape is the contract between core and any UI; extend, don't break.
 

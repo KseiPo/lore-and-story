@@ -1,0 +1,5 @@
+# The goldens pin a sha256 of every fixture file's bytes, so git must not
+# rewrite line endings here. This repo is cloned with core.autocrlf=true on
+# Windows; without this, checkout would convert LF→CRLF and every textSha in
+# expected.json would break.
+* -text

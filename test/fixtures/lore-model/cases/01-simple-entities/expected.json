@@ -1,0 +1,43 @@
+{
+  "entries": [
+    {
+      "id": "characters/frank.md",
+      "title": "Frank",
+      "aliases": [
+        "Frank",
+        "Фрэнк",
+        "Frankie"
+      ],
+      "category": "characters",
+      "relDir": "characters",
+      "textSha": "ab3fc9a76caaa175",
+      "tree": null,
+      "children": []
+    },
+    {
+      "id": "characters/no-heading.md",
+      "title": "no-heading",
+      "aliases": [
+        "no-heading",
+        "Безымянный"
+      ],
+      "category": "characters",
+      "relDir": "characters",
+      "textSha": "c71bac25cb5995c8",
+      "tree": null,
+      "children": []
+    },
+    {
+      "id": "characters/protagonist.md",
+      "title": "Protagonist",
+      "aliases": [
+        "Protagonist"
+      ],
+      "category": "characters",
+      "relDir": "characters",
+      "textSha": "8c50f08d3fd4632f",
+      "tree": null,
+      "children": []
+    }
+  ]
+}

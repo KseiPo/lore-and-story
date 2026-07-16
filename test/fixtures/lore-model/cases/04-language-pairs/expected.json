@@ -1,0 +1,126 @@
+{
+  "entries": [
+    {
+      "id": "characters/mira/mira.md",
+      "title": "Mira",
+      "aliases": [
+        "Mira",
+        "Мира",
+        "Алисса"
+      ],
+      "category": "characters",
+      "relDir": "characters/mira",
+      "textSha": "217cba1143accc25",
+      "tree": {
+        "name": "mira",
+        "title": "",
+        "overview": null,
+        "items": [],
+        "children": [
+          {
+            "name": "events",
+            "title": "Events",
+            "overview": null,
+            "items": [
+              {
+                "id": "events/dream",
+                "title": "Сон — Dream",
+                "group": "events",
+                "passage": "Mira - Dream",
+                "langs": {
+                  "en": {
+                    "file": "characters/mira/events/dream.en.md",
+                    "relDir": "characters/mira/events",
+                    "title": "Dream",
+                    "textSha": "a8cf64e284fdadc7"
+                  },
+                  "ru": {
+                    "file": "characters/mira/events/dream.ru.md",
+                    "relDir": "characters/mira/events",
+                    "title": "Сон",
+                    "textSha": "8c527c34b2ecf5a4"
+                  }
+                }
+              },
+              {
+                "id": "events/only-en",
+                "title": "Only English",
+                "group": "events",
+                "passage": null,
+                "langs": {
+                  "en": {
+                    "file": "characters/mira/events/only-en.en.md",
+                    "relDir": "characters/mira/events",
+                    "title": "Only English",
+                    "textSha": "731620a75f5e36cf"
+                  }
+                }
+              },
+              {
+                "id": "events/only-ru",
+                "title": "Только по-русски",
+                "group": "events",
+                "passage": "Mira - Only RU",
+                "langs": {
+                  "ru": {
+                    "file": "characters/mira/events/only-ru.ru.md",
+                    "relDir": "characters/mira/events",
+                    "title": "Только по-русски",
+                    "textSha": "ebd0e2b5ea006027"
+                  }
+                }
+              },
+              {
+                "id": "events/plain",
+                "title": "Plain",
+                "group": "events",
+                "passage": null,
+                "langs": {
+                  "orig": {
+                    "file": "characters/mira/events/plain.md",
+                    "relDir": "characters/mira/events",
+                    "title": "Plain",
+                    "textSha": "5d4fdd7e30b9fd6f"
+                  }
+                }
+              }
+            ],
+            "children": []
+          }
+        ]
+      },
+      "children": [
+        {
+          "id": "characters/mira/events/dream.en.md",
+          "title": "Dream",
+          "group": "events",
+          "textSha": "a8cf64e284fdadc7"
+        },
+        {
+          "id": "characters/mira/events/dream.ru.md",
+          "title": "Сон",
+          "group": "events",
+          "textSha": "8c527c34b2ecf5a4"
+        },
+        {
+          "id": "characters/mira/events/only-en.en.md",
+          "title": "Only English",
+          "group": "events",
+          "textSha": "731620a75f5e36cf"
+        },
+        {
+          "id": "characters/mira/events/only-ru.ru.md",
+          "title": "Только по-русски",
+          "group": "events",
+          "textSha": "ebd0e2b5ea006027"
+        },
+        {
+          "id": "characters/mira/events/plain.md",
+          "title": "Plain",
+          "group": "events",
+          "textSha": "5d4fdd7e30b9fd6f"
+        }
+      ]
+    }
+  ]
+}

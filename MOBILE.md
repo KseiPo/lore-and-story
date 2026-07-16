@@ -362,10 +362,22 @@ lore-and-story/
   public/                    # desktop POC UI
   apps/
     mobile/                  # Flutter (Android) writing app  ← this doc
+  scripts/
+    update-goldens.js        # `npm run goldens` (outside test/ — see fixtures README)
   test/
+    lore-model.test.js       # asserts lib/lore.js against the goldens
     fixtures/
       lore-model/            # shared golden fixtures (JS + Dart)  (ADR 4)
+        normalize.js         # the projection the Dart port must reproduce
+        cases/               # 01-simple-entities … 04-language-pairs
 ```
+
+The fixtures exist and the JS side asserts against them (`npm test`, zero deps —
+`node:test`). See [test/fixtures/lore-model/README.md](test/fixtures/lore-model/README.md)
+for what each case pins, the normalization contract the Dart port must reproduce,
+and one **known discrepancy between `lib/lore.js` and ARCHITECTURE §3.2** that the
+fixtures surfaced (the entity card appears in its own `children[]`). The goldens
+pin current behavior; resolve that deliberately before the port copies it.
 
 ## 10. Risks
 

@@ -1,0 +1,140 @@
+{
+  "entries": [
+    {
+      "id": "characters/selena/selena.md",
+      "title": "Selena",
+      "aliases": [
+        "Selena",
+        "Селена"
+      ],
+      "category": "characters",
+      "relDir": "characters/selena",
+      "textSha": "9fe9336090c9c477",
+      "tree": {
+        "name": "selena",
+        "title": "",
+        "overview": null,
+        "items": [
+          {
+            "id": "arc",
+            "title": "Selena — Arc",
+            "group": "",
+            "passage": null,
+            "langs": {
+              "orig": {
+                "file": "characters/selena/arc.md",
+                "relDir": "characters/selena",
+                "title": "Selena — Arc",
+                "textSha": "95fef024a648c9c3"
+              }
+            }
+          }
+        ],
+        "children": [
+          {
+            "name": "events",
+            "title": "Events",
+            "overview": null,
+            "items": [
+              {
+                "id": "events/dock-inspection",
+                "title": "Проверка в доке",
+                "group": "events",
+                "passage": "Selena - Dock inspection",
+                "langs": {
+                  "orig": {
+                    "file": "characters/selena/events/dock-inspection.md",
+                    "relDir": "characters/selena/events",
+                    "title": "Проверка в доке",
+                    "textSha": "9a8669469ed06f04"
+                  }
+                }
+              }
+            ],
+            "children": []
+          },
+          {
+            "name": "quests",
+            "title": "Quests",
+            "overview": null,
+            "items": [],
+            "children": [
+              {
+                "name": "relationship-quest-1",
+                "title": "Relationship Quest 1",
+                "overview": {
+                  "id": "characters/selena/quests/relationship-quest-1/relationship-quest-1.md",
+                  "relDir": "characters/selena/quests/relationship-quest-1",
+                  "textSha": "8204c4304a211a46"
+                },
+                "items": [
+                  {
+                    "id": "quests/relationship-quest-1/01-hobby",
+                    "title": "Хобби Селены",
+                    "group": "quests/relationship-quest-1",
+                    "passage": "Selena - Hobby",
+                    "langs": {
+                      "orig": {
+                        "file": "characters/selena/quests/relationship-quest-1/01-hobby.md",
+                        "relDir": "characters/selena/quests/relationship-quest-1",
+                        "title": "Хобби Селены",
+                        "textSha": "bff3fa7377f5a7ad"
+                      }
+                    }
+                  },
+                  {
+                    "id": "quests/relationship-quest-1/02-minigame",
+                    "title": "Микросхема",
+                    "group": "quests/relationship-quest-1",
+                    "passage": "Selena - Microcircuit minigame",
+                    "langs": {
+                      "orig": {
+                        "file": "characters/selena/quests/relationship-quest-1/02-minigame.md",
+                        "relDir": "characters/selena/quests/relationship-quest-1",
+                        "title": "Микросхема",
+                        "textSha": "d002b236ee6ce1bb"
+                      }
+                    }
+                  }
+                ],
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      "children": [
+        {
+          "id": "characters/selena/arc.md",
+          "title": "Selena — Arc",
+          "group": "",
+          "textSha": "95fef024a648c9c3"
+        },
+        {
+          "id": "characters/selena/events/dock-inspection.md",
+          "title": "Проверка в доке",
+          "group": "events",
+          "textSha": "9a8669469ed06f04"
+        },
+        {
+          "id": "characters/selena/quests/relationship-quest-1/01-hobby.md",
+          "title": "Хобби Селены",
+          "group": "quests/relationship-quest-1",
+          "textSha": "bff3fa7377f5a7ad"
+        },
+        {
+          "id": "characters/selena/quests/relationship-quest-1/02-minigame.md",
+          "title": "Микросхема",
+          "group": "quests/relationship-quest-1",
+          "textSha": "d002b236ee6ce1bb"
+        },
+        {
+          "id": "characters/selena/quests/relationship-quest-1/relationship-quest-1.md",
+          "title": "Relationship Quest 1",
+          "group": "quests/relationship-quest-1",
+          "textSha": "8204c4304a211a46"
+        }
+      ]
+    }
+  ]
+}
