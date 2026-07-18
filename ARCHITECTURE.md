@@ -229,8 +229,24 @@ twee exists only in the final passages.
 - Inner monologue: `Мысль: …` (RU) / `*Thought:* …` (EN).
 - Variable placeholders: readable square brackets — `[имя героя]`,
   `[награда]`, `[станция назначения]` — never `<<=$var>>`.
-- Player choices: bold text, optionally with the target passage as a note —
-  `**Начать атаку**`, `**Перелезть** *(→ At Spaceport)*`.
+- Player choices / passage links — ONE canonical form (2026-07-17):
+  `**Choice text** _(→ Passage Name)_` — underscore emphasis, stable under
+  VSCode/Prettier md formatting. Bold-only `**Choice**` when no target.
+- **Return links** (dialog/popup pattern, 2026-07-17): some widgets return the
+  reader to wherever they came from instead of naming a target —
+  `<<linkBack>>` (back to previous passage) and `<<wakeupLink>>` (ends a dream,
+  back to `$sleepLocation`). Prose form: `**Label** _(↩ back)_` /
+  `**Label** _(↩ wake up)_` — return arrow, no target. Config `returnMacros`
+  lists such widgets; passages containing one are never dead ends
+  (analysis: 87 → 68 endings, 23 returners on the reference project).
+- **Multi-passage scenes:** when a story is split across several passages for
+  UX, keep it as ONE scene file with a `# <Passage Name>` section per passage,
+  each carrying its own `scene ⇄ passage` comment; choices between sections
+  use the canonical link form. (See on-the-crossroads.en.md.) Tools collect
+  ALL mapping comments per file. In-passage branch variants (the "choices"
+  widget) are `####` variant headings inside the section, souvenir-style.
+- English-only scenes are legitimate (original lost or authored in EN);
+  a lone `.en.md` is not a defect.
 - Authoring conditionals: em-dash markers — `— если игрок знаком с доктором
   Джулией — … — иначе — … — конец условия —`.
 - `[[Wikilinks]]` are reserved for lore entity references (cards/overviews);

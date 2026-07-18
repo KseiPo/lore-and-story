@@ -25,6 +25,7 @@ function readConfig() {
     storyDir: path.resolve(process.env.STORY_DIR || config.storyDir || path.join(__dirname, 'story')),
     loreDir: path.resolve(process.env.LORE_DIR || config.loreDir || path.join(__dirname, 'lore')),
     linkMacros: config.linkMacros || [],
+    returnMacros: config.returnMacros || [],
     codeDirs: (config.codeDirs || []).map(d => path.resolve(d)),
     dynamicTags: config.dynamicTags || [],
   };
@@ -115,6 +116,7 @@ app.get('/api/data', (req, res) => {
     const tweeFiles = collectTweeFiles(cfg.storyDir);
     const story = buildStoryModel(tweeFiles, {
       linkMacros: cfg.linkMacros,
+      returnMacros: cfg.returnMacros,
       dynamicTags: cfg.dynamicTags,
       codeLiterals: collectCodeLiterals(cfg.codeDirs, tweeFiles),
     });

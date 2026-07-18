@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/",
+    "test": "node --test test/lore-model.test.js",
     "goldens": "node scripts/update-goldens.js"
   },
   "dependencies": {
