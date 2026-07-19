@@ -45,3 +45,19 @@ and click **Rescan** in the UI (or reload the page) — no server restart needed
 
 Parse ~50 ms, layout ~250 ms. Orphan false positives went 139 → 2 after the three
 suppression layers; both remaining findings were genuine. See IDEA.md → "POC findings".
+
+## Dev tooling (BMad)
+
+This repo uses [BMad](https://github.com/bmad-code-org) for AI-assisted planning
+and development. The installed framework (`_bmad/`, `.claude/skills/`) is treated
+as a regenerable dependency and is **gitignored** — reinstall it with the BMad
+installer. Authored outputs live in `_bmad-output/` (committed); customization
+overrides live in `_bmad/custom/` (committed, except the personal `.user.toml`).
+
+Installed versions (from `_bmad/_config/manifest.yaml`):
+
+| Module | Version |
+|---|---|
+| installer / core / bmm | 6.10.0 |
+| bmb (bmad-builder) | v2.1.0 |
+| cis | v0.2.1 |

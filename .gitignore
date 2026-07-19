@@ -1,3 +1,11 @@
 node_modules/
 config.json
 id_kseipo
+
+# BMad dev tooling — installed/regenerable, treated like a dependency.
+# Reinstall with the BMad installer (versions noted in README.md).
+.claude/skills/
+_bmad/*
+# ...but keep authored customization overrides:
+!_bmad/custom/
+_bmad/custom/config.user.toml   # personal, machine-local — never commit
