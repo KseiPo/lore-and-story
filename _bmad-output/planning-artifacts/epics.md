@@ -380,6 +380,9 @@ So that a character can accumulate written content.
 
 ## Epic 3: Convention tooling (v0.2)
 
+**Epic Definition of Done (every story):** works fully offline (NFR4); linting and
+navigation feel instant (NFR6).
+
 ### Story 3.1: Lint a file for convention errors
 
 As the author,
@@ -405,6 +408,10 @@ So that lore references are fast and correct.
 **Given** a rendered `[[Title]]` in preview, **When** I tap it, **Then** it navigates to that entity.
 
 ## Epic 4: AI writing assist (AI phases)
+
+**Epic Definition of Done (every story):** the app stays usable offline — AI actions
+require network and fail gracefully when it's absent (NFR4/NFR5); non-AI
+interactions stay responsive (NFR6).
 
 ### Story 4.1: Configure an AI key and stand up the API client
 
@@ -456,6 +463,9 @@ So that I can improve prose while keeping my voice.
 
 ## Epic 5: Promote entity to folder (promotion phase)
 
+**Epic Definition of Done (every story):** works fully offline (NFR4); promotion
+completes without a noticeable stall (NFR6).
+
 ### Story 5.1: Promote a simple entity to an entity folder
 
 As the author,
@@ -469,3 +479,5 @@ So that it can hold events and quests like a full character.
 **Given** the move, **When** it runs, **Then** it is atomic and the model re-scans to show the entity as a folder that can hold sub-entries. *(FR25)*
 
 **Given** a conflict copy exists for that entity, **When** I try to promote, **Then** promotion is blocked until it is resolved. *(R8)*
+
+**Given** the entity's card is open with unsaved edits, **When** I try to promote, **Then** the app saves-or-blocks first — it never moves the file out from under a dirty buffer. *(AD-10)*
