@@ -86,20 +86,20 @@ executes every `.js` it finds there, so keeping the generator inside would let t
 suite rewrite the very goldens it is asserting against (and race with itself doing
 it).
 
-## Known contract discrepancy
+## Resolved contract discrepancy (was: card in own `children[]`)
 
-**`children[]` includes the entity card itself.** ARCHITECTURE §3.2 says "every
-*other* `.md` inside it (recursively) is a **sub-entry**", but `lib/lore.js`
-pushes every file into the flat list (`flat.push(...)`, `lore.js:65`) *before* the
-`base === cardBase → continue` guard that correctly excludes the card from
-`items[]`. So `selena.md` appears in its own `children[]`.
+**The entity card is excluded from its own `children[]`** — code, goldens, and doc
+now agree. ARCHITECTURE §3.2/§3.2a state the card "is **not** a sub-entry of
+itself"; `lib/lore.js` enforces it with the `if (base !== cardBase)` guard on the
+`flat.push(...)` (`lore.js:67`), and these goldens pin that behavior (e.g.
+`selena` has `children: []`).
 
-Currently **latent**: the desktop UI renders `tree`, never `children`, and
-`buildLoreGraph` concatenates `children` text with `e.text` and dedups its edges,
-so the duplicate is harmless there.
-
-It matters for the port: a Dart implementation written from §3.2 would exclude the
-card and mismatch these goldens — looking like a Dart bug when it is really a
-doc/reference disagreement. **The goldens pin current behavior, not the doc.**
-Resolve deliberately (fix `lore.js` to match §3.2, or amend §3.2 to match) rather
-than by regenerating.
+History: earlier, `buildNode` pushed *every* file into the flat list before the
+`base === cardBase → continue` guard that already excluded the card from `items[]`,
+so an entity's card leaked into its own `children[]`. It was **latent** on the
+desktop (the UI renders `tree`, never `children`, and `buildLoreGraph` dedups its
+edges), but it would have tripped the Dart port: an implementation written from
+§3.2 would exclude the card and mismatch these goldens — looking like a port bug
+rather than the reference/doc disagreement it was. Resolved by fixing `lore.js` to
+match §3.2 (PRD open question O1), then regenerating the goldens off the corrected
+loader. **The goldens now pin the doc's contract, not legacy behavior.**

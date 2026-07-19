@@ -270,8 +270,9 @@ FR26 are phased. The mixed Group I tags each FR with its phase inline.
 - **NFR2 — Model conformance / anti-drift:** the Dart lore loader conforms to the
   `ARCHITECTURE.md` §3.2–3.3 contract and asserts against the **shared golden
   fixtures**; when the model changes, fixtures change first and both the JS
-  reference and the Dart port follow. *(See open question O1 re: the known
-  card-in-own-children fixture discrepancy — resolve before the port copies it.)*
+  reference and the Dart port follow. *(O1 — the card-in-own-children fixture
+  discrepancy — is resolved: `lib/lore.js` excludes the card and the goldens pin
+  that, so there is nothing for the port to copy. See §9.)*
 - **NFR3 — Portability seam:** the loader and editor depend only on a `RepoStorage`
   interface (`listDir`, `read`, `writeAtomic`, `exists`), never on the storage
   permission or raw file APIs directly — so a future SAF backend or app-private +
@@ -323,17 +324,18 @@ FR26 are phased. The mixed Group I tags each FR with its phase inline.
 
 ## 9. Open questions
 
-- **O1** — Resolve the known `lib/lore.js` ↔ `ARCHITECTURE.md` §3.2 discrepancy
-  (entity card appearing in its own `children[]`) **before** the Dart port copies
-  current fixture behavior.
 - **O3** — Read-only passage reference on mobile: which representation the phone
   shows, and whether it needs the twee parser ported or just renders recovered
   scene files. *(Deferred feature; flagged for a later PRD.)*
 - **O4** — How much lore-graph / mention surfacing is worth computing on-device
   vs. leaving to the desktop tool?
 
-_Resolved: O2 — syncer exclusions hardcoded for MVP, configurable `ignore` list
-deferred (FR16). FR24 — phone may create new top-level categories. O5 — Android
-11+. O6 — no telemetry (§7)._
+_Resolved: O1 — the `lib/lore.js` ↔ `ARCHITECTURE.md` §3.2 discrepancy (entity
+card in its own `children[]`) is fixed: `buildNode` excludes the card via the
+`base !== cardBase` guard (`lore.js:67`) and the shared goldens pin the
+card-excluded behavior, so the Dart port inherits the correct contract. O2 —
+syncer exclusions hardcoded for MVP, configurable `ignore` list deferred (FR16).
+FR24 — phone may create new top-level categories. O5 — Android 11+. O6 — no
+telemetry (§7)._
 
 _Tech-implementation depth intentionally lives in `addendum.md`._
