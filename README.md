@@ -4,6 +4,13 @@ Risk-probe proof of concept for the app described in [IDEA.md](IDEA.md): a visua
 story-flow + lore companion for file-based Twine/SugarCube projects. The file
 system is the source of truth; the graph and all analysis are derived views.
 
+> **The product goal is the Flutter/Android writing app** in
+> [`apps/mobile/`](apps/mobile/) (design in [MOBILE.md](MOBILE.md)). This Node.js
+> code (`lib/`, `server.js`, `public/`) is the reference implementation and
+> risk-probe POC — its derived-model contract is pinned by the golden fixtures in
+> `test/fixtures/lore-model/` so the JS reference and the Dart port assert against
+> the same shape.
+
 ## Run
 
 ```
