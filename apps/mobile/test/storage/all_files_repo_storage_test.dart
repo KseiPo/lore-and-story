@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -77,7 +78,7 @@ void main() {
     final leftovers = tmp
         .listSync()
         .whereType<File>()
-        .where((f) => f.path.contains('.tmp-'))
+        .where((f) => f.path.contains('.lore-tmp-'))
         .toList();
     expect(leftovers, isEmpty);
   });
@@ -131,5 +132,101 @@ void main() {
       () => storage.writeAtomic('no-such-dir/file.md', 'x'),
       throwsA(isA<RepoStorageException>()),
     );
+  });
+
+  // --- Story 1.2: byte-exactness, malformed reads, temp lifecycle ----------
+
+  // read -> writeAtomic(read result) -> raw bytes on disk must equal the
+  // original bytes exactly, for every well-formed UTF-8 shape.
+  Future<void> expectByteExactRoundTrip(List<int> original, String name) async {
+    await File('${tmp.path}/$name').writeAsBytes(original, flush: true);
+    final s = await storage.read(name);
+    await storage.writeAtomic(name, s);
+    final after = await File('${tmp.path}/$name').readAsBytes();
+    expect(after, orderedEquals(original), reason: 'round-trip changed bytes: $name');
+  }
+
+  test('byte-exact round-trip preserves LF line endings', () async {
+    await expectByteExactRoundTrip(utf8.encode('a\nb\nc\n'), 'lf.md');
+  });
+
+  test('byte-exact round-trip preserves CRLF line endings', () async {
+    await expectByteExactRoundTrip(utf8.encode('a\r\nb\r\nc\r\n'), 'crlf.md');
+  });
+
+  test('byte-exact round-trip preserves absence of a trailing newline', () async {
+    await expectByteExactRoundTrip(utf8.encode('no trailing newline'), 'notrail.md');
+  });
+
+  test('byte-exact round-trip preserves a leading UTF-8 BOM', () async {
+    final withBom = <int>[0xEF, 0xBB, 0xBF, ...utf8.encode('# Title\n')];
+    await expectByteExactRoundTrip(withBom, 'bom.md');
+  });
+
+  test('byte-exact round-trip preserves Cyrillic content', () async {
+    await expectByteExactRoundTrip(
+      utf8.encode('# Селена\n«Тест» — реплика.\n'),
+      'cyr.md',
+    );
+  });
+
+  test('read of invalid UTF-8 bytes never throws (NFR7)', () async {
+    // 0xFF/0xFE are invalid UTF-8 lead bytes.
+    await File('${tmp.path}/bad.md').writeAsBytes([0xFF, 0xFE, 0x00, 0x41]);
+    final s = await storage.read('bad.md');
+    expect(s, contains('\u{FFFD}')); // decoded best-effort, did not throw
+  });
+
+  test('a stale temp file is swept on the next write to that directory',
+      () async {
+    // Stale temp must carry THIS target's scoped prefix to be swept.
+    final stale = File('${tmp.path}/.lore-tmp-fresh.md-999-1');
+    stale.writeAsStringSync('junk from an interrupted write');
+    expect(stale.existsSync(), isTrue);
+
+    await storage.writeAtomic('fresh.md', 'ok');
+
+    expect(stale.existsSync(), isFalse);
+    expect(await storage.read('fresh.md'), 'ok');
+  });
+
+  test('byte-exact round-trip preserves a doubled leading BOM', () async {
+    final twoBoms = <int>[
+      0xEF, 0xBB, 0xBF, 0xEF, 0xBB, 0xBF, //
+      ...utf8.encode('# Title\n'),
+    ];
+    await expectByteExactRoundTrip(twoBoms, 'twobom.md');
+  });
+
+  test('byte-exact round-trip preserves empty (0-byte) content', () async {
+    await expectByteExactRoundTrip(<int>[], 'empty.md');
+    expect(await storage.read('empty.md'), '');
+  });
+
+  test('writeAtomic to an empty path (the root) throws, never touches the parent',
+      () async {
+    expect(
+      () => storage.writeAtomic('', 'x'),
+      throwsA(isA<RepoStorageException>()),
+    );
+    // No temp leaked into the parent of the root.
+    final parentTemps = tmp.parent
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.contains('.lore-tmp-'))
+        .toList();
+    expect(parentTemps, isEmpty);
+  });
+
+  test('concurrent writes to different files in the same dir both succeed',
+      () async {
+    // Scoped-prefix sweep must not let one write delete another\'s in-flight
+    // temp when they target different files in the same directory.
+    await Future.wait([
+      storage.writeAtomic('a.md', 'AAA'),
+      storage.writeAtomic('b.md', 'BBB'),
+    ]);
+    expect(await storage.read('a.md'), 'AAA');
+    expect(await storage.read('b.md'), 'BBB');
   });
 }

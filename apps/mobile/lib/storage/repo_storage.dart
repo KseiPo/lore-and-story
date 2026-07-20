@@ -80,18 +80,20 @@ abstract interface class RepoStorage {
   /// call [exists] rather than inferring it from an empty list.
   Future<List<RepoEntry>> listDir(String path);
 
-  /// Reads the file at [path] as UTF-8 text.
-  ///
-  /// Throws [RepoStorageException] if the file is missing or unreadable.
+  /// Reads the file at [path] as UTF-8 text, **best-effort**: invalid UTF-8
+  /// bytes decode to U+FFFD rather than throwing, so a malformed file still
+  /// opens (NFR7 / AD-8). A missing file or I/O error still throws
+  /// [RepoStorageException]. Because malformed bytes are lossy on decode, a
+  /// malformed file is **not** guaranteed byte-exact if written back via
+  /// [writeAtomic]; well-formed UTF-8 round-trips exactly.
   Future<String> read(String path);
 
-  /// Writes [contents] to [path] atomically: a temp file in the **same
-  /// directory** followed by a rename, so the external syncer never observes a
-  /// partial file.
-  ///
-  /// NOTE: the byte-exact / EOL-preserving guarantees (AD-4 / NFR1) are hardened
-  /// in **Story 1.2**. This story only requires the atomic temp+rename seam to
-  /// exist. Throws [RepoStorageException] on failure.
+  /// Writes [contents] to [path] atomically and byte-exactly: a temp file in the
+  /// **same directory** followed by a rename, so the external syncer never
+  /// observes a partial file (AD-4 / AD-5 / NFR1). [contents] is encoded as
+  /// canonical UTF-8 and written verbatim — no newline translation, no BOM
+  /// insert/strip, no trimming; the caller's EOL and trailing newline are
+  /// preserved. Throws [RepoStorageException] on failure.
   Future<void> writeAtomic(String path, String contents);
 
   /// Whether a file or directory exists at [path].

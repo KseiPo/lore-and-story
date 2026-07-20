@@ -9,4 +9,5 @@ library;
 export 'repo_storage.dart';
 export 'android_storage.dart';
 export 'repo_root_store.dart';
+export 'round_trip_spike.dart';
 export 'storage_permission.dart';

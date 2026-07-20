@@ -119,6 +119,41 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _refresh();
   }
 
+  /// Debug trigger for the Story 1.2 headless round-trip spike (S1 gate): find a
+  /// `.ru.md` under the root, read → atomic write-back → re-read, and report
+  /// whether it round-tripped byte-safely. Never crashes the app (NFR7).
+  Future<void> _runRoundTripSpike() async {
+    final root = _rootPath;
+    if (root == null) return;
+    final storage = widget.storageFactory(root);
+    final path = await findFirstMatching(storage, (name) => name.endsWith('.ru.md'));
+    if (!mounted) return;
+    if (path == null) {
+      _showSpikeResult('No .ru.md file found under the repo root.');
+      return;
+    }
+    final result = await RoundTripSpike(storage).run(path);
+    if (!mounted) return;
+    _showSpikeResult(
+      result.identical
+          ? '✓ Byte-safe round-trip.\n\n${result.path}'
+          : '✗ Not byte-safe.\n\n${result.path}\n\n${result.detail ?? ''}',
+    );
+  }
+
+  void _showSpikeResult(String message) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Atomic round-trip'),
+        content: Text(message),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+        ],
+      ),
+    );
+  }
+
   Future<void> _chooseRoot() async {
     final picked = await Navigator.of(context).push<String>(
       MaterialPageRoute(
@@ -175,6 +210,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           rootPath: _rootPath ?? '',
           topLevel: _topLevel,
           onChangeFolder: _chooseRoot,
+          onRunSpike: _runRoundTripSpike,
         );
     }
   }
@@ -217,11 +253,13 @@ class _ReadyView extends StatelessWidget {
   final String rootPath;
   final List<RepoEntry> topLevel;
   final VoidCallback onChangeFolder;
+  final VoidCallback onRunSpike;
 
   const _ReadyView({
     required this.rootPath,
     required this.topLevel,
     required this.onChangeFolder,
+    required this.onRunSpike,
   });
 
   @override
@@ -255,6 +293,12 @@ class _ReadyView extends StatelessWidget {
               );
             },
           ),
+        ),
+        const SizedBox(height: 8),
+        FilledButton.tonalIcon(
+          onPressed: onRunSpike,
+          icon: const Icon(Icons.sync_alt),
+          label: const Text('Run atomic round-trip'),
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
