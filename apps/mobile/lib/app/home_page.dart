@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'app.dart';
+import 'browse_filter.dart';
+import 'editor_page.dart';
+import 'lore_file_picker_page.dart';
 import 'root_picker_page.dart';
 
 /// The three states of the v0.1 landing surface. A real browsing UI is Epic 2 —
@@ -93,7 +96,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     // Demonstrate the seam end-to-end: read the chosen root through RepoStorage.
-    final entries = await storage.listDir('');
+    // Syncthing's own folders (.stfolder, .stversions, ...) are never real
+    // content — hide them here too, same as the file picker.
+    final entries = (await storage.listDir(''))
+        .where((e) => !isHiddenBrowseEntry(e))
+        .toList();
     // Resolve project config every open (re-read, never cached) — FR2.
     final config = await resolveProjectConfig(storage);
     if (!mounted || epoch != _refreshEpoch) return;
@@ -124,37 +131,53 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _refresh();
   }
 
-  /// Debug trigger for the Story 1.2 headless round-trip spike (S1 gate): find a
-  /// `.ru.md` under the root, read → atomic write-back → re-read, and report
-  /// whether it round-tripped byte-safely. Never crashes the app (NFR7).
-  Future<void> _runRoundTripSpike() async {
+  /// Opens the in-repo file picker and, on a selected file, pushes the bare
+  /// editor (AC5 — closes Epic 1's full loop).
+  ///
+  /// Starts at the resolved `loreDir` when it exists as a subfolder of the
+  /// chosen root. If the user pointed the repo root directly at their lore
+  /// folder (a perfectly reasonable choice), `loreDir` won't exist as a
+  /// subfolder of itself — fall back to browsing from the true repo root
+  /// rather than showing an empty picker.
+  Future<void> _openFile() async {
     final root = _rootPath;
     if (root == null) return;
     final storage = widget.storageFactory(root);
-    final path = await findFirstMatching(storage, (name) => name.endsWith('.ru.md'));
+    final startPath = await storage.exists(_loreDir) ? _loreDir : '';
     if (!mounted) return;
-    if (path == null) {
-      _showSpikeResult('No .ru.md file found under the repo root.');
-      return;
-    }
-    final result = await RoundTripSpike(storage).run(path);
-    if (!mounted) return;
-    _showSpikeResult(
-      result.identical
-          ? '✓ Byte-safe round-trip.\n\n${result.path}'
-          : '✗ Not byte-safe.\n\n${result.path}\n\n${result.detail ?? ''}',
-    );
+    await _openFileFrom(storage, startPath);
   }
 
-  void _showSpikeResult(String message) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Atomic round-trip'),
-        content: Text(message),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
-        ],
+  /// Opens [entry]: descends into a directory via the in-repo picker (which
+  /// itself supports further recursive descent and file selection), or opens
+  /// a file directly in the editor.
+  Future<void> _openEntry(RepoEntry entry) async {
+    final root = _rootPath;
+    if (root == null) return;
+    final storage = widget.storageFactory(root);
+    if (entry.isDirectory) {
+      await _openFileFrom(storage, entry.path);
+    } else {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => EditorPage(storage: storage, path: entry.path),
+        ),
+      );
+    }
+  }
+
+  /// Pushes the in-repo file picker rooted at [startPath]; on a selected file,
+  /// pushes the bare editor.
+  Future<void> _openFileFrom(RepoStorage storage, String startPath) async {
+    final path = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => LoreFilePickerPage(storage: storage, startPath: startPath),
+      ),
+    );
+    if (path == null || !mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => EditorPage(storage: storage, path: path),
       ),
     );
   }
@@ -216,7 +239,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           loreDir: _loreDir,
           topLevel: _topLevel,
           onChangeFolder: _chooseRoot,
-          onRunSpike: _runRoundTripSpike,
+          onOpenFile: _openFile,
+          onOpenEntry: _openEntry,
         );
     }
   }
@@ -260,14 +284,16 @@ class _ReadyView extends StatelessWidget {
   final String loreDir;
   final List<RepoEntry> topLevel;
   final VoidCallback onChangeFolder;
-  final VoidCallback onRunSpike;
+  final VoidCallback onOpenFile;
+  final void Function(RepoEntry entry) onOpenEntry;
 
   const _ReadyView({
     required this.rootPath,
     required this.loreDir,
     required this.topLevel,
     required this.onChangeFolder,
-    required this.onRunSpike,
+    required this.onOpenFile,
+    required this.onOpenEntry,
   });
 
   @override
@@ -302,15 +328,17 @@ class _ReadyView extends StatelessWidget {
                   e.isDirectory ? Icons.folder_outlined : Icons.description_outlined,
                 ),
                 title: Text(e.name),
+                trailing: e.isDirectory ? const Icon(Icons.chevron_right) : null,
+                onTap: () => onOpenEntry(e),
               );
             },
           ),
         ),
         const SizedBox(height: 8),
-        FilledButton.tonalIcon(
-          onPressed: onRunSpike,
-          icon: const Icon(Icons.sync_alt),
-          label: const Text('Run atomic round-trip'),
+        FilledButton.icon(
+          onPressed: onOpenFile,
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Open a file'),
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(

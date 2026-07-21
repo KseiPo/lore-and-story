@@ -37,25 +37,76 @@ class FakeStoragePermission extends StoragePermission {
 }
 
 /// In-memory [RepoStorage] for widget tests.
+///
+/// Models a small virtual filesystem: [entries] is the root listing (kept for
+/// backward compatibility with existing tests); [dirEntries] gives the
+/// listing for any other repo-relative path; [fileContents] seeds initial file
+/// content read by [read]. Every [writeAtomic] call is recorded in
+/// [writeCalls] and updates the in-memory content so a subsequent [read]
+/// reflects the write — letting tests assert both "was written" and "reads
+/// back the saved content."
 class FakeRepoStorage implements RepoStorage {
   @override
   final String rootPath;
   final List<RepoEntry> _entries;
+  final Map<String, List<RepoEntry>> _dirEntries;
+  final Map<String, String> _fileContents = {};
 
-  FakeRepoStorage(this.rootPath, {List<RepoEntry> entries = const []})
-      : _entries = entries; // ignore: prefer_initializing_formals
+  /// Every `(path, contents)` passed to [writeAtomic], in call order. A Dart
+  /// record (not `MapEntry`, which uses identity equality) so tests can assert
+  /// on it with plain `==`/`orderedEquals`.
+  final List<(String path, String contents)> writeCalls = [];
+
+  /// When true, [writeAtomic] throws instead of recording — lets tests cover
+  /// the save-failure path.
+  final bool failWrites;
+
+  FakeRepoStorage(
+    this.rootPath, {
+    List<RepoEntry> entries = const [],
+    Map<String, List<RepoEntry>> dirEntries = const {},
+    Map<String, String> fileContents = const {},
+    this.failWrites = false,
+  })  : _entries = entries, // ignore: prefer_initializing_formals
+        _dirEntries = dirEntries { // ignore: prefer_initializing_formals
+    _fileContents.addAll(fileContents);
+  }
 
   @override
-  Future<List<RepoEntry>> listDir(String path) async =>
-      path.isEmpty ? List.of(_entries) : const [];
+  Future<List<RepoEntry>> listDir(String path) async {
+    // The root can be seeded either via `entries` (the original single-level
+    // form) or via `dirEntries['']` — honour both, so seeding the root the
+    // natural way through dirEntries isn't silently ignored. This matters now
+    // that startPath: '' is a real production branch.
+    if (path.isEmpty) {
+      return List.of(_dirEntries[''] ?? _entries);
+    }
+    return List.of(_dirEntries[path] ?? const []);
+  }
 
   @override
-  Future<String> read(String path) async => '';
+  Future<String> read(String path) async {
+    final content = _fileContents[path];
+    if (content == null) {
+      throw RepoStorageException('not found (fake)', path);
+    }
+    return content;
+  }
 
   @override
-  Future<void> writeAtomic(String path, String contents) async {}
+  Future<void> writeAtomic(String path, String contents) async {
+    if (failWrites) {
+      throw RepoStorageException('write failed (fake)', path);
+    }
+    writeCalls.add((path, contents));
+    _fileContents[path] = contents;
+  }
 
   @override
-  // The root ('') exists; no specific child files are modeled.
-  Future<bool> exists(String path) async => path.isEmpty;
+  // The root ('') always exists; a directory "exists" if it has a seeded
+  // listing (even an empty one, via dirEntries), a file if its content is
+  // seeded. This lets tests exercise the "path is genuinely absent" branch
+  // (e.g. a resolved loreDir that doesn't exist under the chosen root).
+  Future<bool> exists(String path) async =>
+      path.isEmpty || _dirEntries.containsKey(path) || _fileContents.containsKey(path);
 }

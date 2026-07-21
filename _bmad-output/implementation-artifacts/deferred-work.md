@@ -24,3 +24,11 @@
 - **`ProjectConfig.==`/`hashCode`/`toString` are untested** — add coverage if/when Epic 2 relies on config equality for caching or comparison. [apps/mobile/lib/lore/project_config.dart:53]
 - **`resolveProjectConfig`'s `RepoStorageException` catch is only tested via the missing-file case**, not a genuine I/O error (e.g. `lore-story.json` existing as a directory). [apps/mobile/test/lore/project_config_test.dart]
 - **AC5's "observable" clause has no widget-test assertion** on the rendered `loreDir` text (only verified by code inspection). [apps/mobile/test/widget_test.dart]
+
+## Deferred from: code review of 1-4-open-and-save-one-file-in-a-bare-editor (2026-07-20)
+
+- **Editor never re-checks the file before overwriting it** — open a file, background the app while Syncthing pulls a desktop edit, return and tap save: the remote edit is atomically and byte-exactly obliterated with no warning. A refuse-on-mismatch guard is cheap, but without the Epic 2 conflict UX (FR17 / Story 2.4) it produces a blocked save with no resolution path. **Revisit together with the conflict UI** — this is the highest-value deferred item in the log. [apps/mobile/lib/app/editor_page.dart:87]
+- **`*.sync-conflict-*` files are unfiltered and freely editable** — deliberately NOT hidden, because FR17 requires conflict copies be surfaced with a badge rather than hidden. Editing one silently puts work in a file the syncer treats as garbage. Resolved by Story 2.4's conflict-badge UI. [apps/mobile/lib/storage/repo_storage.dart]
+- **`_openEntry` doesn't `exists`-check a folder that vanished between listing and tap** — yields an empty picker with the Up button suppressed (dead end, but not a crash). `_openFile` already applies the port doc's `exists` disambiguation; `_openEntry` should too. [apps/mobile/lib/app/home_page.dart:152]
+- **A `loreDir` configured with a trailing slash breaks `_atStart`** — `'lore/'` never equals `'lore'`, so the picker shows a phantom extra Up level. Fix by normalizing trailing slashes in `ProjectConfig.parse` or the picker. [apps/mobile/lib/app/lore_file_picker_page.dart:81]
+- **A regular *file* named exactly `loreDir` passes the `exists` check** — the picker then opens on a file path, lists nothing, and hides Up. Fixing properly needs an `isDirectory`/stat capability on the `RepoStorage` port. [apps/mobile/lib/app/home_page.dart:145]

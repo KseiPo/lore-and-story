@@ -49,11 +49,11 @@ story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
   # Epic 1: Edit a file end-to-end (v0.1 — thin vertical slice)
-  epic-1: in-progress
+  epic-1: done
   1-1-scaffold-the-app-and-grant-the-repo-folder: done
   1-2-prove-a-safe-atomic-round-trip-headless-spike: done
   1-3-resolve-project-configuration: done
-  1-4-open-and-save-one-file-in-a-bare-editor: backlog
+  1-4-open-and-save-one-file-in-a-bare-editor: done
   epic-1-retrospective: optional
 
   # Epic 2: Browse, edit, and create lore & scenes (v0.1 — full experience)

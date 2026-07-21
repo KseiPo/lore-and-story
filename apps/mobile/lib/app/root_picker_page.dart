@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../storage/storage.dart';
 import 'app.dart';
+import 'browse_filter.dart';
 
 /// In-app directory browser rooted at primary shared storage. It navigates real
 /// filesystem directories through the [RepoStorage] seam and returns the
@@ -45,7 +46,9 @@ class _RootPickerPageState extends State<RootPickerPage> {
     setState(() => _loading = true);
     final entries = await _storage.listDir(requested);
     if (!mounted || epoch != _loadEpoch) return;
-    final dirs = entries.where((e) => e.isDirectory).toList()
+    final dirs = entries
+        .where((e) => e.isDirectory && !isHiddenBrowseEntry(e))
+        .toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     setState(() {
       _dirs = dirs;
