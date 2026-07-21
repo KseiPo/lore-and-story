@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'app.dart';
 import 'root_picker_page.dart';
@@ -32,6 +33,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   _Stage _stage = _Stage.loading;
   String? _rootPath;
   List<RepoEntry> _topLevel = const [];
+  String _loreDir = ProjectConfig.defaults.loreDir;
 
   /// Monotonic guard: a resume-triggered refresh can start while a prior one is
   /// still awaiting I/O. Each run captures the current epoch and bails after any
@@ -92,12 +94,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     // Demonstrate the seam end-to-end: read the chosen root through RepoStorage.
     final entries = await storage.listDir('');
+    // Resolve project config every open (re-read, never cached) — FR2.
+    final config = await resolveProjectConfig(storage);
     if (!mounted || epoch != _refreshEpoch) return;
     entries.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     setState(() {
       _stage = _Stage.ready;
       _rootPath = root;
       _topLevel = entries;
+      _loreDir = config.loreDir;
     });
   }
 
@@ -208,6 +213,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case _Stage.ready:
         return _ReadyView(
           rootPath: _rootPath ?? '',
+          loreDir: _loreDir,
           topLevel: _topLevel,
           onChangeFolder: _chooseRoot,
           onRunSpike: _runRoundTripSpike,
@@ -251,12 +257,14 @@ class _MessageAction extends StatelessWidget {
 
 class _ReadyView extends StatelessWidget {
   final String rootPath;
+  final String loreDir;
   final List<RepoEntry> topLevel;
   final VoidCallback onChangeFolder;
   final VoidCallback onRunSpike;
 
   const _ReadyView({
     required this.rootPath,
+    required this.loreDir,
     required this.topLevel,
     required this.onChangeFolder,
     required this.onRunSpike,
@@ -271,6 +279,10 @@ class _ReadyView extends StatelessWidget {
         Text('Repo root', style: theme.textTheme.labelLarge),
         const SizedBox(height: 4),
         Text(rootPath, style: theme.textTheme.bodyMedium),
+        const SizedBox(height: 12),
+        Text('Lore folder', style: theme.textTheme.labelLarge),
+        const SizedBox(height: 4),
+        Text(loreDir, style: theme.textTheme.bodyMedium),
         const SizedBox(height: 16),
         Text(
           topLevel.isEmpty

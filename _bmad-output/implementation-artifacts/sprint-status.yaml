@@ -52,7 +52,7 @@ development_status:
   epic-1: in-progress
   1-1-scaffold-the-app-and-grant-the-repo-folder: done
   1-2-prove-a-safe-atomic-round-trip-headless-spike: done
-  1-3-resolve-project-configuration: backlog
+  1-3-resolve-project-configuration: done
   1-4-open-and-save-one-file-in-a-bare-editor: backlog
   epic-1-retrospective: optional
 
