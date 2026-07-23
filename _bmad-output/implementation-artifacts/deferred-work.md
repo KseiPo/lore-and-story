@@ -32,3 +32,10 @@
 - **`_openEntry` doesn't `exists`-check a folder that vanished between listing and tap** — yields an empty picker with the Up button suppressed (dead end, but not a crash). `_openFile` already applies the port doc's `exists` disambiguation; `_openEntry` should too. [apps/mobile/lib/app/home_page.dart:152]
 - **A `loreDir` configured with a trailing slash breaks `_atStart`** — `'lore/'` never equals `'lore'`, so the picker shows a phantom extra Up level. Fix by normalizing trailing slashes in `ProjectConfig.parse` or the picker. [apps/mobile/lib/app/lore_file_picker_page.dart:81]
 - **A regular *file* named exactly `loreDir` passes the `exists` check** — the picker then opens on a file path, lists nothing, and hides Up. Fixing properly needs an `isDirectory`/stat capability on the `RepoStorage` port. [apps/mobile/lib/app/home_page.dart:145]
+
+## Deferred from: code review of 2-1a-port-the-lore-loader-read-model (2026-07-20)
+
+- ~~`children[]` ordering under-specified~~ — **RESOLVED 2026-07-20**: `lib/lore.js` now sorts files before flattening; both implementations are deterministic; README documents it. (Goldens regenerated, no reorder.)
+- ~~`prettify` capitalization~~ — **RESOLVED 2026-07-20**: `prettify` no longer changes case in either implementation (KseiPo: "we don't need to capitalize anything"); goldens regenerated.
+- **`localeCompare` vs `compareTo` sort divergence** — the Dart normalizer sorts entries and `langs` keys with `compareTo` (UTF-16 code units) where the JS reference uses `localeCompare`. They agree for all current fixture ids (lowercase ASCII) and the `ru/en/orig` key set. Revisit if a fixture introduces mixed-case or Cyrillic ids/keys. [apps/mobile/test/lore/normalize.dart]
+- **Malformed-UTF-8 replacement-char granularity may differ (Node/V8 vs Dart `Utf8Decoder`)** — only affects `textSha` of genuinely corrupt files; real files are well-formed. Latent. [apps/mobile/lib/storage/all_files_repo_storage.dart:54]

@@ -6,4 +6,6 @@
 /// `storage/` slice's [RepoStorage] port.
 library;
 
+export 'lore_loader.dart';
+export 'lore_model.dart';
 export 'project_config.dart';

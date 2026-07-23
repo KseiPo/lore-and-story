@@ -33,7 +33,7 @@
         "children": [
           {
             "name": "events",
-            "title": "Events",
+            "title": "events",
             "overview": null,
             "items": [
               {
@@ -55,7 +55,7 @@
           },
           {
             "name": "quests",
-            "title": "Quests",
+            "title": "quests",
             "overview": null,
             "items": [],
             "children": [

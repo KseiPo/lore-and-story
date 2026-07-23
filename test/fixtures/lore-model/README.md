@@ -37,7 +37,7 @@ two repos that are otherwise independent.
 |---|---|
 | `01-simple-entities` | `.md` in a category is a simple entity; title from `# heading`; **title falls back to the filename slug** when there is no heading; `aliases:` optional; aliases always include the title, deduped. Also pins the **EN title + RU aliases** shape the real cards use — which is what makes the alias index double as an AI translation glossary (MOBILE.md §6.2). |
 | `02-entity-folders` | card via `<folder-name>.md` **and** via `index.md`; a folder **without** either is a nested *category* (`characters/secondary` → carrie's category), not an entity; `media/` skipped at both category and entity level. |
-| `03-sub-entry-tree` | root sub-entry (`arc.md`); `events/` group; **nested** section with its own overview card (`quests/relationship-quest-1/`); `group` = subfolder path; folder names prettified into section titles; `scene ⇄ passage` extraction. |
+| `03-sub-entry-tree` | root sub-entry (`arc.md`); `events/` group; **nested** section with its own overview card (`quests/relationship-quest-1/`); `group` = subfolder path; folder names prettified into section titles (`-`/`_` → space, **case unchanged**); `scene ⇄ passage` extraction. |
 | `04-language-pairs` | `ru`+`en` merge into one item titled `"<ru> — <en>"` (**original first**); `ru`-only keeps its RU title (the *needs translation* signal); `en`-only; `orig` (no suffix); `passage` read from the RU variant of a pair. |
 
 ## The normalization contract (`normalize.js`)
@@ -55,7 +55,9 @@ must reproduce both** or it cannot compare against these files:
    files.
 
 Entries are sorted by `id` so the comparison does not depend on directory
-iteration order.
+iteration order. An entity's flat `children[]` is **also order-stable**: both
+implementations sort a folder's files by name before flattening, so `children[]`
+never depends on `readdir` order (which is not guaranteed across filesystems).
 
 ## ⚠️ Do not let git rewrite these bytes
 
