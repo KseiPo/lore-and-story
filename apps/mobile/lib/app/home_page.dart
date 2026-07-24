@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'app.dart';
-import 'browse_filter.dart';
+import 'category_entities_page.dart';
 import 'editor_page.dart';
 import 'lore_file_picker_page.dart';
 import 'root_picker_page.dart';
@@ -35,7 +35,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   _Stage _stage = _Stage.loading;
   String? _rootPath;
-  List<RepoEntry> _topLevel = const [];
   String _loreDir = ProjectConfig.defaults.loreDir;
 
   /// Result of the last lore walk. Rebuilt on every refresh — never cached
@@ -112,7 +111,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!granted) {
       setState(() {
         _stage = _Stage.needsPermission;
-        _topLevel = const [];
+        _lore = LoreModel.empty;
       });
       return;
     }
@@ -136,25 +135,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
-    // Demonstrate the seam end-to-end: read the chosen root through RepoStorage.
-    // Syncthing's own folders (.stfolder, .stversions, ...) are never real
-    // content — hide them here too, same as the file picker.
-    final entries = (await storage.listDir(''))
-        .where((e) => !isHiddenBrowseEntry(e))
-        .toList();
     // Resolve project config every open (re-read, never cached) — FR2.
     final config = await resolveProjectConfig(storage);
+    // The picked folder IS the lore folder — the author syncs the lore folder
+    // itself, so its contents are the categories/entities directly (no `lore/`
+    // level), which is why loreDir defaults to the repo root. A lore-story.json
+    // may still redirect loreDir to a subfolder for the whole-repo-sync case.
+    //
+    // We deliberately do NOT substitute the repo root when a configured
+    // subfolder is missing: silently walking the whole repo would surface — and
+    // let the author byte-exact-save — non-lore files (README, CHANGELOG, …). A
+    // missing configured loreDir instead yields an empty model that names the
+    // folder, a safe and recoverable signal that a rescan clears once the
+    // subfolder syncs in.
+    final loreDir = config.loreDir;
     // Full lore walk, rebuilt every refresh (AD-10). This is the rescan: on
-    // resume or manual refresh it re-reads the repo from disk, so surfaced
-    // conflict copies always reflect current state (FR3).
-    final lore = await loadLore(storage, config.loreDir);
+    // resume or manual refresh it re-reads the repo from disk, so the browsed
+    // categories/entities and surfaced conflict copies always reflect current
+    // state (FR3). Browsing is driven by this model, not a raw directory listing.
+    final lore = await loadLore(storage, loreDir);
     if (!mounted || epoch != _refreshEpoch) return;
-    entries.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     setState(() {
       _stage = _Stage.ready;
       _rootPath = root;
-      _topLevel = entries;
-      _loreDir = config.loreDir;
+      _loreDir = loreDir;
       _lore = lore;
     });
   }
@@ -163,7 +167,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _stage = _Stage.needsRoot;
       _rootPath = null;
-      _topLevel = const [];
+      _lore = LoreModel.empty;
     });
   }
 
@@ -194,25 +198,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _openFileFrom(storage, startPath);
   }
 
-  /// Opens [entry]: descends into a directory via the in-repo picker (which
-  /// itself supports further recursive descent and file selection), or opens
-  /// a file directly in the editor.
-  Future<void> _openEntry(RepoEntry entry) async {
+  /// Opens a category's entities list (Story 2.2). On return — including from
+  /// any editor opened through it — rescans so the counts/conflicts reflect
+  /// edits (FR3: "reflects the current repo"; AD-10 rebuild).
+  Future<void> _openCategory(LoreCategory category) async {
     final root = _rootPath;
     if (root == null) return;
     final storage = widget.storageFactory(root);
-    if (entry.isDirectory) {
-      await _openFileFrom(storage, entry.path);
-    } else {
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => EditorPage(storage: storage, path: entry.path),
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CategoryEntitiesPage(
+          storage: storage,
+          category: category,
+          loreDir: _loreDir,
         ),
-      );
-      // The edit may have changed the model (content, or a new file) — rescan
-      // so the counts/conflicts reflect it (FR3: "reflects the current repo").
-      if (mounted) await _refresh();
-    }
+      ),
+    );
+    if (mounted) await _refresh();
   }
 
   /// Pushes the in-repo file picker rooted at [startPath]; on a selected file,
@@ -287,11 +289,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return _ReadyView(
           rootPath: _rootPath ?? '',
           loreDir: _loreDir,
-          topLevel: _topLevel,
           lore: _lore,
+          categories: categoriesOf(_lore.entries),
           onChangeFolder: _chooseRoot,
           onOpenFile: _openFile,
-          onOpenEntry: _openEntry,
+          onOpenCategory: _openCategory,
           onRefresh: _refresh,
         );
 
@@ -343,21 +345,21 @@ class _MessageAction extends StatelessWidget {
 class _ReadyView extends StatelessWidget {
   final String rootPath;
   final String loreDir;
-  final List<RepoEntry> topLevel;
   final LoreModel lore;
+  final List<LoreCategory> categories;
   final VoidCallback onChangeFolder;
   final VoidCallback onOpenFile;
-  final void Function(RepoEntry entry) onOpenEntry;
+  final void Function(LoreCategory category) onOpenCategory;
   final VoidCallback onRefresh;
 
   const _ReadyView({
     required this.rootPath,
     required this.loreDir,
-    required this.topLevel,
     required this.lore,
+    required this.categories,
     required this.onChangeFolder,
     required this.onOpenFile,
-    required this.onOpenEntry,
+    required this.onOpenCategory,
     required this.onRefresh,
   });
 
@@ -373,7 +375,10 @@ class _ReadyView extends StatelessWidget {
         const SizedBox(height: 12),
         Text('Lore folder', style: theme.textTheme.labelLarge),
         const SizedBox(height: 4),
-        Text(loreDir, style: theme.textTheme.bodyMedium),
+        Text(
+          loreDir.isEmpty ? '(the selected folder)' : loreDir,
+          style: theme.textTheme.bodyMedium,
+        ),
         const SizedBox(height: 4),
         Text(
           '${lore.entries.length} lore '
@@ -409,29 +414,36 @@ class _ReadyView extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 16),
-        Text(
-          topLevel.isEmpty
-              ? 'No entries found at the root.'
-              : 'Top-level entries (${topLevel.length}):',
-          style: theme.textTheme.labelLarge,
-        ),
+        Text('Categories', style: theme.textTheme.labelLarge),
         const SizedBox(height: 8),
         Expanded(
-          child: ListView.builder(
-            itemCount: topLevel.length,
-            itemBuilder: (context, i) {
-              final e = topLevel[i];
-              return ListTile(
-                dense: true,
-                leading: Icon(
-                  e.isDirectory ? Icons.folder_outlined : Icons.description_outlined,
+          child: categories.isEmpty
+              // A friendly empty state, never a hollow list (AD-8/NFR7): an
+              // empty model is a state, not an error.
+              ? Center(
+                  child: Text(
+                    loreDir.isEmpty
+                        ? 'No lore entities found in this folder.'
+                        : 'No lore entities found in "$loreDir".',
+                    style: theme.textTheme.bodyMedium,
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: categories.length,
+                  itemBuilder: (context, i) {
+                    final c = categories[i];
+                    final n = c.entries.length;
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.folder_outlined),
+                      title: Text(c.label),
+                      subtitle: Text('$n ${n == 1 ? "entity" : "entities"}'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => onOpenCategory(c),
+                    );
+                  },
                 ),
-                title: Text(e.name),
-                trailing: e.isDirectory ? const Icon(Icons.chevron_right) : null,
-                onTap: () => onOpenEntry(e),
-              );
-            },
-          ),
         ),
         const SizedBox(height: 8),
         FilledButton.icon(

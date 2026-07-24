@@ -1,5 +1,5 @@
 # generated: 2026-07-20
-# last_updated: 2026-07-20
+# last_updated: 2026-07-24
 # project: Lore & Story
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-20
-last_updated: 2026-07-20
+last_updated: 2026-07-24
 project: Lore & Story
 project_key: NOKEY
 tracking_system: file-system
@@ -60,7 +60,7 @@ development_status:
   epic-2: in-progress
   2-1a-port-the-lore-loader-read-model: done
   2-1b-syncer-aware-walk-and-rescan: done
-  2-2-browse-categories-and-entities: backlog
+  2-2-browse-categories-and-entities: done
   2-3-view-an-entitys-detail-tree: backlog
   2-4-surface-sync-conflict-copies: backlog
   2-5-edit-with-helper-toolbar-and-convention-highlighting: backlog
@@ -70,6 +70,7 @@ development_status:
   2-9-create-a-translation-from-a-missing-en: backlog
   2-10-create-a-new-entity: backlog
   2-11-create-a-new-event-sub-entry: backlog
+  2-12-retire-the-raw-file-picker: backlog
   epic-2-retrospective: optional
 
   # Epic 3: Convention tooling (v0.2)

@@ -144,9 +144,13 @@ FR26 are phased. The mixed Group I tags each FR with its phase inline.
 - **FR1** — The app grants access to a user-chosen repo root folder that lives in
   shared storage (a syncer folder root or a folder inside one), and remembers it
   across launches.
-- **FR2** — On open, the app reads `lore-story.json` (`ARCHITECTURE.md` §3.4) from
-  the repo root to resolve `loreDir` (default `lore`). A missing/invalid config
-  falls back to defaults without blocking.
+- **FR2** — The picked repo folder **is** the lore folder itself (the author syncs
+  the lore folder directly), so `loreDir` defaults to the repo root. On open, the
+  app may still read `lore-story.json` (`ARCHITECTURE.md` §3.4) to redirect
+  `loreDir` to a subfolder for the whole-repo-sync case, honored only when that
+  subfolder exists. A missing/invalid config, or a `loreDir` that does not exist,
+  falls back to the root without blocking (so picking the folder never silently
+  shows nothing).
 - **FR3** — The app re-scans the repo on app resume (no live file watcher in
   v0.1). A manual refresh is available.
 

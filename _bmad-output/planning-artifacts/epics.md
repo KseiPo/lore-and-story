@@ -25,7 +25,7 @@ and MOBILE.md serve as the technical-requirements source.)
 **MVP (v0.1 walking skeleton) — groups A–E + FR24–FR25**
 
 - **FR1**: Grant access to a user-chosen repo root in shared storage and remember it across launches.
-- **FR2**: Read `lore-story.json` to resolve `loreDir` (default `lore`); missing/invalid config falls back without blocking.
+- **FR2**: The picked repo folder is the lore folder itself, so `loreDir` defaults to the repo root; `lore-story.json` may redirect it to a subfolder (whole-repo sync) when that subfolder exists. Missing/invalid config, or a non-existent `loreDir`, falls back to the root without blocking.
 - **FR3**: Re-scan the repo on app resume (no live watcher in v0.1); provide a manual refresh.
 - **FR4**: Show a Categories screen listing top-level folders under `loreDir`.
 - **FR5**: Present simple files and entity folders as one node type in the Entities list (`frank.md` and `selena/` behave identically).
@@ -208,7 +208,7 @@ So that it knows where my lore lives without in-app configuration.
 
 **Acceptance Criteria:**
 
-**Given** a repo root containing `lore-story.json`, **When** the app opens the repo, **Then** it resolves `loreDir` (default `lore`) from it. *(FR2)*
+**Given** a repo root containing `lore-story.json`, **When** the app opens the repo, **Then** it resolves `loreDir` from it (default: the repo root itself — the picked folder is the lore folder). *(FR2)*
 
 **Given** the file is missing or invalid JSON, **When** the app opens the repo, **Then** it falls back to defaults and continues without blocking or crashing.
 
@@ -377,6 +377,24 @@ So that a character can accumulate written content.
 **Acceptance Criteria:**
 
 **Given** an entity folder, **When** I add a new sub-entry to a group (e.g. `events/`), **Then** a new file is created there, creating the group subfolder if needed, RU/EN-aware. *(FR25)*
+
+### Story 2.12: Retire the raw file picker in favor of full browse
+
+As the author,
+I want a single, consistent way to reach my files — the lore browse,
+So that the app isn't cluttered with a second, weaker navigation path that lists raw filenames instead of titles, RU/EN tabs, and conflict badges.
+
+**Context:** "Open a file" + `LoreFilePickerPage` were Epic 1 scaffolding (Story 1.4), kept through Story 2.2 as a secondary action because the browse then only opened an entity's *card*. Once the browse reaches everything an author edits — cards, sub-entries, events, scenes, quests (Story 2.3's detail tree) and RU/EN pairs (Stories 2.8/2.9) — the raw picker is redundant. This is the closing consolidation story of Epic 2; it must run **after** 2.3 (and ideally the editor cluster 2.5–2.9) so removal strands nothing.
+
+**Acceptance Criteria:**
+
+**Given** the browse reaches every editable lore file (card, sub-entry, scene, language variant) via categories → entities → the detail tree, **When** the home surface renders, **Then** the "Open a file" button is gone and browsing is the single navigation path in.
+
+**Given** the raw picker is no longer user-reachable, **When** it is retired, **Then** `LoreFilePickerPage` and the home handlers that drove it (`_openFile`/`_openFileFrom`) are removed cleanly with no dead or half-wired code — **or** the picker is kept only as an explicitly-justified, clearly-labeled advanced/escape-hatch entry point (decide during the story), not as a co-equal primary action. *(AD-12 / hygiene)*
+
+**Given** everything previously reachable through "Open a file", **When** I browse after the change, **Then** each editable lore file remains reachable — no regression in access (verify cards, sub-entries, scenes, and RU/EN variants).
+
+**Notes:** Removing the picker also closes several deferred picker-only bugs (trailing-slash `loreDir`, a file named exactly `loreDir`, the `_openEntry`/`_openFile` `exists`-vs-`isDirectory` conflation) — see `deferred-work.md`. Not tied to a new FR; a UX-consolidation/hygiene story.
 
 ## Epic 3: Convention tooling (v0.2)
 

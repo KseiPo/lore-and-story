@@ -17,10 +17,18 @@ const int _maxLoreDirLength = 512;
 /// `linkMacros`, `dynamicTags`) are twee/desktop concerns and are ignored here.
 /// Pure value type — no I/O.
 class ProjectConfig {
-  /// Repo-relative folder containing lore entries. Default: `lore`.
+  /// Repo-relative folder containing lore entries. Default: `''` — the repo
+  /// root itself.
+  ///
+  /// On mobile the author syncs (and picks) the lore folder directly, so the
+  /// chosen root **is** the lore folder; there is no `lore/` subfolder level.
+  /// A `lore-story.json` may still point `loreDir` at a subfolder for the
+  /// whole-repo-sync case (the desktop layout), but the default is the root —
+  /// deliberately different from the desktop reference's `lore` default, which
+  /// assumes the whole repo is present.
   final String loreDir;
 
-  const ProjectConfig({this.loreDir = 'lore'});
+  const ProjectConfig({this.loreDir = ''});
 
   /// Config used when `lore-story.json` is missing, invalid, or under-specified.
   static const ProjectConfig defaults = ProjectConfig();
@@ -56,6 +64,10 @@ class ProjectConfig {
       while (normalized.startsWith('./')) {
         normalized = normalized.substring(2);
       }
+      // A bare '.' means the repo root — the same as the default. Normalize it
+      // so the resolved value (and the UI/paths built from it) never carry a
+      // literal '.'.
+      if (normalized == '.') normalized = '';
       if (normalized.isEmpty || normalized.length > _maxLoreDirLength) {
         return defaults;
       }

@@ -145,7 +145,7 @@ graph TD
 | Packaging | feature-first vertical slices; slice internals private, cross-slice only via ports/exports (AD-12). |
 | Entity / file identity | IDs are repo-relative paths, **forward-slash normalized even on Android**; category = folder path under `loreDir`; slug = filename; canonical title = first `# heading`. |
 | Data & formats | UTF-8 always (Cyrillic is first-class); RU/EN via `.ru.md`/`.en.md`; `scene ⇄ passage` marker is the literal `⇄` (U+21C4); no frontmatter unless a feature requires it. |
-| Config | `lore-story.json` resolves `loreDir` (default `lore`); re-read per repo open; missing/invalid → defaults, never block. |
+| Config | The picked repo folder is the lore folder itself → `loreDir` defaults to the repo root; `lore-story.json` may redirect it to a subfolder (whole-repo sync) when that subfolder exists; re-read per repo open; missing/invalid or non-existent `loreDir` → root, never block. |
 | State & mutation | model rebuilt not patched (AD-10); every write atomic + byte-exact (AD-4); malformed content flagged, never thrown (AD-8). |
 | Errors & secrets | domain surfaces malformed input as data; AI key in secure storage (AD-11); no telemetry; never log file contents or keys. |
 

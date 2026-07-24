@@ -92,9 +92,12 @@ embedded git (§3.3); its storage properties are otherwise the best of the three
 which is why this table replaced an earlier version that wrongly presented the
 permission as a free-standing choice.
 
-The user grants the permission once and picks the repo root — a folder that is a
-Syncthing folder root or inside one. The app reads `lore-story.json`
-(ARCHITECTURE §3.4) to resolve `loreDir` (default `lore`).
+The user grants the permission once and picks the repo root — the folder they
+sync, which **is** the lore folder itself. So `loreDir` defaults to the picked
+root (not a `lore/` subfolder); the app may still read `lore-story.json`
+(ARCHITECTURE §3.4) to redirect `loreDir` to a subfolder for the whole-repo-sync
+case, honored only when that subfolder exists. (The desktop reference still
+defaults to `lore`, since it assumes the whole repo is present.)
 
 `RepoStorage` is the seam: `listDir`, `read`, `writeAtomic`, `exists`. The loader
 and editor depend only on this interface, never on `MANAGE_EXTERNAL_STORAGE` or

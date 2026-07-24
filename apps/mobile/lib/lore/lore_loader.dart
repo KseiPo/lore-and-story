@@ -243,6 +243,13 @@ class _LoreLoader {
             category.isEmpty ? item.name : '$category/${item.name}',
           );
         }
+      } else if (item.name.startsWith('.')) {
+        // Hidden files are never content — the same all-dot rule the walk uses
+        // for directories (`_isSkippedWalkDir`) and the browse filter uses.
+        // Load-bearing now that the picked repo root is walked directly: an
+        // editor artifact or `.hidden.md` sitting beside real cards must not
+        // become a bogus entity. (Checked before conflict/`.md` classification.)
+        continue;
       } else if (isConflictCopy(item.name)) {
         // Surfaced, never parsed as an entity (FR17).
         _recordConflict(item.path);
@@ -315,6 +322,9 @@ class _LoreLoader {
     for (final e in listed) {
       if (e.isDirectory) {
         if (!_isSkippedWalkDir(e.name)) subdirs.add(e);
+      } else if (e.name.startsWith('.')) {
+        // Hidden file — never content (same all-dot rule as the dir skip).
+        continue;
       } else if (isConflictCopy(e.name)) {
         // Surfaced, never parsed — it must not reach byBase, so it can never
         // become an item, an overview card, or a `children[]` entry (FR17).

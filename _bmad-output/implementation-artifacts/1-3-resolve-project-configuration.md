@@ -8,6 +8,13 @@ Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
+> **⚠️ Superseded default (2026-07-24):** This story was built when the default
+> `loreDir` was `lore` (references below still say so, as a historical record).
+> A later requirements change (FR2) made the picked repo folder the lore folder
+> itself, so the **default `loreDir` is now the repo root (`''`)**; a
+> `lore-story.json` may still redirect it to a subfolder that exists. See the
+> updated FR2 in `prd.md` / `epics.md` and the architecture-spine Config row.
+
 ## Story
 
 As the author,
