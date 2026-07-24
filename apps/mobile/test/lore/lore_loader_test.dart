@@ -75,6 +75,54 @@ void main() {
     });
   });
 
+  group('isSyncerMetadata', () {
+    test('matches the hardcoded syncer set (FR16)', () {
+      expect(isSyncerMetadata('.stfolder'), isTrue);
+      expect(isSyncerMetadata('.stversions'), isTrue);
+      expect(isSyncerMetadata('.stignore'), isTrue);
+    });
+
+    test('does not match ordinary content or media', () {
+      expect(isSyncerMetadata('characters'), isFalse);
+      expect(isSyncerMetadata('media'), isFalse); // skipped separately
+      expect(isSyncerMetadata('frank.md'), isFalse);
+      expect(isSyncerMetadata('.stuff'), isFalse); // not in the hardcoded set
+    });
+  });
+
+  group('isConflictCopy', () {
+    test('matches Syncthing conflict copies', () {
+      expect(
+        isConflictCopy('selena.sync-conflict-20240612-093000-K3F9AAA.md'),
+        isTrue,
+      );
+      expect(isConflictCopy('dock.ru.sync-conflict-20240101-000000-AAA.md'),
+          isTrue);
+    });
+
+    test('does not match ordinary files', () {
+      expect(isConflictCopy('frank.md'), isFalse);
+      expect(isConflictCopy('selena.ru.md'), isFalse);
+      // Right name shape but not markdown — not our concern.
+      expect(isConflictCopy('image.sync-conflict-20240612-093000-A.png'),
+          isFalse);
+    });
+
+    test('does not misfire on an authored name containing the substring', () {
+      // No date/time after `.sync-conflict-` → a real file, not a conflict copy.
+      expect(isConflictCopy('troubleshooting.sync-conflict-recovery.md'),
+          isFalse);
+      expect(isConflictCopy('sync-conflict-notes.md'), isFalse);
+    });
+
+    test('is case-insensitive', () {
+      expect(
+        isConflictCopy('FRANK.SYNC-CONFLICT-20240612-093000-K3F9AAA.MD'),
+        isTrue,
+      );
+    });
+  });
+
   group('passageOf', () {
     test('extracts the scene passage target', () {
       const text = '<!-- scene ⇄ passage: "Selena - Hobby" · lang: ru -->\n';

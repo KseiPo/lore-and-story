@@ -10,6 +10,56 @@
 /// `loreDir`** and forward-slash normalized, even on Android.
 library;
 
+/// The result of one walk: the entity model plus anything the walk surfaced
+/// alongside it.
+///
+/// [conflicts] is **Dart-only** — the JS reference has no syncer awareness
+/// (addendum §E), it is not part of `normalize`, and no golden fixture pins it.
+/// Only [entries] is covered by the shared contract.
+class LoreModel {
+  /// The entity model — the shape pinned by the golden fixtures.
+  final List<LoreEntry> entries;
+
+  /// Syncthing conflict copies found during the walk. Surfaced so the author can
+  /// resolve them (FR17); never parsed as content, never silently dropped.
+  final List<ConflictCopy> conflicts;
+
+  const LoreModel({required this.entries, required this.conflicts});
+
+  static const LoreModel empty = LoreModel(entries: [], conflicts: []);
+}
+
+/// A `*.sync-conflict-*.md` file found during the walk.
+class ConflictCopy {
+  /// loreDir-relative path, forward-slash normalized.
+  final String id;
+
+  /// The filename, e.g. `selena.sync-conflict-20240612-093000-K3F9AAA.md`.
+  final String name;
+
+  /// loreDir-relative directory holding it.
+  final String relDir;
+
+  const ConflictCopy({
+    required this.id,
+    required this.name,
+    required this.relDir,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is ConflictCopy &&
+      other.id == id &&
+      other.name == name &&
+      other.relDir == relDir;
+
+  @override
+  int get hashCode => Object.hash(id, name, relDir);
+
+  @override
+  String toString() => 'ConflictCopy($id)';
+}
+
 /// One lore entity: a simple `.md` card, or an entity folder with a content
 /// tree.
 class LoreEntry {

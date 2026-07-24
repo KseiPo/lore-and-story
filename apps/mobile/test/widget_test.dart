@@ -191,6 +191,76 @@ void main() {
     expect(find.widgetWithText(TextField, '# Frank\n\n**bold**\n'), findsOneWidget);
   });
 
+  testWidgets('surfaces sync-conflict copies found by the walk (FR17)',
+      (tester) async {
+    final storage = FakeRepoStorage(
+      '/storage/emulated/0/repo',
+      entries: const [
+        RepoEntry(name: 'lore', path: 'lore', isDirectory: true),
+      ],
+      dirEntries: {
+        'lore': const [
+          RepoEntry(name: 'frank.md', path: 'lore/frank.md', isDirectory: false),
+          RepoEntry(
+            name: 'frank.sync-conflict-20240612-093000-K3F9AAA.md',
+            path: 'lore/frank.sync-conflict-20240612-093000-K3F9AAA.md',
+            isDirectory: false,
+          ),
+        ],
+      },
+      fileContents: {'lore/frank.md': '# Frank\n'},
+    );
+    await tester.pumpWidget(LoreStoryApp(
+      rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
+      permission: FakeStoragePermission(granted: true),
+      storageFactory: (root) => storage,
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('conflict-banner')), findsOneWidget);
+    expect(find.textContaining('1 sync-conflict copy —'), findsOneWidget);
+    // The conflict copy is surfaced, not counted as a lore entity.
+    expect(find.text('1 lore entity'), findsOneWidget);
+  });
+
+  testWidgets('Refresh re-scans from disk and reflects new state (FR3)',
+      (tester) async {
+    // A mutable listing lets the test change the repo between scans, proving
+    // the refresh performs a real walk rather than reusing a cached model.
+    final loreDir = <RepoEntry>[
+      const RepoEntry(name: 'frank.md', path: 'lore/frank.md', isDirectory: false),
+    ];
+    final storage = FakeRepoStorage(
+      '/storage/emulated/0/repo',
+      entries: const [
+        RepoEntry(name: 'lore', path: 'lore', isDirectory: true),
+      ],
+      dirEntries: {'lore': loreDir},
+      fileContents: {'lore/frank.md': '# Frank\n'},
+    );
+    await tester.pumpWidget(LoreStoryApp(
+      rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
+      permission: FakeStoragePermission(granted: true),
+      storageFactory: (root) => storage,
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('conflict-banner')), findsNothing);
+
+    // The syncer drops a conflict copy while the app is open.
+    loreDir.add(const RepoEntry(
+      name: 'frank.sync-conflict-20240612-093000-K3F9AAA.md',
+      path: 'lore/frank.sync-conflict-20240612-093000-K3F9AAA.md',
+      isDirectory: false,
+    ));
+
+    await tester.tap(find.text('Refresh'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('conflict-banner')), findsOneWidget);
+    expect(find.textContaining('1 sync-conflict copy —'), findsOneWidget);
+  });
+
   testWidgets('media/ is hidden from browsing (binary assets are not editable)',
       (tester) async {
     final storage = FakeRepoStorage(
@@ -209,5 +279,58 @@ void main() {
 
     expect(find.text('characters'), findsOneWidget);
     expect(find.text('media'), findsNothing);
+  });
+
+  testWidgets('resume re-scans from disk and reflects new state (FR3)',
+      (tester) async {
+    final loreDir = <RepoEntry>[
+      const RepoEntry(name: 'frank.md', path: 'lore/frank.md', isDirectory: false),
+    ];
+    final storage = FakeRepoStorage(
+      '/storage/emulated/0/repo',
+      entries: const [
+        RepoEntry(name: 'lore', path: 'lore', isDirectory: true),
+      ],
+      dirEntries: {'lore': loreDir},
+      fileContents: {'lore/frank.md': '# Frank\n'},
+    );
+    await tester.pumpWidget(LoreStoryApp(
+      rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
+      permission: FakeStoragePermission(granted: true),
+      storageFactory: (root) => storage,
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('conflict-banner')), findsNothing);
+
+    loreDir.add(const RepoEntry(
+      name: 'frank.sync-conflict-20240612-093000-K3F9AAA.md',
+      path: 'lore/frank.sync-conflict-20240612-093000-K3F9AAA.md',
+      isDirectory: false,
+    ));
+
+    // A lifecycle resume (not a button) must trigger the same rescan.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('conflict-banner')), findsOneWidget);
+  });
+
+  testWidgets('a scan failure shows an error state with Retry, not a stuck spinner',
+      (tester) async {
+    final storage = FakeRepoStorage(
+      '/storage/emulated/0/repo',
+      // exists('') is true (root), but reading config/listing throws.
+      throwOnListDir: true,
+    );
+    await tester.pumpWidget(LoreStoryApp(
+      rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
+      permission: FakeStoragePermission(granted: true),
+      storageFactory: (root) => storage,
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Something went wrong'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 }

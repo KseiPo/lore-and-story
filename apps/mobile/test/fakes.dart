@@ -61,12 +61,17 @@ class FakeRepoStorage implements RepoStorage {
   /// the save-failure path.
   final bool failWrites;
 
+  /// When true, [listDir] throws — lets tests cover the scan-failure/error-state
+  /// path (an unexpected storage failure during a refresh).
+  final bool throwOnListDir;
+
   FakeRepoStorage(
     this.rootPath, {
     List<RepoEntry> entries = const [],
     Map<String, List<RepoEntry>> dirEntries = const {},
     Map<String, String> fileContents = const {},
     this.failWrites = false,
+    this.throwOnListDir = false,
   })  : _entries = entries, // ignore: prefer_initializing_formals
         _dirEntries = dirEntries { // ignore: prefer_initializing_formals
     _fileContents.addAll(fileContents);
@@ -74,6 +79,9 @@ class FakeRepoStorage implements RepoStorage {
 
   @override
   Future<List<RepoEntry>> listDir(String path) async {
+    if (throwOnListDir) {
+      throw RepoStorageException('listDir failed (fake)', path);
+    }
     // The root can be seeded either via `entries` (the original single-level
     // form) or via `dirEntries['']` — honour both, so seeding the root the
     // natural way through dirEntries isn't silently ignored. This matters now

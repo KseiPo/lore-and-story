@@ -8,14 +8,14 @@ import 'editor_page.dart';
 import 'lore_file_picker_page.dart';
 import 'root_picker_page.dart';
 
-/// The three states of the v0.1 landing surface. A real browsing UI is Epic 2 —
-/// this stays deliberately thin.
-enum _Stage { loading, needsPermission, needsRoot, ready }
+/// The states of the v0.1 landing surface. A real browsing UI is Epic 2 — this
+/// stays deliberately thin.
+enum _Stage { loading, needsPermission, needsRoot, ready, error }
 
 /// Orchestrates grant → pick-root → ready and remembers the choice across
-/// launches. Re-checks on app resume so a permission granted in the system
-/// Settings screen takes effect without an app restart (app-lifecycle only —
-/// this is not the Epic 2 model rescan of AD-10).
+/// launches. Re-checks and re-scans the repo on app resume: a permission granted
+/// in the system Settings screen takes effect without a restart, and the lore
+/// model is rebuilt from disk (the AD-10 rescan — no live watcher, no cache).
 class HomePage extends StatefulWidget {
   final RepoRootStore rootStore;
   final StoragePermission permission;
@@ -38,10 +38,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   List<RepoEntry> _topLevel = const [];
   String _loreDir = ProjectConfig.defaults.loreDir;
 
+  /// Result of the last lore walk. Rebuilt on every refresh — never cached
+  /// across scans (AD-10: no live watcher, the model comes from a full walk).
+  LoreModel _lore = LoreModel.empty;
+  String? _errorMessage;
+
   /// Monotonic guard: a resume-triggered refresh can start while a prior one is
   /// still awaiting I/O. Each run captures the current epoch and bails after any
   /// await if a newer run has superseded it, so stale results never win.
   int _refreshEpoch = 0;
+
+  /// Single-flight coalescing: overlapping triggers (rapid Refresh taps, a
+  /// resume during a walk) never start concurrent full walks. A trigger while a
+  /// walk is in flight sets [_refreshQueued]; the running walk re-runs once when
+  /// it finishes, so the final state is always fresh.
+  bool _refreshing = false;
+  bool _refreshQueued = false;
 
   @override
   void initState() {
@@ -64,7 +76,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// Coalescing, error-bounded entry point for a rescan. All triggers
+  /// (initState, resume, Refresh, return-from-editor) go through here.
   Future<void> _refresh() async {
+    if (_refreshing) {
+      _refreshQueued = true;
+      return;
+    }
+    _refreshing = true;
+    try {
+      do {
+        _refreshQueued = false;
+        await _scanOnce();
+      } while (_refreshQueued && mounted);
+    } catch (e) {
+      // AD-8 is enforced inside the loader, but resolveProjectConfig, the
+      // permission channel, or an unexpected throwable must not strand the UI
+      // on a spinner. Surface an error state with a Retry rather than dropping
+      // the future.
+      if (mounted) {
+        setState(() {
+          _stage = _Stage.error;
+          _errorMessage = e.toString();
+        });
+      }
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  Future<void> _scanOnce() async {
     final epoch = ++_refreshEpoch;
     final granted = await widget.permission.isGranted();
     if (!mounted || epoch != _refreshEpoch) return;
@@ -103,6 +144,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         .toList();
     // Resolve project config every open (re-read, never cached) — FR2.
     final config = await resolveProjectConfig(storage);
+    // Full lore walk, rebuilt every refresh (AD-10). This is the rescan: on
+    // resume or manual refresh it re-reads the repo from disk, so surfaced
+    // conflict copies always reflect current state (FR3).
+    final lore = await loadLore(storage, config.loreDir);
     if (!mounted || epoch != _refreshEpoch) return;
     entries.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     setState(() {
@@ -110,6 +155,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _rootPath = root;
       _topLevel = entries;
       _loreDir = config.loreDir;
+      _lore = lore;
     });
   }
 
@@ -163,11 +209,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           builder: (_) => EditorPage(storage: storage, path: entry.path),
         ),
       );
+      // The edit may have changed the model (content, or a new file) — rescan
+      // so the counts/conflicts reflect it (FR3: "reflects the current repo").
+      if (mounted) await _refresh();
     }
   }
 
   /// Pushes the in-repo file picker rooted at [startPath]; on a selected file,
-  /// pushes the bare editor.
+  /// pushes the bare editor, then rescans so an edit is reflected.
   Future<void> _openFileFrom(RepoStorage storage, String startPath) async {
     final path = await Navigator.of(context).push<String>(
       MaterialPageRoute(
@@ -180,6 +229,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         builder: (_) => EditorPage(storage: storage, path: path),
       ),
     );
+    if (mounted) await _refresh();
   }
 
   Future<void> _chooseRoot() async {
@@ -238,9 +288,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           rootPath: _rootPath ?? '',
           loreDir: _loreDir,
           topLevel: _topLevel,
+          lore: _lore,
           onChangeFolder: _chooseRoot,
           onOpenFile: _openFile,
           onOpenEntry: _openEntry,
+          onRefresh: _refresh,
+        );
+
+      case _Stage.error:
+        return _MessageAction(
+          icon: Icons.error_outline,
+          title: 'Something went wrong',
+          body: _errorMessage ?? 'The repo could not be read.',
+          actionLabel: 'Retry',
+          onAction: _refresh,
         );
     }
   }
@@ -283,17 +344,21 @@ class _ReadyView extends StatelessWidget {
   final String rootPath;
   final String loreDir;
   final List<RepoEntry> topLevel;
+  final LoreModel lore;
   final VoidCallback onChangeFolder;
   final VoidCallback onOpenFile;
   final void Function(RepoEntry entry) onOpenEntry;
+  final VoidCallback onRefresh;
 
   const _ReadyView({
     required this.rootPath,
     required this.loreDir,
     required this.topLevel,
+    required this.lore,
     required this.onChangeFolder,
     required this.onOpenFile,
     required this.onOpenEntry,
+    required this.onRefresh,
   });
 
   @override
@@ -309,6 +374,40 @@ class _ReadyView extends StatelessWidget {
         Text('Lore folder', style: theme.textTheme.labelLarge),
         const SizedBox(height: 4),
         Text(loreDir, style: theme.textTheme.bodyMedium),
+        const SizedBox(height: 4),
+        Text(
+          '${lore.entries.length} lore '
+          '${lore.entries.length == 1 ? "entity" : "entities"}',
+          style: theme.textTheme.bodyMedium,
+        ),
+        if (lore.conflicts.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          // Conflict copies are surfaced, never hidden (FR17). The badged,
+          // tappable list is Story 2.4; this is the visible signal.
+          Container(
+            key: const Key('conflict-banner'),
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.errorContainer,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_outlined,
+                    size: 18, color: theme.colorScheme.onErrorContainer),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${lore.conflicts.length} sync-conflict '
+                    '${lore.conflicts.length == 1 ? "copy" : "copies"} — resolve on the desktop',
+                    style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         Text(
           topLevel.isEmpty
@@ -339,6 +438,14 @@ class _ReadyView extends StatelessWidget {
           onPressed: onOpenFile,
           icon: const Icon(Icons.edit_outlined),
           label: const Text('Open a file'),
+        ),
+        const SizedBox(height: 8),
+        // Manual half of FR3 — the resume path already re-scans via the
+        // lifecycle observer; this makes a rescan available on demand.
+        OutlinedButton.icon(
+          onPressed: onRefresh,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Refresh'),
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(

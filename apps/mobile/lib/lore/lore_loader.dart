@@ -64,11 +64,58 @@ String prettify(String seg) => seg.replaceAll(_sepRe, ' ');
 /// The `scene ⇄ passage: "..."` target declared in [text], if any.
 String? passageOf(String text) => _passageRe.firstMatch(text)?.group(1);
 
-/// Parses [loreDir] (repo-relative) into the entity model.
+/// Well-known syncer/VCS metadata names (FR16, per AD-5). `.stversions` is the
+/// load-bearing one: it holds dated `.md` copies of real files that would
+/// otherwise be parsed as bogus entities. Case-insensitive — a Windows-authored
+/// repo can sync down `.StVersions`.
 ///
-/// Returns `[]` when [loreDir] does not exist. Never throws for a missing or
-/// unreadable directory — `listDir` already degrades to empty (AD-8).
-Future<List<LoreEntry>> loadLore(RepoStorage storage, String loreDir) async {
+/// Dart-only: the JS reference has no syncer awareness (addendum §E), and no
+/// golden fixture contains these, so this cannot affect fixture conformance.
+const Set<String> kSyncerMetadataNames = {
+  '.stfolder',
+  '.stversions',
+  '.stignore',
+};
+
+/// True for a known syncer-internal name (case-insensitive).
+bool isSyncerMetadata(String name) =>
+    kSyncerMetadataNames.contains(name.toLowerCase());
+
+/// Directories the walk never descends into: `media/` (binary assets, shared
+/// contract) and **every dot-prefixed folder** — the same rule the browse UI
+/// uses (`app/browse_filter.dart`). A 3-name allowlist was too weak: it let the
+/// walk descend into `.git`, `.github` (full of `.md`), `.obsidian`, and any
+/// future `.st*`, loading their markdown as bogus entities — reachable when the
+/// repo root *is* the lore folder. This also covers the app's own `.lore-tmp-*`
+/// atomic-write temps (whose skip the storage adapter already promises here).
+bool _isSkippedWalkDir(String name) =>
+    name == 'media' || name.startsWith('.');
+
+// Syncthing conflict copies: `<base>.sync-conflict-<yyyymmdd>-<hhmmss>-<modid>.md`.
+// Anchored to the real shape (dated) so an *authored* file that merely contains
+// the substring — e.g. `troubleshooting.sync-conflict-recovery.md` — is NOT
+// mistaken for a conflict and silently removed from the model. Case-insensitive
+// for case-preserving/insensitive filesystems (Android FUSE, Windows).
+final RegExp _conflictCopyRe = RegExp(
+  r'\.sync-conflict-\d{8}-\d{6}-[A-Za-z0-9]+\.md$',
+  caseSensitive: false,
+);
+
+/// True for a Syncthing conflict copy.
+///
+/// Surfaced, never parsed and never hidden (FR17 / AD-5): the walk routes these
+/// to [LoreModel.conflicts] so the author can see and resolve them.
+bool isConflictCopy(String name) => _conflictCopyRe.hasMatch(name);
+
+/// Parses [loreDir] (repo-relative) into the entity model, plus any syncer
+/// conflict copies found alongside it.
+///
+/// Returns [LoreModel.empty] when [loreDir] does not exist. Never throws for a
+/// missing or unreadable directory — `listDir` already degrades to empty (AD-8).
+///
+/// The walk is stateless and rebuilt on every call (AD-10 — no cached model, no
+/// live watcher); a rescan on resume/refresh simply calls this again.
+Future<LoreModel> loadLore(RepoStorage storage, String loreDir) async {
   final loader = _LoreLoader(storage, _normalizeDir(loreDir));
   return loader.run();
 }
@@ -115,13 +162,34 @@ class _LoreLoader {
   final String loreDir;
 
   final List<LoreEntry> _entries = [];
+  final List<ConflictCopy> _conflicts = [];
 
   _LoreLoader(this.storage, this.loreDir);
 
-  Future<List<LoreEntry>> run() async {
-    if (!await storage.exists(loreDir)) return const [];
+  Future<LoreModel> run() async {
+    if (!await storage.exists(loreDir)) return LoreModel.empty;
     await _walkCategory(loreDir, '');
-    return _entries;
+    // Deterministic order, like entries/children[] (Story 2.4's list depends on
+    // it); the walk visits conflicts in directory order, which is not stable.
+    _conflicts.sort((a, b) => a.id.compareTo(b.id));
+    // Hand out read-only views so a UI consumer can't mutate the model (and so
+    // the type matches LoreModel.empty's const []).
+    return LoreModel(
+      entries: List.unmodifiable(_entries),
+      conflicts: List.unmodifiable(_conflicts),
+    );
+  }
+
+  /// Records a conflict copy. Surfaced, never parsed (FR17/AD-5). `relDir` uses
+  /// `.` at the lore root, matching `LoreEntry.relDir` so Story 2.4 can join the
+  /// two by directory.
+  void _recordConflict(String repoPath) {
+    final dir = _rel(_dirname(repoPath));
+    _conflicts.add(ConflictCopy(
+      id: _rel(repoPath),
+      name: _basename(repoPath),
+      relDir: dir.isEmpty ? '.' : dir,
+    ));
   }
 
   /// Repo-relative path → loreDir-relative id.
@@ -142,7 +210,10 @@ class _LoreLoader {
 
     for (final item in sorted) {
       if (item.isDirectory) {
-        if (item.name == 'media') continue;
+        // Never descend into media/ (binary assets) or any dot-prefixed dir
+        // (syncer metadata, VCS, temps) — `.stversions` in particular holds
+        // `.md` version copies that would otherwise load as bogus entities.
+        if (_isSkippedWalkDir(item.name)) continue;
 
         // index.md wins over <folder-name>.md, matching the reference's
         // ['index.md', name + '.md'].find(exists) precedence — but the card
@@ -172,6 +243,9 @@ class _LoreLoader {
             category.isEmpty ? item.name : '$category/${item.name}',
           );
         }
+      } else if (isConflictCopy(item.name)) {
+        // Surfaced, never parsed as an entity (FR17).
+        _recordConflict(item.path);
       } else if (item.name.endsWith('.md')) {
         await _addEntry(item.path, category.isEmpty ? 'general' : category, null);
       }
@@ -240,7 +314,11 @@ class _LoreLoader {
     final subdirs = <RepoEntry>[];
     for (final e in listed) {
       if (e.isDirectory) {
-        if (e.name != 'media') subdirs.add(e);
+        if (!_isSkippedWalkDir(e.name)) subdirs.add(e);
+      } else if (isConflictCopy(e.name)) {
+        // Surfaced, never parsed — it must not reach byBase, so it can never
+        // become an item, an overview card, or a `children[]` entry (FR17).
+        _recordConflict(e.path);
       } else if (e.name.endsWith('.md')) {
         files.add(e);
       }

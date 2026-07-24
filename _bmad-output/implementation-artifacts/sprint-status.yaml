@@ -59,7 +59,7 @@ development_status:
   # Epic 2: Browse, edit, and create lore & scenes (v0.1 — full experience)
   epic-2: in-progress
   2-1a-port-the-lore-loader-read-model: done
-  2-1b-syncer-aware-walk-and-rescan: backlog
+  2-1b-syncer-aware-walk-and-rescan: done
   2-2-browse-categories-and-entities: backlog
   2-3-view-an-entitys-detail-tree: backlog
   2-4-surface-sync-conflict-copies: backlog
