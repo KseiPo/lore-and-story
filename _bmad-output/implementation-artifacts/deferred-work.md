@@ -58,3 +58,8 @@
 ## Deferred from: code review of loreDir=root requirement change (2026-07-24)
 
 - **A lore-story.json whose `loreDir` points at a FILE (not a directory) makes the "Open a file" picker root at that file path** — `home_page._openFile` uses `exists(_loreDir) ? _loreDir : ''`, and `RepoStorage.exists` is true for files too, so the picker opens on a file path, lists nothing, and hides Up (stuck). Requires a hand-written malformed config; the user syncs only the lore folder (no config), so unreachable in practice. The clean fix needs an `isDirectory` method on the `RepoStorage` port. (The "empty model" half of this was resolved by removing the root-promotion guard — a missing/file loreDir now shows the empty state naming the folder, never silently walks the repo root.) [apps/mobile/lib/app/home_page.dart `_openFile`; apps/mobile/lib/storage/repo_storage.dart]
+
+## Deferred from: code review of 2-3-view-an-entitys-detail-tree (2026-07-24)
+
+- **Rapid double-tap stacks duplicate routes** — on a detail-page leaf/card row (two `EditorPage` pushes) and on the entity row in `CategoryEntitiesPage._openEntity` (two destination pages). No navigation single-flight guard; pre-existing app-wide pattern deferred repo-wide since Story 2.1b/2.2. [apps/mobile/lib/app/entity_detail_page.dart `_open`; apps/mobile/lib/app/category_entities_page.dart `_openEntity`]
+- **Eager `ListView(children:)` in the entity detail page** — `_rows`/`_appendSection` materialize the whole entity outline on every build, unlike the sibling `CategoryEntitiesPage`'s `ListView.builder`. Realistic single-entity trees are small, so the descriptor-based lazy refactor is disproportionate for v0.1; revisit if entities grow content-heavy (NFR6). [apps/mobile/lib/app/entity_detail_page.dart:93]

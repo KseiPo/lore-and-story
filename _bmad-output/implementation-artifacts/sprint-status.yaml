@@ -61,7 +61,7 @@ development_status:
   2-1a-port-the-lore-loader-read-model: done
   2-1b-syncer-aware-walk-and-rescan: done
   2-2-browse-categories-and-entities: done
-  2-3-view-an-entitys-detail-tree: backlog
+  2-3-view-an-entitys-detail-tree: done
   2-4-surface-sync-conflict-copies: backlog
   2-5-edit-with-helper-toolbar-and-convention-highlighting: backlog
   2-6-flag-invalid-markup-without-crashing: backlog

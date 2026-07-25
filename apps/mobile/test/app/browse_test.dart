@@ -108,6 +108,52 @@ void main() {
     expect(find.widgetWithText(TextField, '# Frank\n'), findsOneWidget);
   });
 
+  testWidgets(
+      'tapping an entity folder opens the detail tree; a simple entity opens the '
+      'editor directly (Story 2.3 routing)', (tester) async {
+    // characters/frank.md is a simple entity; characters/selena/ is a folder
+    // entity with a sub-entry.
+    final storage = FakeRepoStorage(
+      '/storage/emulated/0/repo',
+      dirEntries: {
+        '': const [
+          RepoEntry(name: 'characters', path: 'characters', isDirectory: true),
+        ],
+        'characters': const [
+          RepoEntry(name: 'frank.md', path: 'characters/frank.md', isDirectory: false),
+          RepoEntry(name: 'selena', path: 'characters/selena', isDirectory: true),
+        ],
+        'characters/selena': const [
+          RepoEntry(
+              name: 'selena.md', path: 'characters/selena/selena.md', isDirectory: false),
+          RepoEntry(name: 'bio.md', path: 'characters/selena/bio.md', isDirectory: false),
+        ],
+      },
+      fileContents: {
+        'characters/frank.md': '# Frank\n',
+        'characters/selena/selena.md': '# Selena\n',
+        'characters/selena/bio.md': '# Bio\n',
+      },
+    );
+    await _pumpReady(tester, storage);
+    await tester.tap(find.text('characters'));
+    await tester.pumpAndSettle();
+
+    // Folder entity → detail tree: its sub-entry is visible and it is NOT the
+    // raw editor.
+    await tester.tap(find.text('Selena'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bio'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+
+    // Back to the entities list; a simple entity opens the editor directly.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Frank'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, '# Frank\n'), findsOneWidget);
+  });
+
   testWidgets('an entity in a nested sub-category is reachable under its top-level '
       'category (AC4)', (tester) async {
     // characters/secondary/deep.md — a card two levels deep.
