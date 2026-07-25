@@ -62,7 +62,7 @@ development_status:
   2-1b-syncer-aware-walk-and-rescan: done
   2-2-browse-categories-and-entities: done
   2-3-view-an-entitys-detail-tree: done
-  2-4-surface-sync-conflict-copies: backlog
+  2-4-surface-sync-conflict-copies: done
   2-5-edit-with-helper-toolbar-and-convention-highlighting: backlog
   2-6-flag-invalid-markup-without-crashing: backlog
   2-7-preview-rendered-markdown: backlog
@@ -71,6 +71,7 @@ development_status:
   2-10-create-a-new-entity: backlog
   2-11-create-a-new-event-sub-entry: backlog
   2-12-retire-the-raw-file-picker: backlog
+  2-13-preview-the-entity-card-on-the-detail-screen: backlog
   epic-2-retrospective: optional
 
   # Epic 3: Convention tooling (v0.2)

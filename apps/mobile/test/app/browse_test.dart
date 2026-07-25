@@ -335,6 +335,113 @@ void main() {
     expect(find.text('general'), findsNothing);
   });
 
+  testWidgets(
+      'tapping the conflict banner opens the badged conflicts list, and a conflict '
+      'opens in the editor (FR17)', (tester) async {
+    final storage = FakeRepoStorage(
+      '/storage/emulated/0/repo',
+      dirEntries: {
+        '': const [
+          RepoEntry(name: 'frank.md', path: 'frank.md', isDirectory: false),
+          RepoEntry(
+            name: 'frank.sync-conflict-20240612-093000-K3F9AAA.md',
+            path: 'frank.sync-conflict-20240612-093000-K3F9AAA.md',
+            isDirectory: false,
+          ),
+        ],
+      },
+      fileContents: {
+        'frank.md': '# Frank\n',
+        'frank.sync-conflict-20240612-093000-K3F9AAA.md': '# conflicted frank\n',
+      },
+    );
+    await _pumpReady(tester, storage);
+
+    expect(find.byKey(const Key('conflict-banner')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('conflict-banner')));
+    await tester.pumpAndSettle();
+
+    // The conflicts screen lists the copy with a badge...
+    expect(find.text('frank.sync-conflict-20240612-093000-K3F9AAA.md'), findsOneWidget);
+    expect(find.text('CONFLICT'), findsOneWidget);
+
+    // ...and tapping it opens the copy in the editor.
+    await tester.tap(find.text('frank.sync-conflict-20240612-093000-K3F9AAA.md'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, '# conflicted frank\n'), findsOneWidget);
+  });
+
+  testWidgets('returning from the conflicts screen rescans the count (AC4)',
+      (tester) async {
+    // A mutable listing lets the conflict be "resolved" externally while the
+    // conflicts screen is open, proving the count reflects a fresh walk on return.
+    final listing = <RepoEntry>[
+      const RepoEntry(name: 'frank.md', path: 'frank.md', isDirectory: false),
+      const RepoEntry(
+        name: 'frank.sync-conflict-20240612-093000-K3F9AAA.md',
+        path: 'frank.sync-conflict-20240612-093000-K3F9AAA.md',
+        isDirectory: false,
+      ),
+    ];
+    final storage = FakeRepoStorage(
+      '/storage/emulated/0/repo',
+      dirEntries: {'': listing},
+      fileContents: {
+        'frank.md': '# Frank\n',
+        'frank.sync-conflict-20240612-093000-K3F9AAA.md': '# conflict\n',
+      },
+    );
+    await _pumpReady(tester, storage);
+    expect(find.byKey(const Key('conflict-banner')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('conflict-banner')));
+    await tester.pumpAndSettle();
+
+    // Resolved on the desktop while the screen is open.
+    listing.removeWhere((e) => e.name.contains('sync-conflict'));
+    await tester.pageBack(); // back to home → _refresh
+    await tester.pumpAndSettle();
+
+    // The rescan dropped the resolved conflict; the banner is gone.
+    expect(find.byKey(const Key('conflict-banner')), findsNothing);
+  });
+
+  testWidgets('a conflict copy never appears as a category or entity (AC2 guard)',
+      (tester) async {
+    final storage = FakeRepoStorage(
+      '/storage/emulated/0/repo',
+      dirEntries: {
+        '': const [
+          RepoEntry(name: 'characters', path: 'characters', isDirectory: true),
+        ],
+        'characters': const [
+          RepoEntry(name: 'frank.md', path: 'characters/frank.md', isDirectory: false),
+          RepoEntry(
+            name: 'frank.sync-conflict-20240612-093000-K3F9AAA.md',
+            path: 'characters/frank.sync-conflict-20240612-093000-K3F9AAA.md',
+            isDirectory: false,
+          ),
+        ],
+      },
+      fileContents: {
+        'characters/frank.md': '# Frank\n',
+        'characters/frank.sync-conflict-20240612-093000-K3F9AAA.md': '# conflict\n',
+      },
+    );
+    await _pumpReady(tester, storage);
+
+    // Surfaced as a conflict (banner), never as content on the home surface.
+    expect(find.byKey(const Key('conflict-banner')), findsOneWidget);
+    expect(find.text('characters'), findsOneWidget);
+    expect(find.text('frank.sync-conflict-20240612-093000-K3F9AAA.md'), findsNothing);
+
+    // Inside the category, only the real entity — the conflict is not an entity.
+    await tester.tap(find.text('characters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Frank'), findsOneWidget);
+    expect(find.text('frank.sync-conflict-20240612-093000-K3F9AAA.md'), findsNothing);
+  });
+
   testWidgets('an empty model shows a friendly empty state, not a hollow list (AD-8)',
       (tester) async {
     final storage = FakeRepoStorage(

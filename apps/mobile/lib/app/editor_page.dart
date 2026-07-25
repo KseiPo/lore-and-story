@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../lore/lore.dart';
 import '../storage/storage.dart';
 
 /// Key for the dirty indicator, so tests bind to identity rather than to a
@@ -34,6 +35,14 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
   String? _errorMessage;
   String _original = '';
   bool _dirty = false;
+
+  /// True when the open file is a Syncthing conflict copy. The AppBar path is
+  /// ellipsized from the end — exactly where the `.sync-conflict-…` marker sits
+  /// — so on a long path nothing else would signal "this is a conflict copy,
+  /// not the original." A banner re-asserts that context (FR17 / Story 2.4);
+  /// resolution is still done with the syncer on the desktop (AD-5). Reuses the
+  /// loader's exported detector — no second implementation (AD-7 spirit).
+  late final bool _isConflictCopy = isConflictCopy(_basename(widget.path));
 
   /// True when the loaded content contains U+FFFD replacement characters,
   /// meaning the file on disk is not well-formed UTF-8 and `read` decoded it
@@ -220,6 +229,11 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
     );
   }
 
+  static String _basename(String p) {
+    final i = p.lastIndexOf('/');
+    return i == -1 ? p : p.substring(i + 1);
+  }
+
   Widget _buildBody() {
     switch (_loadState) {
       case _LoadState.loading:
@@ -234,6 +248,20 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
       case _LoadState.ready:
         return Column(
           children: [
+            if (_isConflictCopy)
+              Container(
+                key: const Key('editor-conflict-banner'),
+                width: double.infinity,
+                color: Theme.of(context).colorScheme.errorContainer,
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'This is a Syncthing conflict copy — not the original file. '
+                  'Resolve it with your syncer on the desktop.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
             if (_lossyLoad)
               Container(
                 width: double.infinity,

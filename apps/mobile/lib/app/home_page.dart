@@ -4,6 +4,7 @@ import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'app.dart';
 import 'category_entities_page.dart';
+import 'conflicts_page.dart';
 import 'editor_page.dart';
 import 'lore_file_picker_page.dart';
 import 'root_picker_page.dart';
@@ -217,6 +218,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) await _refresh();
   }
 
+  /// Opens the badged, tappable list of conflict copies (Story 2.4). On return
+  /// — including from any editor opened through it — rescans so the count/banner
+  /// reflect current disk state (AD-10/FR3). The app only surfaces conflicts; it
+  /// never resolves them (AD-5).
+  Future<void> _openConflicts() async {
+    final root = _rootPath;
+    if (root == null) return;
+    final storage = widget.storageFactory(root);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ConflictsPage(
+          storage: storage,
+          conflicts: _lore.conflicts,
+          loreDir: _loreDir,
+        ),
+      ),
+    );
+    if (mounted) await _refresh();
+  }
+
   /// Pushes the in-repo file picker rooted at [startPath]; on a selected file,
   /// pushes the bare editor, then rescans so an edit is reflected.
   Future<void> _openFileFrom(RepoStorage storage, String startPath) async {
@@ -294,6 +315,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onChangeFolder: _chooseRoot,
           onOpenFile: _openFile,
           onOpenCategory: _openCategory,
+          onOpenConflicts: _openConflicts,
           onRefresh: _refresh,
         );
 
@@ -350,6 +372,7 @@ class _ReadyView extends StatelessWidget {
   final VoidCallback onChangeFolder;
   final VoidCallback onOpenFile;
   final void Function(LoreCategory category) onOpenCategory;
+  final VoidCallback onOpenConflicts;
   final VoidCallback onRefresh;
 
   const _ReadyView({
@@ -360,6 +383,7 @@ class _ReadyView extends StatelessWidget {
     required this.onChangeFolder,
     required this.onOpenFile,
     required this.onOpenCategory,
+    required this.onOpenConflicts,
     required this.onRefresh,
   });
 
@@ -387,29 +411,35 @@ class _ReadyView extends StatelessWidget {
         ),
         if (lore.conflicts.isNotEmpty) ...[
           const SizedBox(height: 8),
-          // Conflict copies are surfaced, never hidden (FR17). The badged,
-          // tappable list is Story 2.4; this is the visible signal.
-          Container(
-            key: const Key('conflict-banner'),
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.errorContainer,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.warning_amber_outlined,
-                    size: 18, color: theme.colorScheme.onErrorContainer),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${lore.conflicts.length} sync-conflict '
-                    '${lore.conflicts.length == 1 ? "copy" : "copies"} — resolve on the desktop',
-                    style: TextStyle(color: theme.colorScheme.onErrorContainer),
+          // Conflict copies are surfaced, never hidden (FR17). Tapping opens the
+          // badged, tappable list (Story 2.4).
+          InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: onOpenConflicts,
+            child: Container(
+              key: const Key('conflict-banner'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_outlined,
+                      size: 18, color: theme.colorScheme.onErrorContainer),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${lore.conflicts.length} sync-conflict '
+                      '${lore.conflicts.length == 1 ? "copy" : "copies"} — tap to view',
+                      style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                    ),
                   ),
-                ),
-              ],
+                  Icon(Icons.chevron_right,
+                      size: 18, color: theme.colorScheme.onErrorContainer),
+                ],
+              ),
             ),
           ),
         ],

@@ -396,6 +396,26 @@ So that the app isn't cluttered with a second, weaker navigation path that lists
 
 **Notes:** Removing the picker also closes several deferred picker-only bugs (trailing-slash `loreDir`, a file named exactly `loreDir`, the `_openEntry`/`_openFile` `exists`-vs-`isDirectory` conflation) — see `deferred-work.md`. Not tied to a new FR; a UX-consolidation/hygiene story.
 
+### Story 2.13: Preview the entity card on the detail screen
+
+As the author,
+I want to read my entity card's content rendered on the detail screen,
+So that I can see what the card says at a glance without opening the editor.
+
+**Context:** Story 2.3's detail screen renders the entity card as a tappable row (icon + title + "Card" label) that opens the editor. This story replaces that row with the card's **rendered markdown** shown read-only inline at the top of the detail outline, so the card reads like a page rather than a link. Sub-entries and sections stay as tappable rows (not pre-rendered) to keep the screen light. Distinct from Story 2.7 (which adds a read-only preview **toggle inside the editor**, FR10) — this is a different surface (the detail screen) that **reuses 2.7's markdown renderer**, so it must be sequenced **after 2.7**. Depends on Story 2.3 (done) and Story 2.7 (the renderer).
+
+**Acceptance Criteria:**
+
+**Given** an entity's detail screen, **When** it renders, **Then** the entity card's markdown is shown **rendered read-only** at the top (headings, emphasis, lists, `[[wikilinks]]` as text, etc.) in place of the plain "Card" row.
+
+**Given** the rendered card, **When** I tap it (or an explicit edit affordance), **Then** the card opens in the editor — the detail screen stays a read-only preview; editing remains the editor's job.
+
+**Given** the card preview, **When** it is built, **Then** it uses the **same** markdown renderer introduced in Story 2.7 — not a second implementation.
+
+**Given** a card with malformed or unexpected markup, **When** the preview renders, **Then** it never crashes — it degrades to plain/best-effort text (AD-8 / NFR7), consistent with the rest of the app.
+
+**Notes:** Only the **card** is previewed; sub-entries/sections remain tappable rows (pre-rendering every leaf would be heavy and defeats the outline). Not tied to a new FR; a UX enhancement of the Story 2.3 detail screen. Sequence any time after 2.7; independent of the authoring cluster (2.10–2.11) and the picker retirement (2.12).
+
 ## Epic 3: Convention tooling (v0.2)
 
 **Epic Definition of Done (every story):** works fully offline (NFR4); linting and

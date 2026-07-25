@@ -63,3 +63,7 @@
 
 - **Rapid double-tap stacks duplicate routes** — on a detail-page leaf/card row (two `EditorPage` pushes) and on the entity row in `CategoryEntitiesPage._openEntity` (two destination pages). No navigation single-flight guard; pre-existing app-wide pattern deferred repo-wide since Story 2.1b/2.2. [apps/mobile/lib/app/entity_detail_page.dart `_open`; apps/mobile/lib/app/category_entities_page.dart `_openEntity`]
 - **Eager `ListView(children:)` in the entity detail page** — `_rows`/`_appendSection` materialize the whole entity outline on every build, unlike the sibling `CategoryEntitiesPage`'s `ListView.builder`. Realistic single-entity trees are small, so the descriptor-based lazy refactor is disproportionate for v0.1; revisit if entities grow content-heavy (NFR6). [apps/mobile/lib/app/entity_detail_page.dart:93]
+
+## Deferred from: code review of 2-4-surface-sync-conflict-copies (2026-07-24)
+
+- **Rapid double-tap stacks duplicate routes on the conflicts surfaces** — the home conflict banner (two `ConflictsPage` pushes) and a conflict row (two `EditorPage` of the same file, last-write-wins race). Pre-existing app-wide pattern (no navigation single-flight guard); this is a higher-stakes surface for it, but the trigger (fast double-tap + two manual edits+saves) is narrow. Fix repo-wide with a nav single-flight guard when the double-tap pattern is addressed. [apps/mobile/lib/app/home_page.dart banner InkWell; apps/mobile/lib/app/conflicts_page.dart `_open`]
