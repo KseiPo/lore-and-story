@@ -416,6 +416,42 @@ So that I can see what the card says at a glance without opening the editor.
 
 **Notes:** Only the **card** is previewed; sub-entries/sections remain tappable rows (pre-rendering every leaf would be heavy and defeats the outline). Not tied to a new FR; a UX enhancement of the Story 2.3 detail screen. Sequence any time after 2.7; independent of the authoring cluster (2.10–2.11) and the picker retirement (2.12).
 
+### Story 2.14: Reflect active formatting in the toolbar and toggle it off
+
+As the author,
+I want the toolbar buttons to show when the cursor/selection is already inside a given formatting, and tapping an active button to remove that formatting,
+So that formatting is a true toggle, not a one-way insert.
+
+**Context:** Story 2.5's toolbar only *inserts* — a button never reflects the current state and never removes formatting. The Story 2.5 `convention_matcher` already tokenizes the buffer (bold, italic, headings, list markers, wikilinks, …), so the active state can be derived from "does a token of this kind cover the caret / the whole selection?" — no new recognition logic, another AD-7 reuse of the matcher.
+
+**Acceptance Criteria:**
+
+**Given** the caret sits inside a formatted span (or a selection is entirely within one), **When** the toolbar renders, **Then** the corresponding button shows an **active** state (bold button active inside `**…**`, H2 active on an `##` line, etc.).
+
+**Given** an active formatting button, **When** I tap it, **Then** that formatting is **removed** from the caret's span / the selection (unwrap `**…**`, strip the `## ` prefix, remove the `[[ ]]`), toggling cleanly — while inactive buttons still insert as today.
+
+**Given** the highlighter, **When** active-state and toggle-off are built, **Then** they consume the **same `convention_matcher` tokens** (no re-implemented recognition) and the buffer stays raw markdown.
+
+**Notes:** Depends on Story 2.5 (toolbar + matcher). Toggle-off is the inverse of the insert/wrap/prefix ops — add `unwrap`/`unprefix` pure ops beside them. A v0.1-close or v0.2 editor refinement; not tied to a new FR.
+
+### Story 2.15: Expand toolbar convention tokens — and decide the link-format model
+
+As the author,
+I want quick-insert buttons for more of this project's conventions (dialogue lines, internal/external links, …),
+So that I can author the full convention set from the phone without hunting for punctuation.
+
+**Context:** Story 2.5 shipped only `[[`, `[`, `]`, `—`, `(emotion):`. We want more — a dialogue-line helper (`Name (emotion): `), internal vs. external link helpers, and likely others as the conventions grow.
+
+**⚠️ Open design decision (discuss with KseiPo before finalizing the buttons):** whether to **unify the link formats** rather than keep the current unique forms. Today the project uses several distinct link/reference shapes — `[[Title]]` for *lore entity* references (never a passage jump), `**Choice** _(→ Passage Name)_` for scene player-choices/passage links, `**Label** _(↩ back)_` for return links (ARCHITECTURE §3.3). The question raised: could we standardize on one model — e.g. reuse **wiki-style `[[…]]`** for everything (with a convention to distinguish lore-ref vs. passage-jump), or adopt **Twine/Twee link syntax** — instead of the bespoke `_(→ …)_` forms? This is a **contract-level decision**, not a toolbar detail: it ripples into `convention_matcher` (FR9/FR9a), the Dart loader's link/mention parsing, ARCHITECTURE §3.3, the golden fixtures, the eventual scene↔passage bridge, **and existing authored lore/scene content** (a migration). If the decision is to unify, that contract change is its **own larger effort** and this story depends on it (or is superseded by it); if we keep the current forms, this story is just the additive buttons.
+
+**Acceptance Criteria (pending the decision above):**
+
+**Given** the resolved link-format model, **When** the toolbar is extended, **Then** it offers quick-insert for a dialogue-speaker line and for internal/external links in the chosen format, via the Story 2.5 insert/wrap/prefix mechanisms.
+
+**Given** any new token buttons, **When** they insert, **Then** the corresponding convention is recognized by the **shared `convention_matcher`** (extend it, don't fork it — AD-7), so highlighting and the linter stay in sync.
+
+**Notes:** Depends on Story 2.5 and the link-format decision. Related to FR19 (`[[` autocomplete / tap-to-navigate, Epic 3) — resolve the link model consistently with that. Bring this to a design discussion before scheduling.
+
 ## Epic 3: Convention tooling (v0.2)
 
 **Epic Definition of Done (every story):** works fully offline (NFR4); linting and
