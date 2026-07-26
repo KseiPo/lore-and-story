@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../lore/lore.dart';
 import '../storage/storage.dart';
+import 'convention_highlighting_controller.dart';
+import 'editor_toolbar.dart';
 
 /// Key for the dirty indicator, so tests bind to identity rather than to a
 /// particular icon's visual styling.
@@ -30,7 +32,10 @@ class EditorPage extends StatefulWidget {
 enum _LoadState { loading, ready, error }
 
 class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
-  final TextEditingController _controller = TextEditingController();
+  // A convention-highlighting controller (FR9): renders the raw buffer styled
+  // via buildTextSpan while the text stays raw markdown.
+  final ConventionHighlightingController _controller =
+      ConventionHighlightingController();
   _LoadState _loadState = _LoadState.loading;
   String? _errorMessage;
   String _original = '';
@@ -288,6 +293,8 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
                 ),
               ),
             ),
+            // Helper toolbar above the keyboard (FR8).
+            EditorToolbar(controller: _controller),
           ],
         );
     }

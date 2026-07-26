@@ -6,6 +6,7 @@
 /// `storage/` slice's [RepoStorage] port.
 library;
 
+export 'convention_matcher.dart';
 export 'lore_browse.dart';
 export 'lore_loader.dart';
 export 'lore_model.dart';

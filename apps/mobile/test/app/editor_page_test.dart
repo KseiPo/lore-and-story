@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/app/editor_page.dart';
+import 'package:lore_and_story/app/editor_toolbar.dart';
 
 import '../fakes.dart';
 
@@ -170,5 +171,64 @@ void main() {
 
     expect(find.textContaining('Save failed'), findsOneWidget);
     expect(find.byKey(kDirtyIndicatorKey), findsOneWidget);
+  });
+
+  group('helper toolbar (FR8)', () {
+    testWidgets('is shown in the ready state', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': 'word'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+      expect(find.byType(EditorToolbar), findsOneWidget);
+    });
+
+    testWidgets('bold wraps at the cursor, keeps the buffer raw, and marks dirty',
+        (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': 'word'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.format_bold));
+      await tester.pump();
+
+      // The toolbar mutated the raw buffer (controller.text) — no WYSIWYG. The
+      // display invariant (span text == buffer) is proven separately in
+      // convention_highlighting_controller_test.dart.
+      expect(find.widgetWithText(TextField, 'word****'), findsOneWidget);
+      expect(find.byKey(kDirtyIndicatorKey), findsOneWidget);
+    });
+
+    testWidgets('H2 prefixes the current line', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': 'word'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('H2'));
+      await tester.pump();
+      expect(find.widgetWithText(TextField, '## word'), findsOneWidget);
+    });
+
+    testWidgets('[[ inserts the wikilink pair with the cursor between',
+        (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': 'word'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('[['));
+      await tester.pump();
+      expect(find.widgetWithText(TextField, 'word[[]]'), findsOneWidget);
+    });
+
+    testWidgets('a toolbar edit is saved by the existing save action', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': 'word'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('H2'));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save_outlined));
+      await tester.pumpAndSettle();
+
+      expect(storage.writeCalls, [('a.md', '## word')]);
+    });
   });
 }

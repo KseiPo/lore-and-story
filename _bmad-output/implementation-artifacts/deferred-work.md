@@ -67,3 +67,10 @@
 ## Deferred from: code review of 2-4-surface-sync-conflict-copies (2026-07-24)
 
 - **Rapid double-tap stacks duplicate routes on the conflicts surfaces** — the home conflict banner (two `ConflictsPage` pushes) and a conflict row (two `EditorPage` of the same file, last-write-wins race). Pre-existing app-wide pattern (no navigation single-flight guard); this is a higher-stakes surface for it, but the trigger (fast double-tap + two manual edits+saves) is narrow. Fix repo-wide with a nav single-flight guard when the double-tap pattern is addressed. [apps/mobile/lib/app/home_page.dart banner InkWell; apps/mobile/lib/app/conflicts_page.dart `_open`]
+
+## Deferred from: code review of 2-5-edit-with-helper-toolbar-and-convention-highlighting (2026-07-26)
+
+- **IME composing underline not drawn** — `ConventionHighlightingController.buildTextSpan` ignores `withComposing`/`value.composing`, so the standard in-progress-composition underline never renders (vs stock TextField). Documented v0.1 tradeoff; Cyrillic is direct-input (not composed), low practical impact. Revisit if composed input (e.g. CJK) is needed. [apps/mobile/lib/app/convention_highlighting_controller.dart]
+- **Dialogue heuristic misses a speaker after a stray colon** — e.g. `See note 3:00 — Frank: hi` yields no dialogueSpeaker token (`matchAsPrefix` can't skip the earlier colon). Heuristic limitation; the Story 3.1 linter will refine the shared matcher. [apps/mobile/lib/lore/convention_matcher.dart]
+- **Per-keystroke full-document re-match on long scene files** — the by-text memo added in review only helps non-text rebuilds; true incremental/viewport-scoped matching is a larger change. Realistic files are small (a scene is a few KB), so deferred; regexes are linear (no ReDoS), so it's cost not a hang. [apps/mobile/lib/app/convention_highlighting_controller.dart]
+- **Lone `\r` (old-Mac line endings) not treated as a line break** — `matchConventions` splits on `\n` only, so a `# Title\rword` heading span swallows the rest. No such files in this project; cosmetic (highlight span only, buffer unaffected). [apps/mobile/lib/lore/convention_matcher.dart]

@@ -63,7 +63,7 @@ development_status:
   2-2-browse-categories-and-entities: done
   2-3-view-an-entitys-detail-tree: done
   2-4-surface-sync-conflict-copies: done
-  2-5-edit-with-helper-toolbar-and-convention-highlighting: backlog
+  2-5-edit-with-helper-toolbar-and-convention-highlighting: done
   2-6-flag-invalid-markup-without-crashing: backlog
   2-7-preview-rendered-markdown: backlog
   2-8-edit-ru-en-pairs-safely: backlog
