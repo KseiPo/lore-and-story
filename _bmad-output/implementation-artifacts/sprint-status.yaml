@@ -65,7 +65,7 @@ development_status:
   2-4-surface-sync-conflict-copies: done
   2-5-edit-with-helper-toolbar-and-convention-highlighting: done
   2-6-flag-invalid-markup-without-crashing: done
-  2-7-preview-rendered-markdown: backlog
+  2-7-preview-rendered-markdown: ready-for-dev
   2-8-edit-ru-en-pairs-safely: backlog
   2-9-create-a-translation-from-a-missing-en: backlog
   2-10-create-a-new-entity: backlog
@@ -74,6 +74,7 @@ development_status:
   2-13-preview-the-entity-card-on-the-detail-screen: backlog
   2-14-reflect-active-formatting-and-toggle-off: backlog
   2-15-expand-toolbar-tokens-and-link-format-decision: backlog
+  2-16-render-local-repo-images-in-the-preview: backlog
   epic-2-retrospective: optional
 
   # Epic 3: Convention tooling (v0.2)

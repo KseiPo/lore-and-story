@@ -452,6 +452,26 @@ So that I can author the full convention set from the phone without hunting for 
 
 **Notes:** Depends on Story 2.5 and the link-format decision. Related to FR19 (`[[` autocomplete / tap-to-navigate, Epic 3) — resolve the link model consistently with that. Bring this to a design discussion before scheduling.
 
+### Story 2.16: Render local repo images in the preview
+
+As the author,
+I want the images I embed (`![alt](media/…)`) to render in the read-only preview,
+So that I can see a card/scene the way it actually reads, illustrations included.
+
+**Context:** Story 2.7 (FR10) added the read-only markdown preview but renders `![alt](src)` images as **alt text/placeholder** only — image loading was split out to here because it reaches into the `storage/` slice. The `RepoStorage` port has only a UTF-8 `read`; images are **binary**, so this story adds a **bytes read** to the port + its `all_files` adapter (+ the test fake), then extends the **same `MarkdownPreview` widget** (Story 2.7) to resolve `src` relative to the open file's directory (forward-slash normalized) and display it. This enhances both surfaces that use `MarkdownPreview` — the editor preview toggle (2.7) and the detail-card preview (2.13). **Depends on Story 2.7** (the renderer) and is independent of the authoring cluster.
+
+**Acceptance Criteria:**
+
+**Given** a `![alt](src)` with a **local relative** `src`, **When** the preview renders, **Then** the image loads from the repo (resolved relative to the open file's directory, forward-slash normalized) and displays. *(extends FR10)*
+
+**Given** the `RepoStorage` port, **When** image loading is added, **Then** a **bytes read** (e.g. `Future<Uint8List> readBytes(String path)`) is added to the port and implemented only in the `all_files` adapter — no `dart:io` outside the adapter (AD-3/AD-9/NFR3); the test fake implements it too.
+
+**Given** a **missing, unreadable, non-image, oversized, or network (`http(s)://`)** image, **When** the preview renders, **Then** it degrades to the alt text / a placeholder and **never crashes** (AD-8/NFR7).
+
+**Given** `MarkdownPreview` from Story 2.7, **When** images are added, **Then** it is **extended** (constructor gains `storage`/`filePath`), not restructured — the editor (2.7) and detail-card (2.13) call sites pass them through.
+
+**Notes:** Not tied to a new FR; a preview enhancement split out of 2.7 for slice isolation. `media/` folders hold these images and are skipped by the loader walk (project-context), so image paths are author-relative and resolved only at render time here.
+
 ## Epic 3: Convention tooling (v0.2)
 
 **Epic Definition of Done (every story):** works fully offline (NFR4); linting and
