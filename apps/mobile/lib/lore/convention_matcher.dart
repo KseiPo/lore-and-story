@@ -11,9 +11,12 @@
 /// into the original string; a trailing `\r` never shifts or breaks a match.
 library;
 
-/// The kinds of span the matcher recognizes. Story 2.6 will add error kinds;
-/// consumers must tolerate kinds beyond this set.
+/// The kinds of span the matcher recognizes. The trailing group are **error
+/// kinds** (suspect/invalid markup, FR9a) — see [errorKinds]. Consumers must
+/// tolerate kinds beyond the valid set: the highlighter styles error kinds
+/// distinctly and the Story 3.1 linter surfaces them as findings.
 enum ConventionKind {
+  // Valid conventions (Story 2.5).
   heading,
   bold,
   italic,
@@ -22,7 +25,25 @@ enum ConventionKind {
   dialogueSpeaker,
   placeholder,
   emDash,
+  // Error kinds (Story 2.6, FR9a) — suspect/invalid markup to flag, not hide.
+  leakedTwee,
+  leakedHtml,
+  scenePassageLink,
+  malformedMarkup,
 }
+
+/// The [ConventionKind]s that denote suspect/invalid markup (FR9a). One source
+/// of truth so the highlighter's error styling and the Story 3.1 linter agree
+/// on what an "error" is — neither hardcodes its own set (AD-7).
+const Set<ConventionKind> errorKinds = {
+  ConventionKind.leakedTwee,
+  ConventionKind.leakedHtml,
+  ConventionKind.scenePassageLink,
+  ConventionKind.malformedMarkup,
+};
+
+/// Whether [kind] denotes suspect/invalid markup (a member of [errorKinds]).
+bool isError(ConventionKind kind) => errorKinds.contains(kind);
 
 /// A recognized span, half-open `[start, end)` into the matched string.
 class ConventionToken {
@@ -67,6 +88,33 @@ final RegExp _italicUnderscore = RegExp(r'_[^_\n]+_');
 final RegExp _italicStar = RegExp(r'\*[^*\n]+\*');
 final RegExp _emDash = RegExp('—'); // — (U+2014)
 
+// Error patterns (FR9a). All linear (negated classes, no nested quantifiers) so
+// they can never backtrack into a hang — "never crash" includes "never hang".
+// A clean `<<…>>` SugarCube macro — twee never belongs in lore/scene markdown.
+// The body excludes BOTH `<` and `>`: excluding `<` keeps each anchored attempt
+// bounded by the next opener (no O(n²) rescans across a long `<<` run), and
+// excluding `>` lets a whole clean macro highlight as one span. Macros with an
+// interior `<`/`>` (e.g. `<<if $hp >= 100>>`, `<<link "a" -> "b">>`) don't match
+// here — they're caught by the delimiter fallback below.
+final RegExp _leakedTwee = RegExp(r'<<[^<>\n]*>>');
+// The bare twee delimiters. MOBILE §6.1 names `<<`/`>>` themselves as the leak
+// signal, so flag them even when the full macro body carries a `<`/`>` the clean
+// pattern can't span. Same kind (leakedTwee); the clean whole-macro token, when
+// present, wins by precedence+length so `<<x>>` stays a single span. Ungated and
+// linear (two-literal alternation).
+final RegExp _tweeDelimiter = RegExp(r'<<|>>');
+// An HTML tag. The required letter after `<`/`</` keeps prose like `5 < 10`,
+// `<3`, and `>:(` from matching (no false positives).
+final RegExp _leakedHtml = RegExp(r'</?[A-Za-z][^>\n]*>');
+// Twine passage-link syntax inside double brackets (`[[label->passage]]`,
+// `[[passage<-label]]`). `[[…]]` is reserved for lore refs, never passage jumps.
+final RegExp _scenePassageLink = RegExp(r'\[\[[^\[\]\n]*(?:->|<-)[^\[\]\n]*\]\]');
+// An unterminated `[[` — a wikilink opener with no `]]` reachable before the
+// next bracket/end of line. A balanced `[[]]` is terminated, so not flagged
+// (this is exactly what the toolbar's `[[` button inserts). Broader malformed
+// detection (unpaired conditionals, dangling wikilinks) is the Story 3.1 linter.
+final RegExp _unterminatedWikilink = RegExp(r'\[\[(?![^\[\]\n]*\]\])');
+
 /// Parses [text] into a sorted, non-overlapping list of convention tokens.
 ///
 /// Never throws: any internal failure returns the tokens collected so far.
@@ -104,6 +152,27 @@ void _matchLine(String line, int base, List<ConventionToken> out) {
     cands.add(ConventionToken(0, dlg.end, ConventionKind.dialogueSpeaker));
   }
 
+  // Error candidates (FR9a) — added alongside the valid ones; precedence in
+  // _resolveOverlaps lets an error win over the valid kind it shadows
+  // (`[[a->b]]` is a passage-link error, not a wikilink; a `<<…>>`/`<tag>`
+  // interior is never partially styled).
+  //
+  // Each is gated on its closing delimiter being present first. This is a cheap
+  // correctness-preserving guard (the pattern can't match without it) that also
+  // keeps a delimiter-less line linear: `<<[^>]*>>` / `<tag…>` would otherwise
+  // backtrack O(n²) scanning a long run with no closer.
+  if (line.contains('>>')) {
+    _collect(_leakedTwee, line, ConventionKind.leakedTwee, cands);
+  }
+  _collect(_tweeDelimiter, line, ConventionKind.leakedTwee, cands);
+  if (line.contains('>')) {
+    _collect(_leakedHtml, line, ConventionKind.leakedHtml, cands);
+  }
+  if (line.contains(']]')) {
+    _collect(_scenePassageLink, line, ConventionKind.scenePassageLink, cands);
+  }
+  _collect(_unterminatedWikilink, line, ConventionKind.malformedMarkup, cands);
+
   _collect(_wikilink, line, ConventionKind.wikilink, cands);
   _collect(_placeholder, line, ConventionKind.placeholder, cands);
   _collect(_bold, line, ConventionKind.bold, cands);
@@ -129,34 +198,64 @@ int _priority(ConventionKind k) {
       return -1; // handled separately
     case ConventionKind.listMarker:
       return 0;
-    case ConventionKind.dialogueSpeaker:
-      return 1;
-    case ConventionKind.wikilink:
-      return 2; // beats placeholder so `[[x]]` is a wikilink, not `[x]`
-    case ConventionKind.bold:
-      return 3; // beats italic so `**x**` is bold, not `*x*`
-    case ConventionKind.italic:
+    // Error kinds outrank the valid kinds they shadow, so suspect markup is
+    // flagged rather than mistaken for a convention.
+    case ConventionKind.leakedTwee:
+      return 1; // a `<<…>>` run beats any inline valid kind inside it
+    case ConventionKind.leakedHtml:
+      return 2; // a `<tag>` beats inline valid kinds inside it
+    case ConventionKind.scenePassageLink:
+      return 3; // `[[a->b]]` is an error, not a wikilink/placeholder
+    case ConventionKind.malformedMarkup:
       return 4;
-    case ConventionKind.placeholder:
+    case ConventionKind.dialogueSpeaker:
       return 5;
+    case ConventionKind.wikilink:
+      return 6; // beats placeholder so `[[x]]` is a wikilink, not `[x]`
+    case ConventionKind.bold:
+      return 7; // beats italic so `**x**` is bold, not `*x*`
+    case ConventionKind.italic:
+      return 8;
+    case ConventionKind.placeholder:
+      return 9;
     case ConventionKind.emDash:
-      return 6;
+      return 10;
   }
 }
 
 /// Keeps higher-precedence candidates and drops any that overlap one already
 /// kept; returns the survivors sorted by position (non-overlapping).
+///
+/// Overlap is tested against a `covered` bitmap rather than by scanning every
+/// kept token, so a line with very many candidates (e.g. a long run of `[[`)
+/// resolves in ~O(total token length) instead of O(n²).
 List<ConventionToken> _resolveOverlaps(List<ConventionToken> cands) {
+  if (cands.isEmpty) return cands;
   cands.sort((a, b) {
     final pa = _priority(a.kind), pb = _priority(b.kind);
     if (pa != pb) return pa - pb;
     if (a.start != b.start) return a.start - b.start;
     return (b.end - b.start) - (a.end - a.start); // longer first
   });
+  var maxEnd = 0;
+  for (final t in cands) {
+    if (t.end > maxEnd) maxEnd = t.end;
+  }
+  final covered = List<bool>.filled(maxEnd, false);
   final kept = <ConventionToken>[];
   for (final t in cands) {
-    final overlaps = kept.any((k) => t.start < k.end && k.start < t.end);
-    if (!overlaps) kept.add(t);
+    var clash = false;
+    for (var i = t.start; i < t.end; i++) {
+      if (covered[i]) {
+        clash = true;
+        break;
+      }
+    }
+    if (clash) continue;
+    for (var i = t.start; i < t.end; i++) {
+      covered[i] = true;
+    }
+    kept.add(t);
   }
   kept.sort((a, b) => a.start - b.start);
   return kept;

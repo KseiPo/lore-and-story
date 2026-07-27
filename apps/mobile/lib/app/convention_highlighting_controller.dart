@@ -89,6 +89,19 @@ class ConventionHighlightingController extends TextEditingController {
         return b.copyWith(color: scheme.tertiary, fontStyle: FontStyle.italic);
       case ConventionKind.emDash:
         return b.copyWith(color: scheme.primary);
+      // Suspect/invalid markup (FR9a): one distinct error style — the error
+      // color plus a wavy underline (a spellcheck-style squiggle). The markup
+      // is styled, never hidden or removed: the author sees exactly what to fix.
+      case ConventionKind.leakedTwee:
+      case ConventionKind.leakedHtml:
+      case ConventionKind.scenePassageLink:
+      case ConventionKind.malformedMarkup:
+        return b.copyWith(
+          color: scheme.error,
+          decoration: TextDecoration.underline,
+          decorationStyle: TextDecorationStyle.wavy,
+          decorationColor: scheme.error,
+        );
     }
   }
 }

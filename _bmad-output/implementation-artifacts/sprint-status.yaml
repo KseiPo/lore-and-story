@@ -1,5 +1,5 @@
 # generated: 2026-07-20
-# last_updated: 2026-07-24
+# last_updated: 2026-07-26
 # project: Lore & Story
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-20
-last_updated: 2026-07-24
+last_updated: 2026-07-26
 project: Lore & Story
 project_key: NOKEY
 tracking_system: file-system
@@ -64,7 +64,7 @@ development_status:
   2-3-view-an-entitys-detail-tree: done
   2-4-surface-sync-conflict-copies: done
   2-5-edit-with-helper-toolbar-and-convention-highlighting: done
-  2-6-flag-invalid-markup-without-crashing: backlog
+  2-6-flag-invalid-markup-without-crashing: done
   2-7-preview-rendered-markdown: backlog
   2-8-edit-ru-en-pairs-safely: backlog
   2-9-create-a-translation-from-a-missing-en: backlog

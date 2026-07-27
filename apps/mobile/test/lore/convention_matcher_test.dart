@@ -84,6 +84,125 @@ void main() {
     });
   });
 
+  group('matchConventions — invalid/suspect markup (FR9a)', () {
+    test('leaked twee macros are flagged over the whole <<…>> run', () {
+      expect(matchConventions('<<if \$x>>'),
+          [const ConventionToken(0, 9, ConventionKind.leakedTwee)]);
+      expect(matchConventions('<<=\$var>>'),
+          [const ConventionToken(0, 9, ConventionKind.leakedTwee)]);
+      expect(matchConventions('<<linkBack>>'),
+          [const ConventionToken(0, 12, ConventionKind.leakedTwee)]);
+    });
+
+    test('leaked twee wins over an inner HTML-shaped match', () {
+      // `<<x>>` contains the HTML-shaped `<x>` — the twee run must claim it.
+      expect(matchConventions('<<x>>'),
+          [const ConventionToken(0, 5, ConventionKind.leakedTwee)]);
+    });
+
+    test('a macro with an interior > or < is still flagged (delimiter fallback)', () {
+      // The two most idiomatic leaked shapes — a comparison and a link macro —
+      // carry an interior `>`/`<` the clean whole-macro pattern can't span; the
+      // `<<`/`>>` delimiters must still flag them as leakedTwee (never HTML).
+      expect(kindsOf('<<if \$hp >= 100>>'), {ConventionKind.leakedTwee});
+      expect(kindsOf('<<link "Next" -> "Scene2">>'), {ConventionKind.leakedTwee});
+      expect(kindsOf('<<if \$x < 5>>'), {ConventionKind.leakedTwee});
+      // The `<<` opener is flagged even with no closer on the line.
+      expect(kindsOf('stray <<if \$x'), {ConventionKind.leakedTwee});
+    });
+
+    test('leaked HTML tags are flagged', () {
+      expect(matchConventions('<b>'),
+          [const ConventionToken(0, 3, ConventionKind.leakedHtml)]);
+      expect(matchConventions('</i>'),
+          [const ConventionToken(0, 4, ConventionKind.leakedHtml)]);
+      expect(matchConventions('<br/>'),
+          [const ConventionToken(0, 5, ConventionKind.leakedHtml)]);
+      expect(matchConventions('<div class="x">'),
+          [const ConventionToken(0, 15, ConventionKind.leakedHtml)]);
+    });
+
+    test('scene passage-link syntax is an error, not a wikilink', () {
+      expect(matchConventions('[[label->passage]]'),
+          [const ConventionToken(0, 18, ConventionKind.scenePassageLink)]);
+      expect(matchConventions('[[passage<-label]]'),
+          [const ConventionToken(0, 18, ConventionKind.scenePassageLink)]);
+      // The inner text must not leak a placeholder/wikilink token.
+      expect(kindsOf('[[label->passage]]'), {ConventionKind.scenePassageLink});
+    });
+
+    test('a plain wikilink stays valid (no false error)', () {
+      expect(matchConventions('[[Title]]'),
+          [const ConventionToken(0, 9, ConventionKind.wikilink)]);
+    });
+
+    test('an unterminated [[ is flagged malformed; a balanced [[]] is not', () {
+      final tokens = matchConventions('see [[Selena');
+      expect(tokens, [const ConventionToken(4, 6, ConventionKind.malformedMarkup)]);
+      // The toolbar inserts a balanced empty pair — never an error.
+      expect(matchConventions('[[]]'), isEmpty);
+    });
+
+    test('Cyrillic is first-class inside error markup', () {
+      expect(kindsOf('[[Селена->станция]]'), {ConventionKind.scenePassageLink});
+      expect(kindsOf('<<если>>'), {ConventionKind.leakedTwee});
+    });
+
+    test('no false positives on innocent angle brackets / brackets', () {
+      // Space or a non-letter after `<` is prose, not a tag.
+      expect(kindsOf('5 < 10'), isEmpty);
+      expect(kindsOf('a <3 heart'), isEmpty);
+      expect(kindsOf('>:( face'), isEmpty);
+    });
+
+    test('errorKinds / isError expose the error set as one source of truth', () {
+      expect(isError(ConventionKind.leakedTwee), isTrue);
+      expect(isError(ConventionKind.leakedHtml), isTrue);
+      expect(isError(ConventionKind.scenePassageLink), isTrue);
+      expect(isError(ConventionKind.malformedMarkup), isTrue);
+      expect(isError(ConventionKind.wikilink), isFalse);
+      expect(isError(ConventionKind.bold), isFalse);
+      expect(errorKinds, everyElement(predicate<ConventionKind>(isError)));
+    });
+
+    test('error and valid kinds coexist, sorted and non-overlapping', () {
+      final tokens = matchConventions('[[Selena]] said <<if \$x>> and <b>');
+      for (var i = 1; i < tokens.length; i++) {
+        expect(tokens[i - 1].end <= tokens[i].start, isTrue,
+            reason: 'overlap between ${tokens[i - 1]} and ${tokens[i]}');
+      }
+      expect(tokens.map((t) => t.kind),
+          containsAll([
+            ConventionKind.wikilink,
+            ConventionKind.leakedTwee,
+            ConventionKind.leakedHtml,
+          ]));
+    });
+
+    test('error markup is CRLF-safe', () {
+      expect(kindsOf('<<if>>\r\n[[a->b]]'),
+          {ConventionKind.leakedTwee, ConventionKind.scenePassageLink});
+    });
+
+    test('adversarial input stays linear — never hangs (ReDoS guard)', () {
+      final sw = Stopwatch()..start();
+      matchConventions('<' * 50000);
+      matchConventions('[' * 50000);
+      matchConventions('<<' * 20000);
+      matchConventions('<<<>>>' * 10000);
+      // The trap the `contains('>>')` guard alone does NOT cover: a `>>` exists
+      // on the line (guard passes) but never *after* the `<<` run, so a body
+      // class that spans `>` would scan-and-backtrack O(n²) per opener. Excluding
+      // `<` from the body keeps each attempt opener-bounded.
+      matchConventions('>>${'<<' * 20000}');
+      // Many real macros with an interior `>` (exercises the delimiter fallback).
+      matchConventions('<<if \$x >= 5>>' * 2000);
+      sw.stop();
+      expect(sw.elapsedMilliseconds, lessThan(500),
+          reason: 'error regexes must be linear, not backtracking');
+    });
+  });
+
   group('matchConventions — robustness', () {
     test('CRLF input is not broken by the trailing \\r', () {
       // Heading + list marker still detected across CRLF line endings.

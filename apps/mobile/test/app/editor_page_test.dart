@@ -173,6 +173,28 @@ void main() {
     expect(find.byKey(kDirtyIndicatorKey), findsOneWidget);
   });
 
+  testWidgets('a file full of suspect markup opens, edits, and saves (FR9a/AD-8)',
+      (tester) async {
+    // Leaked twee + a scene passage-link — flagged, never fatal.
+    const suspect = 'Frank: hi <<if \$x>>\n[[label->passage]] <b>bold</b>\n';
+    final storage = FakeRepoStorage('/repo', fileContents: {'bad.md': suspect});
+    await pumpEditor(tester, storage, 'bad.md');
+    await tester.pumpAndSettle();
+
+    // Opens without throwing, raw content intact.
+    expect(tester.takeException(), isNull);
+    expect(find.widgetWithText(TextField, suspect), findsOneWidget);
+
+    // Editable and saveable — suspect markup does not disable saving.
+    await tester.enterText(find.byType(TextField), '$suspect edited');
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.save_outlined));
+    await tester.pumpAndSettle();
+
+    expect(storage.writeCalls, [('bad.md', '$suspect edited')]);
+    expect(tester.takeException(), isNull);
+  });
+
   group('helper toolbar (FR8)', () {
     testWidgets('is shown in the ready state', (tester) async {
       final storage = FakeRepoStorage('/repo', fileContents: {'a.md': 'word'});
