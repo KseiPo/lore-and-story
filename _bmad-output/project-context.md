@@ -227,6 +227,14 @@ a `server.js` route + a `<script>` tag — never an `import`.
   goldens with `npm run goldens` and review the diff.
 - Naming stays consistent with the terminology above across code and docs.
 
+**Testing emphasis (v0.1, deliberate):** Cover **business logic** well — the pure
+model/loader/matcher (pinned by golden fixtures), write/save correctness, and
+data-safety guards (e.g. "never silently discard an edit"). **Do not over-invest
+in UI/widget tests right now** — UI-layer coverage can wait. A data-loss or
+correctness fix warrants a test; a purely-cosmetic UI gap does not, and a review
+finding that is only "add a widget test for X" may be skipped unless X is a
+data-safety path. Don't cite missing UI tests as a blocker.
+
 ---
 
 ## Usage Guidelines

@@ -230,6 +230,41 @@ void main() {
     },
   );
 
+  testWidgets('backing out with a failed save keeps the screen — never discards (AD-10)',
+      (tester) async {
+    final storage = FakeRepoStorage(
+      '/repo',
+      fileContents: {'a.md': 'hello'},
+      failWrites: true,
+    );
+    // Push the editor so there is a back button to pop.
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => ElevatedButton(
+            onPressed: () => Navigator.of(ctx).push(MaterialPageRoute<void>(
+              builder: (_) => EditorPage(storage: storage, path: 'a.md'),
+            )),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await enterEditMode(tester);
+    await tester.enterText(find.byType(TextField), 'hello world');
+    await tester.pump();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // The save failed, so the editor stays open with the edit — not popped away.
+    expect(find.byType(EditorPage), findsOneWidget);
+    expect(find.textContaining('Save failed'), findsOneWidget);
+    expect(find.byKey(kDirtyIndicatorKey), findsOneWidget);
+  });
+
   group('preview toggle (FR10)', () {
     testWidgets('toggles between the editor and a read-only rendered preview', (
       tester,

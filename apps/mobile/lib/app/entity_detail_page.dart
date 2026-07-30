@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart';
+import 'paired_editor_page.dart';
 
 /// The entity **card on top**, then its folder-named sections (Events, Quests)
 /// with their items, nested sections rendered nested — the navigable outline of
@@ -62,6 +63,33 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
     // A title edit (or a new/removed file) changes the tree — re-walk so the
     // outline reflects it without popping back to the entities list (AC3/FR3).
     if (mounted) await _rescan();
+  }
+
+  /// Opens a sub-entry: a bilingual pair (2+ language variants) opens the
+  /// tabbed [PairedEditorPage] (Story 2.8, FR12); a single-file item opens the
+  /// plain [EditorPage]. Both re-walk on return (AD-10/FR3).
+  Future<void> _openItem(LoreItem item) async {
+    if (item.langs.length >= 2) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => PairedEditorPage(
+            storage: widget.storage,
+            item: item,
+            loreDir: widget.loreDir,
+          ),
+        ),
+      );
+      if (mounted) await _rescan();
+      return;
+    }
+    // The loader only ever keys variants ru/en/orig; the final fallback is
+    // defensive so an unexpected key can't make a tappable row a silent no-op.
+    final primary = item.langs['orig'] ??
+        item.langs['ru'] ??
+        item.langs['en'] ??
+        (item.langs.isEmpty ? null : item.langs.values.first);
+    if (primary == null) return;
+    await _open(primary.file);
   }
 
   /// Re-walk and re-find this entity by its stable [LoreEntry.id] (AD-10 —
@@ -154,13 +182,17 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
   }
 
   Widget _itemRow(LoreItem item, int depth) {
-    // Open the primary language variant; RU/EN tabs are Story 2.8.
-    final primary = item.langs['orig'] ?? item.langs['ru'] ?? item.langs['en'];
-    return _leaf(
-      title: item.title,
-      icon: Icons.description_outlined,
-      loreRelId: primary?.file,
-      depth: depth,
+    // A bilingual pair opens the RU/EN tabbed editor; a single file opens the
+    // plain editor (Story 2.8). A null primary (no readable variant) is
+    // untappable.
+    final hasVariant = item.langs.isNotEmpty;
+    return Padding(
+      padding: EdgeInsets.only(left: _indentFor(depth)),
+      child: ListTile(
+        leading: const Icon(Icons.description_outlined),
+        title: Text(item.title),
+        onTap: hasVariant ? () => _openItem(item) : null,
+      ),
     );
   }
 

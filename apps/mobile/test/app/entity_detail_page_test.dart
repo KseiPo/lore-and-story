@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/app/entity_detail_page.dart';
+import 'package:lore_and_story/app/editor_page.dart';
+import 'package:lore_and_story/app/paired_editor_page.dart';
 import 'package:lore_and_story/lore/lore.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
@@ -78,7 +80,59 @@ Future<void> _pump(WidgetTester tester, FakeRepoStorage storage, LoreEntry entry
   await tester.pumpAndSettle();
 }
 
+/// A `selena/` folder with one **paired** sub-entry (`scene.ru.md` + `scene.en.md`)
+/// and one single-file sub-entry (`bio.md`).
+FakeRepoStorage _pairRepo() => FakeRepoStorage(
+      '/repo',
+      dirEntries: {
+        '': const [RepoEntry(name: 'selena', path: 'selena', isDirectory: true)],
+        'selena': const [
+          RepoEntry(name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
+          RepoEntry(name: 'bio.md', path: 'selena/bio.md', isDirectory: false),
+          RepoEntry(name: 'scene.ru.md', path: 'selena/scene.ru.md', isDirectory: false),
+          RepoEntry(name: 'scene.en.md', path: 'selena/scene.en.md', isDirectory: false),
+        ],
+      },
+      fileContents: {
+        'selena/selena.md': '# Selena\n',
+        'selena/bio.md': '# Bio\n',
+        'selena/scene.ru.md': '# Сцена\n',
+        'selena/scene.en.md': '# Scene\n',
+      },
+    );
+
 void main() {
+  group('RU/EN pair routing (Story 2.8)', () {
+    testWidgets('tapping a paired sub-entry opens the tabbed paired editor',
+        (tester) async {
+      final storage = _pairRepo();
+      final selena = await _entry(storage, 'selena/selena.md');
+      await _pump(tester, storage, selena);
+
+      // The pair renders as one row titled "<ru> — <en>".
+      await tester.tap(find.text('Сцена — Scene'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PairedEditorPage), findsOneWidget);
+      expect(find.text('RU'), findsOneWidget);
+      expect(find.text('EN'), findsOneWidget);
+    });
+
+    testWidgets('tapping a single-file sub-entry opens the plain editor (no tabs)',
+        (tester) async {
+      final storage = _pairRepo();
+      final selena = await _entry(storage, 'selena/selena.md');
+      await _pump(tester, storage, selena);
+
+      await tester.tap(find.text('Bio'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EditorPage), findsOneWidget);
+      expect(find.byType(PairedEditorPage), findsNothing);
+      expect(find.byType(TabBar), findsNothing);
+    });
+  });
+
   testWidgets('renders the card, root items, sections, and nested sections (FR6)',
       (tester) async {
     final storage = _repo();

@@ -1,0 +1,301 @@
+import 'package:flutter/material.dart';
+
+import '../lore/lore.dart' as lore;
+import '../storage/storage.dart';
+import 'convention_highlighting_controller.dart';
+import 'editor_toolbar.dart';
+import 'markdown_preview.dart';
+
+/// The per-file editing surface — everything about editing **one** file, minus
+/// any `Scaffold`/`AppBar` chrome. Hosted by [EditorPage] (a single file) and by
+/// the RU/EN paired editor (one per tab, Story 2.8), so the hardened
+/// save/dirty/pop/lossy/conflict/highlighting/preview logic lives in **one**
+/// place and is never forked (AD-7 spirit).
+///
+/// Owns the in-memory buffer of its file (AD-10). A save writes that file, and
+/// only that file, via [RepoStorage.writeAtomic] (AD-4/AD-6 — a paired editor
+/// never merges the two languages). Reads/writes are total (AD-8): a malformed
+/// file still opens, a lossy-UTF-8 file opens read-best-effort with saving
+/// disabled, and a read/save failure surfaces an error state, never a crash.
+///
+/// The host drives chrome (title, dirty indicator, preview toggle, Save action,
+/// pop/background save) through the exposed getters + [save]/[togglePreview],
+/// and rebuilds when [FileEditor.onStateChanged] fires.
+class FileEditor extends StatefulWidget {
+  final RepoStorage storage;
+
+  /// Repo-relative path of the file being edited.
+  final String path;
+
+  /// Fired whenever host-visible state changes (dirty / load-state / preview),
+  /// so the host can rebuild its chrome.
+  final VoidCallback? onStateChanged;
+
+  const FileEditor({
+    super.key,
+    required this.storage,
+    required this.path,
+    this.onStateChanged,
+  });
+
+  @override
+  FileEditorState createState() => FileEditorState();
+}
+
+enum _LoadState { loading, ready, error }
+
+/// Public so a host can hold a `GlobalKey<FileEditorState>` and query
+/// dirty/save/lossy state (for its AppBar and its pop/background handling).
+class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
+  // A convention-highlighting controller (FR9): renders the raw buffer styled
+  // via buildTextSpan while the text stays raw markdown.
+  final ConventionHighlightingController _controller =
+      ConventionHighlightingController();
+  _LoadState _loadState = _LoadState.loading;
+  String? _errorMessage;
+  String _original = '';
+  bool _dirty = false;
+
+  /// True when showing the read-only rendered preview (FR10) instead of the raw
+  /// editor. Pure UI state — the buffer is never touched by previewing.
+  bool _previewing = true;
+
+  /// True when the open file is a Syncthing conflict copy. The AppBar path is
+  /// ellipsized from the end — exactly where the `.sync-conflict-…` marker sits
+  /// — so on a long path nothing else would signal "this is a conflict copy,
+  /// not the original." A banner re-asserts that context (FR17 / Story 2.4);
+  /// resolution is still done with the syncer on the desktop (AD-5). Reuses the
+  /// loader's exported detector — no second implementation (AD-7 spirit).
+  late final bool _isConflictCopy = lore.isConflictCopy(_basename(widget.path));
+
+  /// True when the loaded content contains U+FFFD replacement characters,
+  /// meaning the file on disk is not well-formed UTF-8 and `read` decoded it
+  /// lossily. Writing such a buffer back would replace the original bytes with
+  /// the replacement chars — permanent corruption — so saving is disabled.
+  bool _lossyLoad = false;
+
+  /// Prevents two `writeAtomic` calls overlapping for the same buffer.
+  bool _saving = false;
+
+  /// Set when a save is requested while one is already in flight. The in-flight
+  /// save re-runs once on completion, so a deferred save is never dropped (a
+  /// plain "return if busy" guard would silently lose the newer text).
+  bool _savePending = false;
+
+  // ---- Host-facing state ---------------------------------------------------
+
+  /// Whether the buffer differs from what's on disk.
+  bool get isDirty => _dirty;
+
+  /// Whether there is something safe to save (dirty, not lossy, ready).
+  bool get canSave => _canSave;
+
+  /// Whether the file decoded lossily and so cannot be saved without corruption.
+  bool get isLossy => _lossyLoad;
+
+  /// Whether the file loaded (vs. loading / errored).
+  bool get isReady => _loadState == _LoadState.ready;
+
+  /// Whether the open file is a Syncthing conflict copy.
+  bool get isConflictCopy => _isConflictCopy;
+
+  /// Whether the read-only preview is showing (vs. the raw editor).
+  bool get previewing => _previewing;
+
+  /// Toggle between the read-only preview and the raw editor (ready state only).
+  void togglePreview() {
+    if (_loadState != _LoadState.ready) return;
+    setState(() => _previewing = !_previewing);
+    _notify();
+  }
+
+  /// Save the buffer to this file, if safe (see [canSave]). Returns whether it
+  /// is now **safe to leave** the editor — true when the buffer is persisted
+  /// (or there was nothing dirty to save), false when a write failed or a save
+  /// is still in flight. A host's back/pop handler must NOT navigate away on a
+  /// false result, or the unsaved edit is lost.
+  Future<bool> save() => _save();
+
+  void _notify() => widget.onStateChanged?.call();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _controller.addListener(_onChanged);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.removeListener(_onChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final text = await widget.storage.read(widget.path);
+      if (!mounted) return;
+      _original = text;
+      // Set text without letting the listener mark this initial load as dirty.
+      _controller.removeListener(_onChanged);
+      _controller.text = text;
+      _controller.addListener(_onChanged);
+      setState(() {
+        _loadState = _LoadState.ready;
+        _lossyLoad = text.contains('\u{FFFD}');
+      });
+      _notify();
+    } catch (e) {
+      // Catch-all, not just RepoStorageException: an Error subtype or an
+      // untranslated platform exception must still land in the error state
+      // rather than escaping as an unhandled async error (AD-8).
+      if (!mounted) return;
+      setState(() {
+        _loadState = _LoadState.error;
+        _errorMessage = e.toString();
+      });
+      _notify();
+    }
+  }
+
+  void _onChanged() {
+    final dirty = _controller.text != _original;
+    if (dirty != _dirty) {
+      setState(() => _dirty = dirty);
+      _notify();
+    }
+  }
+
+  bool get _canSave => _dirty && !_lossyLoad && _loadState == _LoadState.ready;
+
+  /// Saves the current buffer if there is something safe to save. Explicit save
+  /// (the host's Save action), save-on-background, and save-on-pop all funnel
+  /// through here.
+  Future<bool> _save() async {
+    if (!_canSave) return !_dirty; // nothing safe to save → ok to leave iff clean
+    if (_saving) {
+      // A write is already running; queue our newest text for its re-run. We
+      // can't confirm it landed yet, so report "not safe to leave" — the caller
+      // (a pop handler) must keep the screen rather than discard the edit.
+      _savePending = true;
+      return false;
+    }
+    _saving = true;
+    try {
+      do {
+        _savePending = false;
+        final text = _controller.text;
+        await widget.storage.writeAtomic(widget.path, text);
+        if (!mounted) return false;
+        _original = text;
+        // Recompute rather than assuming clean: the user may have typed while
+        // the write was in flight, and those keystrokes are still unsaved.
+        final dirty = _controller.text != _original;
+        if (dirty != _dirty) {
+          setState(() => _dirty = dirty);
+        }
+        _notify();
+        if (dirty) _savePending = true;
+      } while (_savePending && _canSave);
+      return !_dirty; // persisted → safe to leave
+    } catch (e) {
+      // Catch-all for the same reason as _load. The write failed and the buffer
+      // is still dirty — surface it and report "not safe to leave" so a pop
+      // handler keeps the edit instead of silently discarding it.
+      if (!mounted) return false;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      return false;
+    } finally {
+      _saving = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Save-on-background (FR11): best-effort — there is no guarantee Android
+    // lets this Future finish before reclaiming the process. This is
+    // acceptable because writeAtomic is atomic: a killed write leaves the old
+    // content intact, never a partial file.
+    if (state == AppLifecycleState.paused) {
+      _save();
+    }
+  }
+
+  static String _basename(String p) {
+    final i = p.lastIndexOf('/');
+    return i == -1 ? p : p.substring(i + 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    switch (_loadState) {
+      case _LoadState.loading:
+        return const Center(child: CircularProgressIndicator());
+      case _LoadState.error:
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('Could not open this file.\n\n${_errorMessage ?? ''}'),
+          ),
+        );
+      case _LoadState.ready:
+        return Column(
+          children: [
+            if (_isConflictCopy)
+              Container(
+                key: const Key('editor-conflict-banner'),
+                width: double.infinity,
+                color: Theme.of(context).colorScheme.errorContainer,
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'This is a Syncthing conflict copy — not the original file. '
+                  'Resolve it with your syncer on the desktop.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+            if (_lossyLoad)
+              Container(
+                width: double.infinity,
+                color: Theme.of(context).colorScheme.errorContainer,
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'This file is not valid UTF-8. It is shown best-effort and '
+                  'cannot be saved — saving would corrupt the original bytes.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+            if (_previewing)
+              // Read-only rendered view of the CURRENT buffer (FR10). Display
+              // only — the buffer is untouched, so Save/dirty still apply.
+              Expanded(child: MarkdownPreview(text: _controller.text))
+            else ...[
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: TextField(
+                    controller: _controller,
+                    maxLines: null,
+                    expands: true,
+                    keyboardType: TextInputType.multiline,
+                    style: const TextStyle(fontFamily: 'monospace'),
+                    decoration: const InputDecoration(border: InputBorder.none),
+                  ),
+                ),
+              ),
+              // Helper toolbar above the keyboard (FR8) — editing only.
+              EditorToolbar(controller: _controller),
+            ],
+          ],
+        );
+    }
+  }
+}

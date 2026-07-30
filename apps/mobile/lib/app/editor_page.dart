@@ -1,23 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../lore/lore.dart';
 import '../storage/storage.dart';
-import 'convention_highlighting_controller.dart';
-import 'editor_toolbar.dart';
-import 'markdown_preview.dart';
+import 'file_editor.dart';
 
 /// Key for the dirty indicator, so tests bind to identity rather than to a
 /// particular icon's visual styling.
 const Key kDirtyIndicatorKey = Key('editor-dirty-indicator');
 
-/// Bare raw-markdown editor for a single file (FR7): no rendering, no markup
-/// hidden — the buffer is exactly what's on disk. Saving goes through
-/// [RepoStorage.writeAtomic] (Story 1.2's byte-exact atomic writer).
-///
-/// This is the first place the AD-10 boundary exists in code: this page owns
-/// the in-memory buffer of the one open file. There is no shared model to
-/// update (Epic 2 introduces the loader) — a save writes the file and that's
-/// the whole story here.
+/// Single-file editor screen (FR7): a thin `Scaffold` host over a [FileEditor].
+/// The AppBar (path, dirty indicator, preview toggle, Save) and the
+/// back/unsaved-edits guard delegate to the one `FileEditor` — all the editing
+/// machinery lives there, shared with the RU/EN paired editor (Story 2.8) so it
+/// is never forked.
 class EditorPage extends StatefulWidget {
   final RepoStorage storage;
 
@@ -30,182 +24,43 @@ class EditorPage extends StatefulWidget {
   State<EditorPage> createState() => _EditorPageState();
 }
 
-enum _LoadState { loading, ready, error }
+class _EditorPageState extends State<EditorPage> {
+  final GlobalKey<FileEditorState> _editorKey = GlobalKey<FileEditorState>();
 
-class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
-  // A convention-highlighting controller (FR9): renders the raw buffer styled
-  // via buildTextSpan while the text stays raw markdown.
-  final ConventionHighlightingController _controller =
-      ConventionHighlightingController();
-  _LoadState _loadState = _LoadState.loading;
-  String? _errorMessage;
-  String _original = '';
-  bool _dirty = false;
-
-  /// True when showing the read-only rendered preview (FR10) instead of the raw
-  /// editor. Pure UI state — the buffer is never touched by previewing.
-  bool _previewing = true;
-
-  /// True when the open file is a Syncthing conflict copy. The AppBar path is
-  /// ellipsized from the end — exactly where the `.sync-conflict-…` marker sits
-  /// — so on a long path nothing else would signal "this is a conflict copy,
-  /// not the original." A banner re-asserts that context (FR17 / Story 2.4);
-  /// resolution is still done with the syncer on the desktop (AD-5). Reuses the
-  /// loader's exported detector — no second implementation (AD-7 spirit).
-  late final bool _isConflictCopy = isConflictCopy(_basename(widget.path));
-
-  /// True when the loaded content contains U+FFFD replacement characters,
-  /// meaning the file on disk is not well-formed UTF-8 and `read` decoded it
-  /// lossily. Writing such a buffer back would replace the original bytes with
-  /// the replacement chars — permanent corruption — so saving is disabled.
-  ///
-  /// This guard previously lived in the (now retired) round-trip spike; it
-  /// belongs on the write path, which is here.
-  bool _lossyLoad = false;
-
-  /// Prevents two `writeAtomic` calls overlapping for the same buffer.
-  bool _saving = false;
-
-  /// Set when a save is requested while one is already in flight. The in-flight
-  /// save re-runs once on completion, so a deferred save is never dropped (a
-  /// plain "return if busy" guard would silently lose the newer text).
-  bool _savePending = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _controller.addListener(_onChanged);
-    _load();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _controller.removeListener(_onChanged);
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    try {
-      final text = await widget.storage.read(widget.path);
-      if (!mounted) return;
-      _original = text;
-      // Set text without letting the listener mark this initial load as dirty.
-      _controller.removeListener(_onChanged);
-      _controller.text = text;
-      _controller.addListener(_onChanged);
-      setState(() {
-        _loadState = _LoadState.ready;
-        _lossyLoad = text.contains('\u{FFFD}');
-      });
-    } catch (e) {
-      // Catch-all, not just RepoStorageException: an Error subtype or an
-      // untranslated platform exception must still land in the error state
-      // rather than escaping as an unhandled async error (AD-8).
-      if (!mounted) return;
-      setState(() {
-        _loadState = _LoadState.error;
-        _errorMessage = e.toString();
-      });
-    }
-  }
-
-  void _onChanged() {
-    final dirty = _controller.text != _original;
-    if (dirty != _dirty) setState(() => _dirty = dirty);
-  }
-
-  bool get _canSave => _dirty && !_lossyLoad && _loadState == _LoadState.ready;
-
-  /// Saves the current buffer if there is something safe to save. Explicit save
-  /// (the AppBar action), save-on-background, and save-on-pop all funnel
-  /// through here.
-  Future<void> _save() async {
-    if (!_canSave) return;
-    if (_saving) {
-      // Don't drop it — re-run after the in-flight write finishes.
-      _savePending = true;
-      return;
-    }
-    _saving = true;
-    try {
-      do {
-        _savePending = false;
-        final text = _controller.text;
-        await widget.storage.writeAtomic(widget.path, text);
-        if (!mounted) return;
-        _original = text;
-        // Recompute rather than assuming clean: the user may have typed while
-        // the write was in flight, and those keystrokes are still unsaved.
-        final dirty = _controller.text != _original;
-        if (dirty != _dirty) setState(() => _dirty = dirty);
-        if (dirty) _savePending = true;
-      } while (_savePending && _canSave);
-    } catch (e) {
-      // Catch-all for the same reason as _load.
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
-    } finally {
-      _saving = false;
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Save-on-background (FR11): best-effort — there is no guarantee Android
-    // lets this Future finish before reclaiming the process. This is
-    // acceptable because writeAtomic is atomic: a killed write leaves the old
-    // content intact, never a partial file. No retry queue / WorkManager here
-    // — out of scope for a v0.1 bare editor.
-    if (state == AppLifecycleState.paused) {
-      _save();
-    }
-  }
+  FileEditorState? get _editor => _editorKey.currentState;
 
   /// Back with unsaved edits must not silently discard them. Saves first when
   /// the buffer is safe to write; otherwise (e.g. a lossy load, which can never
   /// be saved) asks before discarding.
   Future<void> _handlePop() async {
-    if (_canSave) {
-      await _save();
+    final editor = _editor;
+    if (editor == null) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    if (editor.canSave) {
+      final saved = await editor.save();
       if (!mounted) return;
+      // A failed (or still in-flight) save must not navigate away — that would
+      // discard the edit. Keep the screen; the snackbar explains the failure.
+      if (!saved) return;
       Navigator.of(context).pop();
       return;
     }
-
-    final discard = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Discard changes?'),
-        content: Text(
-          _lossyLoad
-              ? 'This file is not valid UTF-8, so it cannot be saved safely. '
-                    'Your changes will be lost.'
-              : 'Your changes have not been saved.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep editing'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Discard'),
-          ),
-        ],
-      ),
-    );
-    if (discard == true && mounted) Navigator.of(context).pop();
+    if (!editor.isDirty) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    final discard = await confirmDiscardUnsaved(context, lossy: editor.isLossy);
+    if (discard && mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
+    final editor = _editor;
+    final dirty = editor?.isDirty ?? false;
     return PopScope(
-      canPop: !_dirty,
+      canPop: !dirty,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _handlePop();
       },
@@ -217,7 +72,7 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
               Flexible(
                 child: Text(widget.path, overflow: TextOverflow.ellipsis),
               ),
-              if (_dirty) ...[
+              if (dirty) ...[
                 const SizedBox(width: 6),
                 Semantics(
                   key: kDirtyIndicatorKey,
@@ -229,95 +84,64 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
           ),
           actions: [
             // Read-only preview toggle (FR10) — only in the ready state.
-            if (_loadState == _LoadState.ready)
+            if (editor?.isReady ?? false)
               IconButton(
-                tooltip: _previewing ? 'Edit' : 'Preview',
-                onPressed: () => setState(() => _previewing = !_previewing),
+                tooltip: editor!.previewing ? 'Edit' : 'Preview',
+                onPressed: () => editor.togglePreview(),
                 icon: Icon(
-                  _previewing ? Icons.edit_outlined : Icons.visibility_outlined,
+                  editor.previewing
+                      ? Icons.edit_outlined
+                      : Icons.visibility_outlined,
                 ),
               ),
             IconButton(
               tooltip: 'Save',
-              onPressed: _canSave ? _save : null,
+              onPressed: (editor?.canSave ?? false) ? () => editor!.save() : null,
               icon: const Icon(Icons.save_outlined),
             ),
           ],
         ),
-        body: _buildBody(),
+        body: FileEditor(
+          key: _editorKey,
+          storage: widget.storage,
+          path: widget.path,
+          onStateChanged: () {
+            if (mounted) setState(() {});
+          },
+        ),
       ),
     );
   }
+}
 
-  static String _basename(String p) {
-    final i = p.lastIndexOf('/');
-    return i == -1 ? p : p.substring(i + 1);
-  }
-
-  Widget _buildBody() {
-    switch (_loadState) {
-      case _LoadState.loading:
-        return const Center(child: CircularProgressIndicator());
-      case _LoadState.error:
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('Could not open this file.\n\n${_errorMessage ?? ''}'),
-          ),
-        );
-      case _LoadState.ready:
-        return Column(
-          children: [
-            if (_isConflictCopy)
-              Container(
-                key: const Key('editor-conflict-banner'),
-                width: double.infinity,
-                color: Theme.of(context).colorScheme.errorContainer,
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'This is a Syncthing conflict copy — not the original file. '
-                  'Resolve it with your syncer on the desktop.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
-            if (_lossyLoad)
-              Container(
-                width: double.infinity,
-                color: Theme.of(context).colorScheme.errorContainer,
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'This file is not valid UTF-8. It is shown best-effort and '
-                  'cannot be saved — saving would corrupt the original bytes.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
-            if (_previewing)
-              // Read-only rendered view of the CURRENT buffer (FR10). Display
-              // only — the buffer is untouched, so Save/dirty still apply.
-              Expanded(child: MarkdownPreview(text: _controller.text))
-            else ...[
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: TextField(
-                    controller: _controller,
-                    maxLines: null,
-                    expands: true,
-                    keyboardType: TextInputType.multiline,
-                    style: const TextStyle(fontFamily: 'monospace'),
-                    decoration: const InputDecoration(border: InputBorder.none),
-                  ),
-                ),
-              ),
-              // Helper toolbar above the keyboard (FR8) — editing only.
-              EditorToolbar(controller: _controller),
-            ],
-          ],
-        );
-    }
-  }
+/// Shared "Discard changes?" dialog for backing out of an editor with unsaved
+/// edits that cannot be (or should not be silently) saved. Returns true when the
+/// user chooses to discard. Reused by the single-file and RU/EN paired editors.
+Future<bool> confirmDiscardUnsaved(
+  BuildContext context, {
+  required bool lossy,
+}) async {
+  final discard = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Discard changes?'),
+      content: Text(
+        lossy
+            ? 'This file is not valid UTF-8, so it cannot be saved safely. '
+                'Your changes will be lost.'
+            : 'Your changes have not been saved.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Keep editing'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Discard'),
+        ),
+      ],
+    ),
+  );
+  return discard ?? false;
 }
