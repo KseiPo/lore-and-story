@@ -4,6 +4,7 @@ import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'convention_highlighting_controller.dart';
 import 'editor_toolbar.dart';
+import 'markdown_preview.dart';
 
 /// Key for the dirty indicator, so tests bind to identity rather than to a
 /// particular icon's visual styling.
@@ -40,6 +41,10 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
   String? _errorMessage;
   String _original = '';
   bool _dirty = false;
+
+  /// True when showing the read-only rendered preview (FR10) instead of the raw
+  /// editor. Pure UI state — the buffer is never touched by previewing.
+  bool _previewing = true;
 
   /// True when the open file is a Syncthing conflict copy. The AppBar path is
   /// ellipsized from the end — exactly where the `.sync-conflict-…` marker sits
@@ -112,8 +117,7 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
     if (dirty != _dirty) setState(() => _dirty = dirty);
   }
 
-  bool get _canSave =>
-      _dirty && !_lossyLoad && _loadState == _LoadState.ready;
+  bool get _canSave => _dirty && !_lossyLoad && _loadState == _LoadState.ready;
 
   /// Saves the current buffer if there is something safe to save. Explicit save
   /// (the AppBar action), save-on-background, and save-on-pop all funnel
@@ -142,9 +146,9 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
     } catch (e) {
       // Catch-all for the same reason as _load.
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Save failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
     } finally {
       _saving = false;
     }
@@ -180,7 +184,7 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
         content: Text(
           _lossyLoad
               ? 'This file is not valid UTF-8, so it cannot be saved safely. '
-                  'Your changes will be lost.'
+                    'Your changes will be lost.'
               : 'Your changes have not been saved.',
         ),
         actions: [
@@ -210,7 +214,9 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(child: Text(widget.path, overflow: TextOverflow.ellipsis)),
+              Flexible(
+                child: Text(widget.path, overflow: TextOverflow.ellipsis),
+              ),
               if (_dirty) ...[
                 const SizedBox(width: 6),
                 Semantics(
@@ -222,6 +228,15 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
             ],
           ),
           actions: [
+            // Read-only preview toggle (FR10) — only in the ready state.
+            if (_loadState == _LoadState.ready)
+              IconButton(
+                tooltip: _previewing ? 'Edit' : 'Preview',
+                onPressed: () => setState(() => _previewing = !_previewing),
+                icon: Icon(
+                  _previewing ? Icons.edit_outlined : Icons.visibility_outlined,
+                ),
+              ),
             IconButton(
               tooltip: 'Save',
               onPressed: _canSave ? _save : null,
@@ -280,21 +295,27 @@ class _EditorPageState extends State<EditorPage> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: TextField(
-                  controller: _controller,
-                  maxLines: null,
-                  expands: true,
-                  keyboardType: TextInputType.multiline,
-                  style: const TextStyle(fontFamily: 'monospace'),
-                  decoration: const InputDecoration(border: InputBorder.none),
+            if (_previewing)
+              // Read-only rendered view of the CURRENT buffer (FR10). Display
+              // only — the buffer is untouched, so Save/dirty still apply.
+              Expanded(child: MarkdownPreview(text: _controller.text))
+            else ...[
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: TextField(
+                    controller: _controller,
+                    maxLines: null,
+                    expands: true,
+                    keyboardType: TextInputType.multiline,
+                    style: const TextStyle(fontFamily: 'monospace'),
+                    decoration: const InputDecoration(border: InputBorder.none),
+                  ),
                 ),
               ),
-            ),
-            // Helper toolbar above the keyboard (FR8).
-            EditorToolbar(controller: _controller),
+              // Helper toolbar above the keyboard (FR8) — editing only.
+              EditorToolbar(controller: _controller),
+            ],
           ],
         );
     }

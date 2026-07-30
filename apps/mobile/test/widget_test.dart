@@ -4,6 +4,7 @@ import 'package:lore_and_story/app/app.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
 import 'fakes.dart';
+import 'app/editor_test_helpers.dart';
 
 // Home-orchestration states (grant → choose-root → ready), the "Open a file"
 // raw-picker fallback, conflict surfacing, rescan-on-refresh/resume, and the
@@ -59,6 +60,7 @@ void main() {
     // Picker opened at the repo root (the lore folder itself).
     await tester.tap(find.text('frank.md'));
     await tester.pumpAndSettle();
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
 
     // The editor opened with the file's raw content.
     expect(find.widgetWithText(TextField, '# Frank\n\n**bold**\n'), findsOneWidget);

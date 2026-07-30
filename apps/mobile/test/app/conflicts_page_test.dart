@@ -4,6 +4,7 @@ import 'package:lore_and_story/app/conflicts_page.dart';
 import 'package:lore_and_story/lore/lore.dart';
 
 import '../fakes.dart';
+import 'editor_test_helpers.dart';
 
 void main() {
   const conflicts = [
@@ -62,6 +63,7 @@ void main() {
 
     await tester.tap(find.text('intro.sync-conflict-20240101-120000-ABC.md'));
     await tester.pumpAndSettle();
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
 
     expect(find.widgetWithText(TextField, '# intro conflict\n'), findsOneWidget);
     // The editor re-asserts that this is a conflict copy (the AppBar path
@@ -89,6 +91,7 @@ void main() {
 
     await tester.tap(find.text('x.sync-conflict-20240101-120000-ABC.md'));
     await tester.pumpAndSettle();
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
 
     expect(find.widgetWithText(TextField, '# subfolder conflict\n'), findsOneWidget);
   });

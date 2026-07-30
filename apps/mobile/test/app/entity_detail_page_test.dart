@@ -5,6 +5,7 @@ import 'package:lore_and_story/lore/lore.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
 import '../fakes.dart';
+import 'editor_test_helpers.dart';
 
 /// An entity folder `selena/` (the picked root is the lore folder):
 ///
@@ -121,6 +122,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('entity-card')));
     await tester.pumpAndSettle();
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
     expect(find.widgetWithText(TextField, '# Selena\n'), findsOneWidget);
   });
 
@@ -138,6 +140,7 @@ void main() {
     ]) {
       await tester.tap(find.text(probe.$1));
       await tester.pumpAndSettle();
+      await enterEditMode(tester); // editor opens in preview (Story 2.7)
       expect(find.widgetWithText(TextField, probe.$2), findsOneWidget,
           reason: 'tapping "${probe.$1}" should open ${probe.$2}');
       // Back to the detail outline for the next probe (nothing was edited, so
@@ -210,6 +213,7 @@ void main() {
     expect(find.text('Overview'), findsOneWidget);
     await tester.tap(find.text('Overview'));
     await tester.pumpAndSettle();
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
     expect(find.widgetWithText(TextField, '# Dual Overview\n'), findsOneWidget);
   });
 
@@ -250,6 +254,7 @@ void main() {
 
     await tester.tap(find.text('Bio'));
     await tester.pumpAndSettle();
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
     await tester.enterText(find.byType(TextField), '# Biography\n');
     await tester.pump();
     await tester.tap(find.byTooltip('Save'));

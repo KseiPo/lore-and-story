@@ -4,6 +4,7 @@ import 'package:lore_and_story/app/app.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
 import '../fakes.dart';
+import 'editor_test_helpers.dart';
 
 /// A small lore repo whose root **is** the lore folder (the author syncs the
 /// lore folder itself — there is no `lore/` level):
@@ -104,6 +105,7 @@ void main() {
     await tester.tap(find.text('Frank'));
     await tester.pumpAndSettle();
 
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
     // The editor opened on the entity's card (characters/frank.md).
     expect(find.widgetWithText(TextField, '# Frank\n'), findsOneWidget);
   });
@@ -151,6 +153,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Frank'));
     await tester.pumpAndSettle();
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
     expect(find.widgetWithText(TextField, '# Frank\n'), findsOneWidget);
   });
 
@@ -185,6 +188,7 @@ void main() {
     // browse reaches a card two folders deep.
     await tester.tap(find.text('Deep One'));
     await tester.pumpAndSettle();
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
     expect(find.widgetWithText(TextField, '# Deep One\n'), findsOneWidget);
   });
 
@@ -197,6 +201,7 @@ void main() {
     await tester.tap(find.text('Intro'));
     await tester.pumpAndSettle();
 
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
     // intro.md sits directly in loreDir (category 'general'); its card opens.
     expect(find.widgetWithText(TextField, '# Intro\n'), findsOneWidget);
   });
@@ -211,6 +216,7 @@ void main() {
     await tester.tap(find.text('Frank'));
     await tester.pumpAndSettle();
 
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
     // Rename the card's heading and save (the atomic writer updates the fake).
     await tester.enterText(find.byType(TextField), '# Franklin\n');
     await tester.pump();
@@ -368,6 +374,7 @@ void main() {
     // ...and tapping it opens the copy in the editor.
     await tester.tap(find.text('frank.sync-conflict-20240612-093000-K3F9AAA.md'));
     await tester.pumpAndSettle();
+    await enterEditMode(tester); // editor opens in preview (Story 2.7)
     expect(find.widgetWithText(TextField, '# conflicted frank\n'), findsOneWidget);
   });
 

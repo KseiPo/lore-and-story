@@ -65,7 +65,7 @@ development_status:
   2-4-surface-sync-conflict-copies: done
   2-5-edit-with-helper-toolbar-and-convention-highlighting: done
   2-6-flag-invalid-markup-without-crashing: done
-  2-7-preview-rendered-markdown: ready-for-dev
+  2-7-preview-rendered-markdown: done
   2-8-edit-ru-en-pairs-safely: backlog
   2-9-create-a-translation-from-a-missing-en: backlog
   2-10-create-a-new-entity: backlog
