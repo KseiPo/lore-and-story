@@ -110,7 +110,7 @@ _None — no UX design document exists for this project. The PRD's journeys (UJ-
 - **FR23**: Epic 4 — grammar/style findings
 - **FR24**: Epic 2 — create new simple entity
 - **FR25**: Epic 2 — create new sub-entry / event
-- **FR26**: Epic 5 — promote simple → folder
+- **FR26**: Epic 2 — promote simple → folder (Story 2.17)
 
 ## Epic List
 
@@ -133,11 +133,12 @@ card/sub-entry/scene with the convention-aware editor (highlighting +
 invalid-markup flagging + preview + RU/EN tabs), see conflict copies surfaced, and
 create new entities and events. The complete v0.1 writing experience, built on the
 proven foundation.
-**FRs covered:** FR3, FR4, FR5, FR6, FR8, FR9, FR9a, FR10, FR12, FR13, FR14, FR16, FR17, FR24, FR25
+**FRs covered:** FR3, FR4, FR5, FR6, FR8, FR9, FR9a, FR10, FR12, FR13, FR14, FR16, FR17, FR24, FR25, FR26
 **Notes:** full Dart loader port (`walkCategory` / `buildNode` / `readTitleAliases`
 / language pairing) + syncer-aware walk; authoring (FR24–FR25) is the **closing
 story cluster** — a distinct create/`mkdir` write path, ordered after the edit
-path is solid.
+path is solid. Promotion (FR26, Story 2.17 — the one authoring op that *moves* an
+existing file) folds in here too, sequenced last.
 
 ### Epic 3: Convention tooling (v0.2)
 
@@ -153,13 +154,6 @@ first, then grammar/style findings. One epic (shared HTTP client, key store, and
 context-preview sheet). **Release checkpoint: translation (FR21) ships before
 grammar (FR23)** — the deliberate PRD phasing.
 **FRs covered:** FR20, FR21, FR22, FR23
-
-### Epic 5: Promote entity to folder (promotion phase)
-
-Grow a simple card into an entity folder so it can hold sub-entries — the one
-authoring op that moves an existing file, isolated and carefully sequenced under
-the syncer.
-**FRs covered:** FR26
 
 ---
 
@@ -472,6 +466,22 @@ So that I can see a card/scene the way it actually reads, illustrations included
 
 **Notes:** Not tied to a new FR; a preview enhancement split out of 2.7 for slice isolation. `media/` folders hold these images and are skipped by the loader walk (project-context), so image paths are author-relative and resolved only at render time here.
 
+### Story 2.17: Promote a simple entity to an entity folder
+
+As the author,
+I want to convert a flat card into an entity folder,
+So that it can hold events and quests like a full character.
+
+**Acceptance Criteria:**
+
+**Given** a simple entity `<slug>.md`, **When** I promote it, **Then** the app creates `<slug>/` and moves the card to `<slug>/<slug>.md` (the folder index), preserving the card's bytes exactly. *(FR26)*
+
+**Given** the move, **When** it runs, **Then** it is atomic and the model re-scans to show the entity as a folder that can hold sub-entries. *(FR25)*
+
+**Given** a conflict copy exists for that entity, **When** I try to promote, **Then** promotion is blocked until it is resolved. *(R8)*
+
+**Given** the entity's card is open with unsaved edits, **When** I try to promote, **Then** the app saves-or-blocks first — it never moves the file out from under a dirty buffer. *(AD-10)*
+
 ## Epic 3: Convention tooling (v0.2)
 
 **Epic Definition of Done (every story):** works fully offline (NFR4); linting and
@@ -554,24 +564,3 @@ So that I can improve prose while keeping my voice.
 **Acceptance Criteria:**
 
 **Given** a file, **When** I request a review, **Then** the app (after the FR22 preview) returns a structured findings list (`line`, `issue`, `suggestion`, `severity`) as a tappable list that jumps to the line — never a rewritten file. *(FR23)*
-
-## Epic 5: Promote entity to folder (promotion phase)
-
-**Epic Definition of Done (every story):** works fully offline (NFR4); promotion
-completes without a noticeable stall (NFR6).
-
-### Story 5.1: Promote a simple entity to an entity folder
-
-As the author,
-I want to convert a flat card into an entity folder,
-So that it can hold events and quests like a full character.
-
-**Acceptance Criteria:**
-
-**Given** a simple entity `<slug>.md`, **When** I promote it, **Then** the app creates `<slug>/` and moves the card to `<slug>/<slug>.md` (the folder index), preserving the card's bytes exactly. *(FR26)*
-
-**Given** the move, **When** it runs, **Then** it is atomic and the model re-scans to show the entity as a folder that can hold sub-entries. *(FR25)*
-
-**Given** a conflict copy exists for that entity, **When** I try to promote, **Then** promotion is blocked until it is resolved. *(R8)*
-
-**Given** the entity's card is open with unsaved edits, **When** I try to promote, **Then** the app saves-or-blocks first — it never moves the file out from under a dirty buffer. *(AD-10)*

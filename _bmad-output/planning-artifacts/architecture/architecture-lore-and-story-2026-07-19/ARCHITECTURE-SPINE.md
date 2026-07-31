@@ -8,7 +8,7 @@ scope: 'The Flutter/Android mobile app and its relationship to the JS reference 
 status: final
 created: '2026-07-19'
 updated: '2026-07-19'
-binds: ['Epic 1', 'Epic 2', 'Epic 3', 'Epic 4', 'Epic 5']
+binds: ['Epic 1', 'Epic 2', 'Epic 3', 'Epic 4']
 sources:
   - _bmad-output/planning-artifacts/prds/prd-lore-and-story-2026-07-19/prd.md
   - _bmad-output/planning-artifacts/prds/prd-lore-and-story-2026-07-19/addendum.md
@@ -190,7 +190,7 @@ _(AD-9 and AD-12 are app-wide and bind every row.)_
 | Epic 2 — browse, edit, create | `lore/` (model + matcher + browse/editor UI) | AD-2, AD-3, AD-4, AD-6, AD-7, AD-8, AD-10 |
 | Epic 3 — convention tooling | `lore/` (matcher + linter UI) | AD-7, AD-8 |
 | Epic 4 — AI assist | `ai/` (port + adapter + context-preview UI) | AD-11 |
-| Epic 5 — promotion | `lore/` + `storage/` `writeAtomic` (move) | AD-3, AD-4, AD-5 |
+| Epic 2 — promotion (Story 2.17) | `lore/` + `storage/` `writeAtomic` (move) | AD-3, AD-4, AD-5 |
 
 ## Deferred
 
