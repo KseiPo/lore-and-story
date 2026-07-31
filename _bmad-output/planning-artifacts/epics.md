@@ -391,6 +391,8 @@ So that the app isn't cluttered with a second, weaker navigation path that lists
 
 **Notes:** Removing the picker also closes several deferred picker-only bugs (trailing-slash `loreDir`, a file named exactly `loreDir`, the `_openEntry`/`_openFile` `exists`-vs-`isDirectory` conflation) — see `deferred-work.md`. Not tied to a new FR; a UX-consolidation/hygiene story.
 
+**Decision (2026-07-31):** Full removal, no escape hatch. The browse tree (categories → entities → detail tree with sub-entries/scenes/RU+EN variants) reaches every editable file the picker could — there is no remaining case for an advanced/escape-hatch entry point. See Story 2.12's spec file for the full rationale.
+
 ### Story 2.13: Preview the entity card on the detail screen
 
 As the author,

@@ -29,9 +29,9 @@
 
 - **Editor never re-checks the file before overwriting it** — open a file, background the app while Syncthing pulls a desktop edit, return and tap save: the remote edit is atomically and byte-exactly obliterated with no warning. A refuse-on-mismatch guard is cheap, but without the Epic 2 conflict UX (FR17 / Story 2.4) it produces a blocked save with no resolution path. **Revisit together with the conflict UI** — this is the highest-value deferred item in the log. [apps/mobile/lib/app/editor_page.dart:87]
 - **`*.sync-conflict-*` files are unfiltered and freely editable** — deliberately NOT hidden, because FR17 requires conflict copies be surfaced with a badge rather than hidden. Editing one silently puts work in a file the syncer treats as garbage. Resolved by Story 2.4's conflict-badge UI. [apps/mobile/lib/storage/repo_storage.dart]
-- **`_openEntry` doesn't `exists`-check a folder that vanished between listing and tap** — yields an empty picker with the Up button suppressed (dead end, but not a crash). `_openFile` already applies the port doc's `exists` disambiguation; `_openEntry` should too. [apps/mobile/lib/app/home_page.dart:152]
-- **A `loreDir` configured with a trailing slash breaks `_atStart`** — `'lore/'` never equals `'lore'`, so the picker shows a phantom extra Up level. Fix by normalizing trailing slashes in `ProjectConfig.parse` or the picker. [apps/mobile/lib/app/lore_file_picker_page.dart:81]
-- **A regular *file* named exactly `loreDir` passes the `exists` check** — the picker then opens on a file path, lists nothing, and hides Up. Fixing properly needs an `isDirectory`/stat capability on the `RepoStorage` port. [apps/mobile/lib/app/home_page.dart:145]
+- ~~**`_openEntry` doesn't `exists`-check a folder that vanished between listing and tap**~~ — **RESOLVED 2026-07-31**: moot — picker retired in Story 2.12.
+- ~~**A `loreDir` configured with a trailing slash breaks `_atStart`**~~ — **RESOLVED 2026-07-31**: moot — picker retired in Story 2.12.
+- ~~**A regular *file* named exactly `loreDir` passes the `exists` check**~~ — **RESOLVED 2026-07-31**: moot — picker retired in Story 2.12.
 
 ## Deferred from: code review of 2-1a-port-the-lore-loader-read-model (2026-07-20)
 
@@ -57,7 +57,7 @@
 
 ## Deferred from: code review of loreDir=root requirement change (2026-07-24)
 
-- **A lore-story.json whose `loreDir` points at a FILE (not a directory) makes the "Open a file" picker root at that file path** — `home_page._openFile` uses `exists(_loreDir) ? _loreDir : ''`, and `RepoStorage.exists` is true for files too, so the picker opens on a file path, lists nothing, and hides Up (stuck). Requires a hand-written malformed config; the user syncs only the lore folder (no config), so unreachable in practice. The clean fix needs an `isDirectory` method on the `RepoStorage` port. (The "empty model" half of this was resolved by removing the root-promotion guard — a missing/file loreDir now shows the empty state naming the folder, never silently walks the repo root.) [apps/mobile/lib/app/home_page.dart `_openFile`; apps/mobile/lib/storage/repo_storage.dart]
+- ~~**A lore-story.json whose `loreDir` points at a FILE (not a directory) makes the "Open a file" picker root at that file path**~~ — **RESOLVED 2026-07-31**: moot — picker and `_openFile` retired in Story 2.12.
 
 ## Deferred from: code review of 2-3-view-an-entitys-detail-tree (2026-07-24)
 

@@ -234,6 +234,11 @@ in UI/widget tests right now** — UI-layer coverage can wait. A data-loss or
 correctness fix warrants a test; a purely-cosmetic UI gap does not, and a review
 finding that is only "add a widget test for X" may be skipped unless X is a
 data-safety path. Don't cite missing UI tests as a blocker.
+**A UI component's mere presence or absence is never itself a reason to write a
+test** (e.g. "assert this button is gone/renders") — tests should exercise
+business logic and algorithms, not pin down UI layout. This applies even when a
+review flags it as a "regression guard" — decline unless the component gates a
+data-safety path.
 
 ---
 

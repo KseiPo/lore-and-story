@@ -4,12 +4,10 @@ import 'package:lore_and_story/app/app.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
 import 'fakes.dart';
-import 'app/editor_test_helpers.dart';
 
-// Home-orchestration states (grant → choose-root → ready), the "Open a file"
-// raw-picker fallback, conflict surfacing, rescan-on-refresh/resume, and the
-// error state. The Categories → Entities browse itself is covered in
-// test/app/browse_test.dart.
+// Home-orchestration states (grant → choose-root → ready), conflict surfacing,
+// rescan-on-refresh/resume, and the error state. The Categories → Entities
+// browse itself is covered in test/app/browse_test.dart.
 void main() {
   testWidgets('shows grant-access state when permission is not granted',
       (tester) async {
@@ -34,36 +32,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Choose repo folder'), findsOneWidget);
-  });
-
-  testWidgets(
-      'full loop: Open a file -> pick from the picker -> the editor opens it (AC5)',
-      (tester) async {
-    // The picked folder IS the lore folder, so its files sit at the root.
-    final storage = FakeRepoStorage(
-      '/storage/emulated/0/repo',
-      entries: const [
-        RepoEntry(name: 'frank.md', path: 'frank.md', isDirectory: false),
-      ],
-      fileContents: {'frank.md': '# Frank\n\n**bold**\n'},
-    );
-    await tester.pumpWidget(LoreStoryApp(
-      rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
-      permission: FakeStoragePermission(granted: true),
-      storageFactory: (root) => storage,
-    ));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Open a file'));
-    await tester.pumpAndSettle();
-
-    // Picker opened at the repo root (the lore folder itself).
-    await tester.tap(find.text('frank.md'));
-    await tester.pumpAndSettle();
-    await enterEditMode(tester); // editor opens in preview (Story 2.7)
-
-    // The editor opened with the file's raw content.
-    expect(find.widgetWithText(TextField, '# Frank\n\n**bold**\n'), findsOneWidget);
   });
 
   testWidgets('surfaces sync-conflict copies found by the walk (FR17)',

@@ -6,7 +6,6 @@ import 'app.dart';
 import 'category_entities_page.dart';
 import 'conflicts_page.dart';
 import 'editor_page.dart';
-import 'lore_file_picker_page.dart';
 import 'root_picker_page.dart';
 
 /// The states of the v0.1 landing surface. A real browsing UI is Epic 2 — this
@@ -182,23 +181,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _refresh();
   }
 
-  /// Opens the in-repo file picker and, on a selected file, pushes the bare
-  /// editor (AC5 — closes Epic 1's full loop).
-  ///
-  /// Starts at the resolved `loreDir` when it exists as a subfolder of the
-  /// chosen root. If the user pointed the repo root directly at their lore
-  /// folder (a perfectly reasonable choice), `loreDir` won't exist as a
-  /// subfolder of itself — fall back to browsing from the true repo root
-  /// rather than showing an empty picker.
-  Future<void> _openFile() async {
-    final root = _rootPath;
-    if (root == null) return;
-    final storage = widget.storageFactory(root);
-    final startPath = await storage.exists(_loreDir) ? _loreDir : '';
-    if (!mounted) return;
-    await _openFileFrom(storage, startPath);
-  }
-
   /// Opens a category's entities list (Story 2.2). On return — including from
   /// any editor opened through it — rescans so the counts/conflicts reflect
   /// edits (FR3: "reflects the current repo"; AD-10 rebuild).
@@ -233,23 +215,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           conflicts: _lore.conflicts,
           loreDir: _loreDir,
         ),
-      ),
-    );
-    if (mounted) await _refresh();
-  }
-
-  /// Pushes the in-repo file picker rooted at [startPath]; on a selected file,
-  /// pushes the bare editor, then rescans so an edit is reflected.
-  Future<void> _openFileFrom(RepoStorage storage, String startPath) async {
-    final path = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => LoreFilePickerPage(storage: storage, startPath: startPath),
-      ),
-    );
-    if (path == null || !mounted) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => EditorPage(storage: storage, path: path),
       ),
     );
     if (mounted) await _refresh();
@@ -394,7 +359,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           lore: _lore,
           categories: categoriesOf(_lore.entries),
           onChangeFolder: _chooseRoot,
-          onOpenFile: _openFile,
           onOpenCategory: _openCategory,
           onOpenConflicts: _openConflicts,
           onRefresh: _refresh,
@@ -451,7 +415,6 @@ class _ReadyView extends StatelessWidget {
   final LoreModel lore;
   final List<LoreCategory> categories;
   final VoidCallback onChangeFolder;
-  final VoidCallback onOpenFile;
   final void Function(LoreCategory category) onOpenCategory;
   final VoidCallback onOpenConflicts;
   final VoidCallback onRefresh;
@@ -462,7 +425,6 @@ class _ReadyView extends StatelessWidget {
     required this.lore,
     required this.categories,
     required this.onChangeFolder,
-    required this.onOpenFile,
     required this.onOpenCategory,
     required this.onOpenConflicts,
     required this.onRefresh,
@@ -555,12 +517,6 @@ class _ReadyView extends StatelessWidget {
                     );
                   },
                 ),
-        ),
-        const SizedBox(height: 8),
-        FilledButton.icon(
-          onPressed: onOpenFile,
-          icon: const Icon(Icons.edit_outlined),
-          label: const Text('Open a file'),
         ),
         const SizedBox(height: 8),
         // Manual half of FR3 — the resume path already re-scans via the

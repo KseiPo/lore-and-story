@@ -458,8 +458,6 @@ void main() {
     await _pumpReady(tester, storage);
 
     expect(find.textContaining('No lore entities found'), findsOneWidget);
-    // The other ready-view actions are still available.
-    expect(find.text('Open a file'), findsOneWidget);
     expect(find.text('Refresh'), findsOneWidget);
   });
 }
