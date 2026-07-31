@@ -65,11 +65,17 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
     if (mounted) await _rescan();
   }
 
-  /// Opens a sub-entry: a bilingual pair (2+ language variants) opens the
-  /// tabbed [PairedEditorPage] (Story 2.8, FR12); a single-file item opens the
-  /// plain [EditorPage]. Both re-walk on return (AD-10/FR3).
+  /// A lone `.ru.md` with no `.en.md` — a "needs translation" candidate (FR13):
+  /// it opens the paired editor with an empty EN tab that creates the file.
+  static bool _needsTranslation(LoreItem item) =>
+      item.langs.containsKey('ru') && !item.langs.containsKey('en');
+
+  /// Opens a sub-entry: a bilingual pair (2+ variants, Story 2.8) or a
+  /// translation candidate (RU with no EN, Story 2.9) opens the tabbed
+  /// [PairedEditorPage]; any other single-file item opens the plain
+  /// [EditorPage]. Both re-walk on return (AD-10/FR3).
   Future<void> _openItem(LoreItem item) async {
-    if (item.langs.length >= 2) {
+    if (item.langs.length >= 2 || _needsTranslation(item)) {
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) => PairedEditorPage(
@@ -191,6 +197,17 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
       child: ListTile(
         leading: const Icon(Icons.description_outlined),
         title: Text(item.title),
+        // "Needs translation" badge for a lone .ru.md (FR13).
+        trailing: _needsTranslation(item)
+            ? const Tooltip(
+                message: 'Needs translation',
+                child: Chip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: Icon(Icons.translate, size: 14),
+                  label: Text('Needs translation'),
+                ),
+              )
+            : null,
         onTap: hasVariant ? () => _openItem(item) : null,
       ),
     );

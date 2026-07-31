@@ -31,11 +31,18 @@ class FileEditor extends StatefulWidget {
   /// so the host can rebuild its chrome.
   final VoidCallback? onStateChanged;
 
+  /// When true, a **missing** file opens as an empty ready buffer (a create
+  /// surface) instead of the error state; the first save creates it. Used for
+  /// the empty EN tab of a not-yet-translated pair (Story 2.9). Default false —
+  /// a missing file is a load error (the single-file editor's behavior).
+  final bool createIfMissing;
+
   const FileEditor({
     super.key,
     required this.storage,
     required this.path,
     this.onStateChanged,
+    this.createIfMissing = false,
   });
 
   @override
@@ -136,6 +143,23 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
 
   Future<void> _load() async {
     try {
+      // Create surface (Story 2.9): a file that doesn't exist yet opens EMPTY,
+      // not as an error — the first save creates it. `exists` distinguishes an
+      // expected-absent file from a genuine read failure (which still errors),
+      // so create-mode can't mask a real I/O problem.
+      if (widget.createIfMissing && !await widget.storage.exists(widget.path)) {
+        if (!mounted) return;
+        _original = '';
+        setState(() {
+          _loadState = _LoadState.ready;
+          _lossyLoad = false;
+          // Nothing to preview in an empty new file — open in edit mode so the
+          // author can type the translation straight away.
+          _previewing = false;
+        });
+        _notify();
+        return;
+      }
       final text = await widget.storage.read(widget.path);
       if (!mounted) return;
       _original = text;

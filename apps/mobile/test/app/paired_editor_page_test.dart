@@ -46,7 +46,83 @@ Future<void> pumpPaired(
   await tester.pumpAndSettle();
 }
 
+/// A lone RU sub-entry with NO `.en.md` — the translation candidate (FR13).
+LoreItem translationItem() => const LoreItem(
+      id: 'events/scene',
+      title: 'Сцена',
+      group: 'events',
+      passage: null,
+      langs: {
+        'ru': LoreLang(
+            file: 'events/scene.ru.md',
+            relDir: 'events',
+            title: 'Сцена',
+            text: '# Сцена\n'),
+      },
+    );
+
+FakeRepoStorage translationStorage() => FakeRepoStorage(
+      '/repo',
+      fileContents: {'events/scene.ru.md': '# Сцена\n'},
+    );
+
 void main() {
+  group('create a translation from a missing EN (Story 2.9)', () {
+    testWidgets('opens with RU (default) and an empty EN tab — no load error',
+        (tester) async {
+      await pumpPaired(tester, translationStorage(), translationItem());
+      expect(find.text('RU'), findsOneWidget);
+      expect(find.text('EN'), findsOneWidget);
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      // The EN file doesn't exist yet: it opens as an empty edit surface, not
+      // the "Could not open this file" error.
+      expect(find.textContaining('Could not open'), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('editing the empty EN tab and saving CREATES only .en.md '
+        '(a create, never a merge; RU untouched)', (tester) async {
+      final storage = translationStorage();
+      await pumpPaired(tester, storage, translationItem());
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      // createIfMissing opens the empty EN tab in edit mode directly.
+      await tester.enterText(find.byType(TextField), '# Scene\n');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save_outlined));
+      await tester.pumpAndSettle();
+
+      // Only the derived .en.md is written; the .ru.md is never touched and no
+      // combined/base path is ever written.
+      expect(storage.writeCalls, [('events/scene.en.md', '# Scene\n')]);
+    });
+
+    testWidgets('an unedited empty EN tab creates nothing (save disabled)',
+        (tester) async {
+      final storage = translationStorage();
+      await pumpPaired(tester, storage, translationItem());
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+
+      // Save is disabled with nothing dirty.
+      final saveButton = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byIcon(Icons.save_outlined),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(saveButton.onPressed, isNull);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pumpAndSettle();
+      expect(storage.writeCalls, isEmpty);
+    });
+  });
+
   testWidgets('shows [RU][EN] tabs with RU selected by default (FR12)',
       (tester) async {
     await pumpPaired(tester, pairStorage(), pairItem());

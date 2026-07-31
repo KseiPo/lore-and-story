@@ -10,9 +10,13 @@ class _Variant {
   final String lang; // 'ru' | 'en' | 'orig'
   final String label; // 'RU' | 'EN' | 'Original'
   final String repoPath; // repo-relative path of this variant's file
+
+  /// True for the synthetic EN tab of a not-yet-translated pair (Story 2.9): the
+  /// file doesn't exist yet, so it opens empty and the first save creates it.
+  final bool createIfMissing;
   final GlobalKey<FileEditorState> key;
 
-  _Variant(this.lang, this.label, this.repoPath)
+  _Variant(this.lang, this.label, this.repoPath, {this.createIfMissing = false})
       : key = GlobalKey<FileEditorState>();
 }
 
@@ -62,6 +66,29 @@ class _PairedEditorPageState extends State<PairedEditorPage>
       for (final k in keys)
         _Variant(k, _labels[k] ?? k.toUpperCase(), _repoPath(langs[k]!.file)),
     ];
+    // Story 2.9: a lone `.ru.md` with no `.en.md` gets an empty EN tab that
+    // CREATES `<base>.en.md` on first save (a create, never a merge — AD-6). The
+    // EN path sits beside the RU file, its `.ru.md` suffix swapped for `.en.md`.
+    if (langs.containsKey('ru') && !langs.containsKey('en')) {
+      final ruFile = langs['ru']!.file;
+      final enFile = ruFile.replaceFirst(
+        RegExp(r'\.ru\.md$', caseSensitive: false),
+        '.en.md',
+      );
+      // Guard: only add the EN create tab when the `.ru.md` suffix actually
+      // matched (so the EN path truly differs from the RU path). Without this, a
+      // no-match `replaceFirst` would point the "EN" tab at the RU file and a
+      // save would clobber it. Unreachable via the loader (it keys `ru` only for
+      // `.ru.md`), but a one-line net against future drift.
+      if (enFile != ruFile) {
+        _variants.add(_Variant(
+          'en',
+          _labels['en']!,
+          _repoPath(enFile),
+          createIfMissing: true,
+        ));
+      }
+    }
     // Default tab = the primary variant (orig ?? ru ?? en), matching the
     // loader's own primary selection. For the canonical ru+en pair there is no
     // `orig`, so this is the RU tab (FR12's "RU default").
@@ -162,6 +189,12 @@ class _PairedEditorPageState extends State<PairedEditorPage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(v.label),
+                      // The synthetic EN tab of a not-yet-translated pair — a
+                      // "needs translation / will create" hint (Story 2.9).
+                      if (v.createIfMissing) ...[
+                        const SizedBox(width: 6),
+                        const Icon(Icons.translate, size: 14),
+                      ],
                       // Per-tab hint so a dirty background tab is discoverable.
                       if (v.key.currentState?.isDirty ?? false) ...[
                         const SizedBox(width: 6),
@@ -203,6 +236,7 @@ class _PairedEditorPageState extends State<PairedEditorPage>
                   key: v.key,
                   storage: widget.storage,
                   path: v.repoPath,
+                  createIfMissing: v.createIfMissing,
                   onStateChanged: () {
                     if (mounted) setState(() {});
                   },

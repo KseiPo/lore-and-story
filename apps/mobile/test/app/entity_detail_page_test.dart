@@ -133,6 +133,48 @@ void main() {
     });
   });
 
+  group('create translation from a missing EN (Story 2.9)', () {
+    // `selena/` with a lone-RU sub-entry (scene.ru.md, no .en.md).
+    FakeRepoStorage repo() => FakeRepoStorage(
+          '/repo',
+          dirEntries: {
+            '': const [
+              RepoEntry(name: 'selena', path: 'selena', isDirectory: true)
+            ],
+            'selena': const [
+              RepoEntry(
+                  name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
+              RepoEntry(
+                  name: 'scene.ru.md',
+                  path: 'selena/scene.ru.md',
+                  isDirectory: false),
+            ],
+          },
+          fileContents: {
+            'selena/selena.md': '# Selena\n',
+            'selena/scene.ru.md': '# Сцена\n',
+          },
+        );
+
+    testWidgets('a lone-RU sub-entry shows a "needs translation" badge and '
+        'opens the paired editor (empty EN)', (tester) async {
+      final storage = repo();
+      final selena = await _entry(storage, 'selena/selena.md');
+      await _pump(tester, storage, selena);
+
+      // Badge on the row.
+      expect(find.widgetWithText(Chip, 'Needs translation'), findsOneWidget);
+
+      await tester.tap(find.text('Сцена'));
+      await tester.pumpAndSettle();
+
+      // Opens the tabbed editor with an EN tab (not the plain single-file one).
+      expect(find.byType(PairedEditorPage), findsOneWidget);
+      expect(find.text('RU'), findsOneWidget);
+      expect(find.text('EN'), findsOneWidget);
+    });
+  });
+
   testWidgets('renders the card, root items, sections, and nested sections (FR6)',
       (tester) async {
     final storage = _repo();
