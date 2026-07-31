@@ -57,6 +57,9 @@ class FakeRepoStorage implements RepoStorage {
   /// on it with plain `==`/`orderedEquals`.
   final List<(String path, String contents)> writeCalls = [];
 
+  /// Every path passed to [ensureDir], in call order.
+  final List<String> ensureDirCalls = [];
+
   /// When true, [writeAtomic] throws instead of recording — lets tests cover
   /// the save-failure path.
   final bool failWrites;
@@ -99,6 +102,12 @@ class FakeRepoStorage implements RepoStorage {
       throw RepoStorageException('not found (fake)', path);
     }
     return content;
+  }
+
+  @override
+  Future<void> ensureDir(String path) async {
+    ensureDirCalls.add(path);
+    _dirEntries.putIfAbsent(path, () => []);
   }
 
   @override

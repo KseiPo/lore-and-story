@@ -140,6 +140,16 @@ class AllFilesRepoStorage implements RepoStorage {
   }
 
   @override
+  Future<void> ensureDir(String path) async {
+    final osPath = _toOsPath(_normalizeRepoPath(path));
+    try {
+      await Directory(osPath).create(recursive: true);
+    } on FileSystemException catch (e) {
+      throw RepoStorageException(e.message, path, osErrorCode: e.osError?.errorCode);
+    }
+  }
+
+  @override
   Future<bool> exists(String path) async {
     final osPath = _toOsPath(_normalizeRepoPath(path));
     return await File(osPath).exists() || await Directory(osPath).exists();

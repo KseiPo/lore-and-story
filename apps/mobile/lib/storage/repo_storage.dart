@@ -96,6 +96,10 @@ abstract interface class RepoStorage {
   /// preserved. Throws [RepoStorageException] on failure.
   Future<void> writeAtomic(String path, String contents);
 
+  /// Creates the directory at [path] (and any missing parents). A no-op if it
+  /// already exists. Throws [RepoStorageException] on failure.
+  Future<void> ensureDir(String path);
+
   /// Whether a file or directory exists at [path].
   Future<bool> exists(String path);
 }

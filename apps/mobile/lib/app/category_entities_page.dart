@@ -64,6 +64,59 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
     if (mounted) await _rescan();
   }
 
+  Future<void> _createEntity() async {
+    final title = await _showCreateEntityDialog(context);
+    if (title == null || !mounted) return;
+
+    final slug = _slugify(title);
+    if (slug.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Title produces an invalid filename.')),
+        );
+      }
+      return;
+    }
+
+    final categoryFolder = _repoPath(widget.category.key);
+    final filePath = '$categoryFolder/$slug.ru.md';
+
+    try {
+      if (await widget.storage.exists(filePath) ||
+          await widget.storage.exists('$categoryFolder/$slug.md') ||
+          await widget.storage.exists('$categoryFolder/$slug.en.md')) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('An entity with this name already exists.')),
+        );
+        return;
+      }
+      await widget.storage.writeAtomic(filePath, '# $title\n');
+    } on RepoStorageException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to create the entity.')),
+        );
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to create the entity.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => EditorPage(storage: widget.storage, path: filePath),
+      ),
+    );
+    if (mounted) await _rescan();
+  }
+
   /// Rebuilds this category's entity list from a fresh walk (AD-10 — model
   /// rebuilt, never patched). An unexpected walk failure leaves the current
   /// list intact rather than stranding the screen (AD-8 at the call site).
@@ -101,6 +154,53 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
                 );
               },
             ),
+      floatingActionButton: FloatingActionButton(
+        heroTag: null,
+        onPressed: _createEntity,
+        tooltip: 'Create entity',
+        child: const Icon(Icons.add),
+      ),
     );
   }
+}
+
+String _slugify(String title) {
+  return title
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'\s+'), '-')
+      .replaceAll(RegExp(r'[^a-z0-9\-]'), '')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+}
+
+Future<String?> _showCreateEntityDialog(BuildContext context) {
+  final controller = TextEditingController();
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('New entity'),
+      content: TextField(
+        key: const Key('entity-title-field'),
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          labelText: 'Title',
+          hintText: 'e.g. Raven\'s Nest',
+        ),
+        textCapitalization: TextCapitalization.words,
+        onSubmitted: (_) => Navigator.of(ctx).pop(controller.text),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          key: const Key('create-entity-confirm'),
+          onPressed: () => Navigator.of(ctx).pop(controller.text),
+          child: const Text('Create'),
+        ),
+      ],
+    ),
+  );
 }

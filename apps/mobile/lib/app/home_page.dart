@@ -255,6 +255,79 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) await _refresh();
   }
 
+  Future<void> _createInNewCategory() async {
+    final root = _rootPath;
+    if (root == null) return;
+
+    final result = await _showNewCategoryDialog(context);
+    if (result == null || !mounted) return;
+
+    final catSlug = _slugify(result.categoryName);
+    final entitySlug = _slugify(result.entityTitle);
+    if (catSlug.isEmpty || entitySlug.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Names produce invalid filenames.')),
+        );
+      }
+      return;
+    }
+    if (catSlug == 'media') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('"media" is reserved and cannot be used as a category name.')),
+        );
+      }
+      return;
+    }
+
+    final storage = widget.storageFactory(root);
+    final categoryFolder = _loreDir.isEmpty ? catSlug : '$_loreDir/$catSlug';
+    final filePath = '$categoryFolder/$entitySlug.ru.md';
+
+    try {
+      final categoryExists = await storage.exists(categoryFolder);
+      await storage.ensureDir(categoryFolder);
+      if (categoryExists && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Category already exists — adding entity to it.')),
+        );
+      }
+      if (await storage.exists(filePath) ||
+          await storage.exists('$categoryFolder/$entitySlug.md') ||
+          await storage.exists('$categoryFolder/$entitySlug.en.md')) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('An entity with this name already exists.')),
+        );
+        return;
+      }
+      await storage.writeAtomic(filePath, '# ${result.entityTitle}\n');
+    } on RepoStorageException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to create the entity.')),
+        );
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to create the entity.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => EditorPage(storage: storage, path: filePath),
+      ),
+    );
+    if (mounted) await _refresh();
+  }
+
   Future<void> _chooseRoot() async {
     final picked = await Navigator.of(context).push<String>(
       MaterialPageRoute(
@@ -275,6 +348,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         padding: const EdgeInsets.all(24),
         child: Center(child: _buildStage()),
       ),
+      floatingActionButton: _stage == _Stage.ready
+          ? FloatingActionButton(
+              heroTag: null,
+              onPressed: _createInNewCategory,
+              tooltip: 'Create in new category',
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 
@@ -498,4 +579,68 @@ class _ReadyView extends StatelessWidget {
       ],
     );
   }
+}
+
+String _slugify(String title) {
+  return title
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'\s+'), '-')
+      .replaceAll(RegExp(r'[^a-z0-9\-]'), '')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+}
+
+class _NewCategoryResult {
+  final String categoryName;
+  final String entityTitle;
+  const _NewCategoryResult(this.categoryName, this.entityTitle);
+}
+
+Future<_NewCategoryResult?> _showNewCategoryDialog(BuildContext context) {
+  final catController = TextEditingController();
+  final titleController = TextEditingController();
+  return showDialog<_NewCategoryResult>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('New category & entity'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            key: const Key('category-name-field'),
+            controller: catController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Category name',
+              hintText: 'e.g. locations',
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('new-cat-entity-title-field'),
+            controller: titleController,
+            decoration: const InputDecoration(
+              labelText: 'Entity title',
+              hintText: 'e.g. Raven\'s Nest',
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          key: const Key('create-new-category-confirm'),
+          onPressed: () => Navigator.of(ctx).pop(
+            _NewCategoryResult(catController.text, titleController.text),
+          ),
+          child: const Text('Create'),
+        ),
+      ],
+    ),
+  );
 }

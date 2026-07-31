@@ -112,11 +112,89 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
     }
   }
 
+  Future<void> _createSubEntry() async {
+    final result = await _showCreateSubEntryDialog(context);
+    if (result == null || !mounted) return;
+
+    final groupSlug = _slugify(result.group);
+    final entrySlug = _slugify(result.title);
+    if (groupSlug.isEmpty || entrySlug.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Names produce invalid filenames.')),
+        );
+      }
+      return;
+    }
+    if (groupSlug == 'media') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('"media" is reserved and cannot be used as a group name.')),
+        );
+      }
+      return;
+    }
+
+    final entryId = widget.entry.id;
+    final lastSlash = entryId.lastIndexOf('/');
+    final entityFolder = lastSlash < 0 ? '' : entryId.substring(0, lastSlash);
+    final groupFolder = '$entityFolder/$groupSlug';
+    final filePath = '$groupFolder/$entrySlug.ru.md';
+
+    try {
+      await widget.storage.ensureDir(_repoPath(groupFolder));
+
+      if (await widget.storage.exists(_repoPath(filePath)) ||
+          await widget.storage.exists(_repoPath('$groupFolder/$entrySlug.md')) ||
+          await widget.storage.exists(_repoPath('$groupFolder/$entrySlug.en.md'))) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('A sub-entry with this name already exists.')),
+        );
+        return;
+      }
+
+      await widget.storage.writeAtomic(
+          _repoPath(filePath), '# ${result.title}\n');
+    } on RepoStorageException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to create the sub-entry.')),
+        );
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to create the sub-entry.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            EditorPage(storage: widget.storage, path: _repoPath(filePath)),
+      ),
+    );
+    if (mounted) await _rescan();
+  }
+
   @override
   Widget build(BuildContext context) {
     final entry = _entry;
     return Scaffold(
       appBar: AppBar(title: Text(entry?.title ?? widget.entry.title)),
+      floatingActionButton: entry?.tree != null
+          ? FloatingActionButton(
+              heroTag: null,
+              onPressed: _createSubEntry,
+              tooltip: 'Add sub-entry',
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: entry == null
           ? const Center(
               child: Padding(
@@ -247,4 +325,70 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
       ),
     );
   }
+}
+
+String _slugify(String title) {
+  return title
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'\s+'), '-')
+      .replaceAll(RegExp(r'[^a-z0-9\-]'), '')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+}
+
+class _SubEntryResult {
+  final String group;
+  final String title;
+  const _SubEntryResult(this.group, this.title);
+}
+
+Future<_SubEntryResult?> _showCreateSubEntryDialog(BuildContext context) {
+  final groupController = TextEditingController();
+  final titleController = TextEditingController();
+  return showDialog<_SubEntryResult>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('New sub-entry'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            key: const Key('sub-entry-group-field'),
+            controller: groupController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Group',
+              hintText: 'e.g. events',
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const Key('sub-entry-title-field'),
+            controller: titleController,
+            decoration: const InputDecoration(
+              labelText: 'Title',
+              hintText: "e.g. Raven's Nest",
+            ),
+            textCapitalization: TextCapitalization.words,
+            onSubmitted: (_) => Navigator.of(ctx).pop(
+              _SubEntryResult(groupController.text, titleController.text),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          key: const Key('create-sub-entry-confirm'),
+          onPressed: () => Navigator.of(ctx).pop(
+            _SubEntryResult(groupController.text, titleController.text),
+          ),
+          child: const Text('Create'),
+        ),
+      ],
+    ),
+  );
 }

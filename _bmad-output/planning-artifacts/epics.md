@@ -134,6 +134,7 @@ invalid-markup flagging + preview + RU/EN tabs), see conflict copies surfaced, a
 create new entities and events. The complete v0.1 writing experience, built on the
 proven foundation.
 **FRs covered:** FR3, FR4, FR5, FR6, FR8, FR9, FR9a, FR10, FR12, FR13, FR14, FR16, FR17, FR24, FR25, FR26
+**Story 2.18 extends:** FR12, FR13 (language tabs + translation flow for bare `.md` files)
 **Notes:** full Dart loader port (`walkCategory` / `buildNode` / `readTitleAliases`
 / language pairing) + syncer-aware walk; authoring (FR24–FR25) is the **closing
 story cluster** — a distinct create/`mkdir` write path, ordered after the edit
@@ -481,6 +482,55 @@ So that it can hold events and quests like a full character.
 **Given** a conflict copy exists for that entity, **When** I try to promote, **Then** promotion is blocked until it is resolved. *(R8)*
 
 **Given** the entity's card is open with unsaved edits, **When** I try to promote, **Then** the app saves-or-blocks first — it never moves the file out from under a dirty buffer. *(AD-10)*
+
+### Story 2.18: Assign a language to a bare `.md` file and unlock the translation flow
+
+As the author,
+I want to declare which language a file without a language suffix is written in,
+So that I can then create the other-language version using the existing translation flow.
+
+**Context:** Files with a language suffix (`.ru.md`, `.en.md`) already get RU/EN tabs (Story 2.8) and a "create translation" flow (Story 2.9). But files that predate the bilingual convention — or were created as bare `.md` — sit as `langs['orig']` with no tabs and no translation path. This story extends the language UI to those "original" files. **Exception:** entity-folder cards (files named the same as their parent folder, e.g. `selena/selena.md`) are excluded — they serve as the folder's index and stay as-is.
+
+**Acceptance Criteria:**
+
+**Given** a file opened in the editor that has **no language suffix** and is **not** an entity-folder card (i.e. its stem does not match its parent folder name), **When** the editor renders, **Then** it shows both `[RU]` and `[EN]` tabs — neither pre-selected — indicating the language is undetermined. *(extends FR12)*
+
+**Given** the undetermined-language tabs, **When** I tap either tab (e.g. `[RU]`), **Then** a confirmation dialog appears: "Is this file written in Russian?" (or English, respectively). *(extends FR13)*
+
+**Given** I confirm the language choice, **When** the confirmation succeeds, **Then** the file is renamed from `<slug>.md` to `<slug>.<lang>.md` (e.g. `frank.md` → `frank.ru.md`) via a storage rename, the editor updates its path reference, and the tabs switch to the standard paired-editor state — the confirmed tab is active with the file content, the other tab shows the "create translation" flow from Story 2.9. *(extends FR12, FR13)*
+
+**Given** I cancel the confirmation dialog, **When** I dismiss it, **Then** nothing changes — the file stays as bare `.md` and the tabs remain in the undetermined state.
+
+**Given** any failure during the rename (permission error, disk full, conflict), **When** it happens, **Then** a snackbar shows the error, the file stays as `.md`, and the editor is not stranded. *(AD-8 / NFR7)*
+
+**Given** an entity-folder card (`<slug>/<slug>.md`), **When** it opens in the editor, **Then** no language tabs are shown — it stays the plain single-file editor, same as today.
+
+**Notes:** The rename is the only file move in this story — it's a rename in the same directory, not a cross-directory move like Story 2.17's promotion. Depends on Stories 2.8 (paired editor) and 2.9 (create-translation flow). The `RepoStorage` port may need a `rename` method (or the rename can be implemented as read + writeAtomic + delete, preserving atomicity). Independent of the authoring cluster (2.10–2.11) and promotion (2.17).
+
+### Story 2.19: Improve the create-sub-entry dialog UX
+
+As the author,
+I want the create-sub-entry dialog to offer existing groups as selectable options and allow creating at the entity root,
+so that I can quickly add content without remembering exact folder names.
+
+**Story 2.19 extends:** FR25 (create sub-entry UX refinements)
+
+**AC1 (optional group — root creation):**
+**Given** the create-sub-entry dialog, **When** I leave the group field empty and enter a title, **Then** the sub-entry is created directly in the entity folder root (`<entity-folder>/<slug>.ru.md`) without creating a subfolder. `ensureDir` is not called. The clobber guard checks the entity root. *(FR25)*
+
+**AC2 (group field with existing-group suggestions):**
+**Given** the entity has existing groups (sections in `entry.tree.children`), **When** I open the create-sub-entry dialog, **Then** the group field shows existing group names as selectable suggestions (e.g. chips, dropdown, or autocomplete). Selecting one fills the field. I can still type a new group name instead. *(FR25 UX)*
+
+**AC3 (new group still works):**
+**Given** I type a group name that doesn't match any existing section, **When** I confirm, **Then** the behavior is unchanged from Story 2.11 — `ensureDir` creates the folder, the file is written inside it. *(FR25)*
+
+**AC4 (AD-8 / NFR7 — never crash):**
+**Given** any error (empty title, reserved "media" name, clobber, write failure), **When** the create is attempted, **Then** the existing error handling from Story 2.11 applies unchanged. *(AD-8)*
+
+**AC5 (no regression):**
+**Given** all existing create-entity and create-sub-entry tests, **When** this story is implemented, **Then** all tests stay green. `flutter analyze` clean. *(NFR)*
+
+**Notes:** This is a pure UX refinement of Story 2.11's dialog. The underlying create flow (slugify → ensureDir → clobber guard → writeAtomic → push editor → rescan) stays the same. The two changes are: (1) making group optional (empty = entity root), and (2) surfacing existing groups from `entry.tree.children` as selectable options. The group suggestions can use Flutter's `Autocomplete` widget or a simple chip row above the text field. Depends on Story 2.11.
 
 ## Epic 3: Convention tooling (v0.2)
 
