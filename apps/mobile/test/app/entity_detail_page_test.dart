@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/app/entity_detail_page.dart';
 import 'package:lore_and_story/app/editor_page.dart';
+import 'package:lore_and_story/app/markdown_preview.dart';
 import 'package:lore_and_story/app/paired_editor_page.dart';
 import 'package:lore_and_story/lore/lore.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
 import '../fakes.dart';
 import 'editor_test_helpers.dart';
+import 'markdown_span_test_helpers.dart';
 
 /// An entity folder `selena/` (the picked root is the lore folder):
 ///
@@ -206,9 +208,13 @@ void main() {
 
     expect(find.text('media'), findsNothing);
     expect(find.text('portrait.png'), findsNothing);
-    // The card 'Selena' appears once as the keyed card row (plus the AppBar
-    // title) — never duplicated as a sub-entry beneath itself.
-    expect(find.widgetWithText(ListTile, 'Selena'), findsOneWidget);
+    // The card renders once as the keyed card row (plus the AppBar title) —
+    // never duplicated as a sub-entry beneath itself.
+    expect(find.byKey(const Key('entity-card')), findsOneWidget);
+    expect(find.descendant(
+      of: find.byKey(const Key('entity-card')),
+      matching: find.text('Selena'),
+    ), findsOneWidget);
   });
 
   testWidgets('tapping the card opens it in the editor', (tester) async {
@@ -361,5 +367,116 @@ void main() {
     // The detail re-walked and shows the new title.
     expect(find.text('Biography'), findsOneWidget);
     expect(find.text('Bio'), findsNothing);
+  });
+
+  group('card preview (Story 2.13)', () {
+    testWidgets('the card renders standard markdown via the shared '
+        'MarkdownPreview widget (AC1, AC3)', (tester) async {
+      final storage = FakeRepoStorage(
+        '/storage/emulated/0/repo',
+        dirEntries: {
+          '': const [RepoEntry(name: 'selena', path: 'selena', isDirectory: true)],
+          'selena': const [
+            RepoEntry(name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
+          ],
+        },
+        fileContents: {'selena/selena.md': '# Selena\n\na **loyal** friend.'},
+      );
+      final selena = await _entry(storage, 'selena/selena.md');
+      await _pump(tester, storage, selena);
+
+      expect(find.byType(MarkdownPreview), findsOneWidget);
+      expect(spanWith(tester, 'loyal').style?.fontWeight, FontWeight.bold);
+    });
+
+    testWidgets('a long card with a sub-entry below it scrolls as one unit, '
+        'no nested-scrollable layout exception (AC1)', (tester) async {
+      final longCard = '# Selena\n\n${List.generate(40, (i) => 'Paragraph $i about Selena.').join('\n\n')}';
+      final storage = FakeRepoStorage(
+        '/storage/emulated/0/repo',
+        dirEntries: {
+          '': const [RepoEntry(name: 'selena', path: 'selena', isDirectory: true)],
+          'selena': const [
+            RepoEntry(name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
+            RepoEntry(name: 'bio.md', path: 'selena/bio.md', isDirectory: false),
+          ],
+        },
+        fileContents: {'selena/selena.md': longCard, 'selena/bio.md': '# Bio\n'},
+      );
+      final selena = await _entry(storage, 'selena/selena.md');
+      await _pump(tester, storage, selena);
+
+      expect(tester.takeException(), isNull);
+      // Dragging the outer ListView reaches content below the long card —
+      // proves the page has one effective scroll surface, not a trapped inner
+      // scrollable.
+      await tester.drag(find.byType(ListView), const Offset(0, -2000));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Bio'), findsOneWidget);
+    });
+
+    testWidgets('a card with malformed markup never crashes the detail '
+        'screen (AC4/AD-8)', (tester) async {
+      final storage = FakeRepoStorage(
+        '/storage/emulated/0/repo',
+        dirEntries: {
+          '': const [RepoEntry(name: 'selena', path: 'selena', isDirectory: true)],
+          'selena': const [
+            RepoEntry(name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
+          ],
+        },
+        fileContents: {
+          'selena/selena.md': '# [[unclosed **bold ```\n<<if \$x >> ]]] [](',
+        },
+      );
+      final selena = await _entry(storage, 'selena/selena.md');
+      await _pump(tester, storage, selena);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('entity-card')), findsOneWidget);
+      expect(find.textContaining('unclosed'), findsWidgets);
+    });
+
+    testWidgets('tapping a malformed card still opens the editor (AC2/AC4 '
+        'together — the AD-8 fallback renders SelectableText, which must not '
+        'swallow the tap)', (tester) async {
+      final storage = FakeRepoStorage(
+        '/storage/emulated/0/repo',
+        dirEntries: {
+          '': const [RepoEntry(name: 'selena', path: 'selena', isDirectory: true)],
+          'selena': const [
+            RepoEntry(name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
+          ],
+        },
+        fileContents: {
+          'selena/selena.md': '# [[unclosed **bold ```\n<<if \$x >> ]]] [](',
+        },
+      );
+      final selena = await _entry(storage, 'selena/selena.md');
+      await _pump(tester, storage, selena);
+
+      await tester.tap(find.byKey(const Key('entity-card')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EditorPage), findsOneWidget);
+    });
+
+    testWidgets('a [[wikilink]] in the card renders as text (AC1)', (tester) async {
+      final storage = FakeRepoStorage(
+        '/storage/emulated/0/repo',
+        dirEntries: {
+          '': const [RepoEntry(name: 'selena', path: 'selena', isDirectory: true)],
+          'selena': const [
+            RepoEntry(name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
+          ],
+        },
+        fileContents: {'selena/selena.md': '# Selena\n\nsee [[Frank]] for context.'},
+      );
+      final selena = await _entry(storage, 'selena/selena.md');
+      await _pump(tester, storage, selena);
+
+      expect(spanWith(tester, '[[Frank]]').text, '[[Frank]]');
+    });
   });
 }

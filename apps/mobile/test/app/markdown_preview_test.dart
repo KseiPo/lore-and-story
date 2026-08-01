@@ -2,32 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/app/markdown_preview.dart';
 
+import 'markdown_span_test_helpers.dart';
+
 /// Pumps [MarkdownPreview] for [text] and returns nothing — callers query the
 /// tree via `find`. A real MaterialApp gives it a Theme.
 Future<void> pumpPreview(WidgetTester tester, String text) async {
   await tester.pumpWidget(MaterialApp(home: Scaffold(body: MarkdownPreview(text: text))));
   await tester.pump();
 }
-
-/// Every [TextSpan] in the pumped tree (flattened), for style assertions.
-Iterable<TextSpan> allSpans(WidgetTester tester) sync* {
-  for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
-    final root = rich.text;
-    if (root is TextSpan) yield* _flatten(root);
-  }
-}
-
-Iterable<TextSpan> _flatten(TextSpan s) sync* {
-  yield s;
-  for (final c in s.children ?? const <InlineSpan>[]) {
-    if (c is TextSpan) yield* _flatten(c);
-  }
-}
-
-/// The first span whose text contains [needle].
-TextSpan spanWith(WidgetTester tester, String needle) => allSpans(tester)
-    .firstWhere((s) => (s.text ?? '').contains(needle),
-        orElse: () => const TextSpan());
 
 void main() {
   testWidgets('renders headings, bold, italic as styled runs', (tester) async {

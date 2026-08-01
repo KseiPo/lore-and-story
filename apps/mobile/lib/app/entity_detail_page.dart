@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart';
+import 'markdown_preview.dart';
 import 'paired_editor_page.dart';
 
 /// The entity **card on top**, then its folder-named sections (Events, Quests)
@@ -208,13 +209,16 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
 
   List<Widget> _rows(LoreEntry entry) {
     final rows = <Widget>[
-      // The entity's own card — always first, visually distinct from sub-entries.
-      ListTile(
+      // The entity's own card — always first, rendered read-only so the card
+      // reads like a page rather than a link (Story 2.13). Tapping opens the
+      // editor; editing itself remains the editor's job. AbsorbPointer keeps
+      // the tap on the InkWell: without it, the AD-8 fallback's SelectableText
+      // wins the gesture arena on a malformed card and silently swallows the
+      // tap, making that card unreachable (Story 2.13 review finding).
+      InkWell(
         key: const Key('entity-card'),
-        leading: const Icon(Icons.badge_outlined),
-        title: Text(entry.title),
-        subtitle: const Text('Card'),
         onTap: () => _open(entry.id),
+        child: AbsorbPointer(child: MarkdownPreview(text: entry.text)),
       ),
     ];
     final tree = entry.tree;
