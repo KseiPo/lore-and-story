@@ -421,4 +421,89 @@ void main() {
       expect(storage.writeCalls, [('a.md', '## word')]);
     });
   });
+
+  group('active state and toggle-off (Story 2.14)', () {
+    testWidgets('Bold shows active inside a bold span, and tapping toggles it off',
+        (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': '**bold** word'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      final controller = tester.widget<TextField>(find.byType(TextField)).controller!;
+      controller.selection = const TextSelection.collapsed(offset: 4); // inside "bold"
+      await tester.pump();
+
+      final boldBtn =
+          tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.format_bold));
+      expect(boldBtn.style?.backgroundColor?.resolve({}), isNotNull);
+
+      await tester.tap(find.byIcon(Icons.format_bold));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, 'bold word'), findsOneWidget);
+      final boldBtnAfter =
+          tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.format_bold));
+      expect(boldBtnAfter.style?.backgroundColor?.resolve({}), isNull);
+    });
+
+    testWidgets('H2 shows active on a heading line, and tapping strips the prefix',
+        (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': '## Title'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      final controller = tester.widget<TextField>(find.byType(TextField)).controller!;
+      controller.selection = const TextSelection.collapsed(offset: 5); // inside "Title"
+      await tester.pump();
+
+      final h2Btn = tester.widget<TextButton>(
+        find.ancestor(of: find.text('H2'), matching: find.byType(TextButton)),
+      );
+      expect(h2Btn.style?.backgroundColor?.resolve({}), isNotNull);
+
+      await tester.tap(find.text('H2'));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Bullet list shows active on a bulleted line, and tapping removes the marker',
+        (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': '- item'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      final controller = tester.widget<TextField>(find.byType(TextField)).controller!;
+      controller.selection = const TextSelection.collapsed(offset: 4); // inside "item"
+      await tester.pump();
+
+      final bulletBtn = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.format_list_bulleted),
+      );
+      expect(bulletBtn.style?.backgroundColor?.resolve({}), isNotNull);
+
+      await tester.tap(find.byIcon(Icons.format_list_bulleted));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, 'item'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Bold with the caret outside any bold span is inactive and still inserts '
+        '(regression guard)', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': 'word'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      final boldBtn =
+          tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.format_bold));
+      expect(boldBtn.style?.backgroundColor?.resolve({}), isNull);
+
+      await tester.tap(find.byIcon(Icons.format_bold));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, 'word****'), findsOneWidget);
+    });
+  });
 }
