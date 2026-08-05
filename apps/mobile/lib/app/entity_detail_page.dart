@@ -218,7 +218,13 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
       InkWell(
         key: const Key('entity-card'),
         onTap: () => _open(entry.id),
-        child: AbsorbPointer(child: MarkdownPreview(text: entry.text)),
+        child: AbsorbPointer(
+          child: MarkdownPreview(
+            text: entry.text,
+            storage: widget.storage,
+            filePath: _repoPath(entry.id),
+          ),
+        ),
       ),
     ];
     final tree = entry.tree;

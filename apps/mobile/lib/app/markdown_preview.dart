@@ -1,21 +1,26 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../lore/lore.dart';
+import '../storage/storage.dart';
 import 'convention_styles.dart';
 
 /// A read-only rendered view of markdown [text] (FR10).
 ///
 /// Standalone by design: it takes only the markdown string, so the editor's
 /// preview toggle (Story 2.7) and the detail-card preview (Story 2.13) both use
-/// it, and Story 2.16 can *extend* it (adding `storage`/`filePath` for image
-/// loading) without restructuring. It never edits — this is a distinct render
-/// mode, not a WYSIWYG surface.
+/// it. Story 2.16 *extends* it (optional `storage`/`filePath`) to load local
+/// repo images instead of showing alt-text-only — without restructuring. It
+/// never edits — this is a distinct render mode, not a WYSIWYG surface.
 ///
 /// **Total (AD-8 / NFR7):** parsing/building is wrapped so a malformed document
 /// can never throw — it degrades to a plain-text rendering of the raw buffer.
+/// Per-image load failures are a *separate* failure surface (missing/unreadable/
+/// non-image/oversized/network) handled entirely inside the image widget itself
+/// — see `_RepoImage` — so one bad image can never blank the whole preview.
 ///
 /// The parser runs with `encodeHtml: false` so raw text (including this
 /// project's `[[wikilinks]]`, `Name (emotion):`, and leaked `<<twee>>`/`<html>`)
@@ -25,7 +30,24 @@ import 'convention_styles.dart';
 class MarkdownPreview extends StatelessWidget {
   final String text;
 
-  const MarkdownPreview({super.key, required this.text});
+  /// When non-null (together with [filePath]), a local-relative image `src` is
+  /// resolved against [filePath]'s directory and loaded through this port
+  /// (Story 2.16). When null, images render as alt text only (Story 2.7's
+  /// original behavior) — the safe default for any caller that doesn't have a
+  /// file context.
+  final RepoStorage? storage;
+
+  /// Repo-relative path of the file whose buffer is being previewed — the
+  /// anchor a local image `src` is resolved relative to. Ignored unless
+  /// [storage] is also set.
+  final String? filePath;
+
+  const MarkdownPreview({
+    super.key,
+    required this.text,
+    this.storage,
+    this.filePath,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +58,9 @@ class MarkdownPreview extends StatelessWidget {
         encodeHtml: false,
       );
       final nodes = document.parseLines(const LineSplitter().convert(text));
-      final blocks = _MarkdownRenderer(context).blocks(nodes);
+      final blocks =
+          _MarkdownRenderer(context, storage: storage, filePath: filePath)
+              .blocks(nodes);
       child = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: blocks.isEmpty ? const [SizedBox.shrink()] : blocks,
@@ -56,11 +80,13 @@ class MarkdownPreview extends StatelessWidget {
 /// can read the ambient [Theme].
 class _MarkdownRenderer {
   final BuildContext context;
+  final RepoStorage? storage;
+  final String? filePath;
   late final ThemeData theme = Theme.of(context);
   late final TextTheme textTheme = theme.textTheme;
   late final ColorScheme scheme = theme.colorScheme;
 
-  _MarkdownRenderer(this.context);
+  _MarkdownRenderer(this.context, {this.storage, this.filePath});
 
   static const _blockGap = SizedBox(height: 8);
 
@@ -369,20 +395,177 @@ class _MarkdownRenderer {
     );
   }
 
-  /// Image placeholder for this story: alt text with a small icon. Story 2.16
-  /// replaces this with a real load via `RepoStorage.readBytes`.
+  /// Renders an `img` node: a local-relative `src` loads via [_RepoImage]
+  /// (Story 2.16); anything else (missing src, an `http(s)://` URL, or no
+  /// `storage`/`filePath` context) falls back to the alt-text placeholder,
+  /// unchanged from Story 2.7.
   Widget _image(String? src, String? alt, TextStyle base) {
     final label = (alt != null && alt.isNotEmpty) ? alt : (src ?? 'image');
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.image_outlined, size: (base.fontSize ?? 14) + 2, color: scheme.outline),
-          const SizedBox(width: 4),
-          Text(label, style: base.copyWith(fontStyle: FontStyle.italic, color: scheme.outline)),
-        ],
-      ),
+    final placeholder = _imagePlaceholder(label, base, scheme);
+    final resolved = _resolveImage(src);
+    if (resolved == null) return placeholder;
+    return _RepoImage(
+      storage: resolved.storage,
+      path: resolved.path,
+      placeholder: placeholder,
+    );
+  }
+
+  /// Resolves [src] to a `(storage, repo-relative path)` pair to load, or
+  /// `null` when the caller should fall back to the alt-text placeholder
+  /// without attempting any read:
+  /// - `src` is null/empty.
+  /// - `src` is an `http://`/`https://` URL — **never fetched**, this app is
+  ///   offline-first except for the user-configured AI provider (NFR4/NFR5).
+  /// - [storage]/[filePath] is null — no file context to resolve against
+  ///   (Story 2.7's original behavior for a bare `MarkdownPreview(text: ...)`).
+  ///
+  /// A local `src` is resolved against [filePath]'s directory with genuine
+  /// `.`/`..` segment handling (`..` pops the preceding directory segment) —
+  /// this matters for real usage: `media/` lives at the **entity root** and is
+  /// referenced by both the card and its sub-entries (ARCHITECTURE.md), so a
+  /// sub-entry two folders deep (e.g. `characters/selena/events/x.md`) needs
+  /// `../media/y.png` to reach it. `RepoStorage`'s own path normalization
+  /// (`AllFilesRepoStorage._normalizeRepoPath`) only *drops* `..` segments
+  /// (an anti-escape measure, not a resolver), which would silently break that
+  /// case — so resolution happens here, not by relying on the port. An
+  /// excess `..` (more than [filePath]'s depth) simply stops popping once the
+  /// segment list is empty, rather than escaping upward — still safe, still
+  /// total.
+  ({RepoStorage storage, String path})? _resolveImage(String? src) {
+    if (src == null || src.isEmpty) return null;
+    final lower = src.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return null;
+    }
+    final st = storage;
+    final fp = filePath;
+    if (st == null || fp == null) return null;
+    final normalizedSrc = src.replaceAll('\\', '/');
+    final lastSlash = fp.lastIndexOf('/');
+    final dir = lastSlash == -1 ? '' : fp.substring(0, lastSlash);
+    final segments = dir.isEmpty ? <String>[] : dir.split('/');
+    for (final seg in normalizedSrc.split('/')) {
+      if (seg.isEmpty || seg == '.') {
+        continue;
+      } else if (seg == '..') {
+        if (segments.isNotEmpty) segments.removeLast();
+      } else {
+        segments.add(seg);
+      }
+    }
+    return (storage: st, path: segments.join('/'));
+  }
+}
+
+/// The alt-text-with-icon placeholder shown when an image isn't loaded — by
+/// choice ([_MarkdownRenderer._resolveImage] declined to try) or by failure
+/// ([_RepoImage] tried and it didn't work out). One look, every failure mode.
+Widget _imagePlaceholder(String label, TextStyle base, ColorScheme scheme) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 2),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.image_outlined, size: (base.fontSize ?? 14) + 2, color: scheme.outline),
+        const SizedBox(width: 4),
+        Text(label, style: base.copyWith(fontStyle: FontStyle.italic, color: scheme.outline)),
+      ],
+    ),
+  );
+}
+
+/// A defensive sanity cap on decoded image size — not a product requirement,
+/// just a guard against a huge/corrupt file janking the preview at decode time
+/// (Story 2.16). Note: [RepoStorage.readBytes] has no streaming/size-probe
+/// primitive, so the full file is already read into memory *before* this
+/// check runs — this cap bounds the `Image.memory` decode cost, not the
+/// read's own memory spike. Closing that gap needs a new port capability
+/// (e.g. a byte-length probe); deferred, see deferred-work.md.
+const int _maxImageBytes = 15 * 1024 * 1024;
+
+/// Caps the on-screen size of a loaded image so a full-resolution phone photo
+/// can't blow out the inline text flow it's embedded in (a `WidgetSpan` has no
+/// natural width constraint of its own to fall back on). `BoxFit.contain`
+/// preserves aspect ratio within the cap.
+const double _maxImageDisplaySize = 280;
+
+/// Loads [path] from [storage] **once** (the future is created in [initState],
+/// not on every rebuild) and renders it via [Image.memory], or [placeholder]
+/// on any failure: a missing/unreadable file (`readBytes` throws), oversized
+/// bytes (checked before attempting to decode), or bytes that don't decode as
+/// an image (caught by [Image.memory]'s own `errorBuilder`). AD-8/NFR7: every
+/// one of those failure modes converges on [placeholder] — none of them throw
+/// past this widget, so one bad image can never blank the rest of the preview.
+class _RepoImage extends StatefulWidget {
+  final RepoStorage storage;
+  final String path;
+  final Widget placeholder;
+
+  const _RepoImage({
+    required this.storage,
+    required this.path,
+    required this.placeholder,
+  });
+
+  @override
+  State<_RepoImage> createState() => _RepoImageState();
+}
+
+class _RepoImageState extends State<_RepoImage> {
+  late Future<Uint8List> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _readBytes();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RepoImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A different image node (e.g. the buffer changed under a live preview
+    // toggle) needs a fresh read; re-fetching only on an actual change is what
+    // keeps this from re-reading on every unrelated rebuild.
+    if (oldWidget.storage != widget.storage || oldWidget.path != widget.path) {
+      _future = _readBytes();
+    }
+  }
+
+  /// `Future.sync` guarantees no exception from [RepoStorage.readBytes] can
+  /// ever escape synchronously to the caller (`initState`/`didUpdateWidget`),
+  /// even from a hypothetical non-`async` implementation — the interface only
+  /// promises a `Future<Uint8List>` return type, not that every implementer
+  /// defers all failures into it. Total by construction, not by convention.
+  Future<Uint8List> _readBytes() =>
+      Future.sync(() => widget.storage.readBytes(widget.path));
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          // A small fixed-size box while loading avoids a layout jump once the
+          // image (or the placeholder) arrives.
+          return const SizedBox(width: 24, height: 24);
+        }
+        final bytes = snapshot.data;
+        if (snapshot.hasError || bytes == null || bytes.length > _maxImageBytes) {
+          return widget.placeholder;
+        }
+        return ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: _maxImageDisplaySize,
+            maxHeight: _maxImageDisplaySize,
+          ),
+          child: Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => widget.placeholder,
+          ),
+        );
+      },
     );
   }
 }

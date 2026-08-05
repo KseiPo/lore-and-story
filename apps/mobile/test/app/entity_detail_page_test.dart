@@ -10,6 +10,7 @@ import 'package:lore_and_story/storage/storage.dart';
 import '../fakes.dart';
 import 'editor_test_helpers.dart';
 import 'markdown_span_test_helpers.dart';
+import 'test_image_fixtures.dart';
 
 /// An entity folder `selena/` (the picked root is the lore folder):
 ///
@@ -387,6 +388,28 @@ void main() {
 
       expect(find.byType(MarkdownPreview), findsOneWidget);
       expect(spanWith(tester, 'loyal').style?.fontWeight, FontWeight.bold);
+    });
+
+    testWidgets(
+        'a local image referenced by the card renders in the preview '
+        '(Story 2.16 — proves storage/filePath actually reach MarkdownPreview)',
+        (tester) async {
+      final storage = FakeRepoStorage(
+        '/storage/emulated/0/repo',
+        dirEntries: {
+          '': const [RepoEntry(name: 'selena', path: 'selena', isDirectory: true)],
+          'selena': const [
+            RepoEntry(name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
+          ],
+        },
+        fileContents: {'selena/selena.md': '# Selena\n\n![portrait](media/portrait.png)'},
+        fileBytes: {'selena/media/portrait.png': validPngFixture},
+      );
+      final selena = await _entry(storage, 'selena/selena.md');
+      await _pump(tester, storage, selena);
+
+      expect(find.byType(MarkdownPreview), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
     });
 
     testWidgets('a long card with a sub-entry below it scrolls as one unit, '

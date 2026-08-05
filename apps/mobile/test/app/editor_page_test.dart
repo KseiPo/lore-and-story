@@ -7,6 +7,7 @@ import 'package:lore_and_story/lore/lore.dart';
 
 import '../fakes.dart';
 import 'editor_test_helpers.dart';
+import 'test_image_fixtures.dart';
 
 /// Pumps the editor and settles. The editor now opens in read-only preview
 /// (Story 2.7); since most editor tests exercise editing, this flips into edit
@@ -293,6 +294,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsNothing);
       expect(find.byType(MarkdownPreview), findsOneWidget);
+    });
+
+    testWidgets(
+        'a local image referenced by the open file renders in the preview '
+        '(Story 2.16 — proves storage/filePath actually reach MarkdownPreview)',
+        (tester) async {
+      final storage = FakeRepoStorage(
+        '/repo',
+        fileContents: {
+          'characters/selena/selena.md': '# Selena\n\n![portrait](media/portrait.png)',
+        },
+        fileBytes: {'characters/selena/media/portrait.png': validPngFixture},
+      );
+      await pumpEditor(tester, storage, 'characters/selena/selena.md', edit: false);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MarkdownPreview), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
     });
 
     testWidgets('previewing does not change the buffer (stays dirty)', (

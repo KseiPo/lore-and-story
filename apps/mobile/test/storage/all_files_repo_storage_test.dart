@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 // The adapter is intentionally not exported from the barrel (only main.dart may
@@ -58,6 +59,26 @@ void main() {
       () async {
     expect(
       () => storage.read('ghost.md'),
+      throwsA(isA<RepoStorageException>()),
+    );
+  });
+
+  test('readBytes returns the exact bytes written, including non-UTF-8 binary',
+      () async {
+    // A tiny binary payload with bytes that would corrupt if run through any
+    // text/UTF-8 decode step (0x00, 0xFF) — proves readBytes is truly raw.
+    final bytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x00, 0xFF, 0x0D, 0x0A]);
+    File('${tmp.path}/media/hero.png').parent.createSync(recursive: true);
+    File('${tmp.path}/media/hero.png').writeAsBytesSync(bytes);
+
+    final result = await storage.readBytes('media/hero.png');
+    expect(result, bytes);
+  });
+
+  test('readBytes of a missing file throws RepoStorageException (not dart:io)',
+      () async {
+    expect(
+      () => storage.readBytes('media/ghost.png'),
       throwsA(isA<RepoStorageException>()),
     );
   });

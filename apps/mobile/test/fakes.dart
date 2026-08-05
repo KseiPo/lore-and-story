@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:lore_and_story/storage/storage.dart';
 
 /// In-memory [RepoRootStore] for widget tests (no plugin channel).
@@ -52,6 +54,10 @@ class FakeRepoStorage implements RepoStorage {
   final Map<String, List<RepoEntry>> _dirEntries;
   final Map<String, String> _fileContents = {};
 
+  /// Seeded binary content read by [readBytes], keyed the same way as
+  /// [fileContents] but separate — image bytes are never text.
+  final Map<String, Uint8List> fileBytes;
+
   /// Every `(path, contents)` passed to [writeAtomic], in call order. A Dart
   /// record (not `MapEntry`, which uses identity equality) so tests can assert
   /// on it with plain `==`/`orderedEquals`.
@@ -73,6 +79,7 @@ class FakeRepoStorage implements RepoStorage {
     List<RepoEntry> entries = const [],
     Map<String, List<RepoEntry>> dirEntries = const {},
     Map<String, String> fileContents = const {},
+    this.fileBytes = const {},
     this.failWrites = false,
     this.throwOnListDir = false,
   })  : _entries = entries, // ignore: prefer_initializing_formals
@@ -102,6 +109,15 @@ class FakeRepoStorage implements RepoStorage {
       throw RepoStorageException('not found (fake)', path);
     }
     return content;
+  }
+
+  @override
+  Future<Uint8List> readBytes(String path) async {
+    final bytes = fileBytes[path];
+    if (bytes == null) {
+      throw RepoStorageException('not found (fake)', path);
+    }
+    return bytes;
   }
 
   @override

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'repo_storage.dart';
 
@@ -67,6 +68,16 @@ class AllFilesRepoStorage implements RepoStorage {
     } on FileSystemException catch (e) {
       // A missing file or I/O error still fails loudly — only *content* decoding
       // is made total, not not-found.
+      throw RepoStorageException(e.message, path, osErrorCode: e.osError?.errorCode);
+    }
+  }
+
+  @override
+  Future<Uint8List> readBytes(String path) async {
+    final osPath = _toOsPath(_normalizeRepoPath(path));
+    try {
+      return await File(osPath).readAsBytes();
+    } on FileSystemException catch (e) {
       throw RepoStorageException(e.message, path, osErrorCode: e.osError?.errorCode);
     }
   }

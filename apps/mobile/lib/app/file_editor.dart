@@ -300,7 +300,13 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
             if (_previewing)
               // Read-only rendered view of the CURRENT buffer (FR10). Display
               // only — the buffer is untouched, so Save/dirty still apply.
-              Expanded(child: MarkdownPreview(text: _controller.text))
+              Expanded(
+                child: MarkdownPreview(
+                  text: _controller.text,
+                  storage: widget.storage,
+                  filePath: widget.path,
+                ),
+              )
             else ...[
               Expanded(
                 child: Padding(

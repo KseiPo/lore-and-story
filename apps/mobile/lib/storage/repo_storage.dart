@@ -7,6 +7,8 @@
 /// not a rewrite*.
 library;
 
+import 'dart:typed_data';
+
 /// One immediate child returned by [RepoStorage.listDir].
 class RepoEntry {
   /// The last path segment, e.g. `selena.md` or `characters`.
@@ -87,6 +89,14 @@ abstract interface class RepoStorage {
   /// malformed file is **not** guaranteed byte-exact if written back via
   /// [writeAtomic]; well-formed UTF-8 round-trips exactly.
   Future<String> read(String path);
+
+  /// Reads the file at [path] as raw bytes — for binary content (images) that
+  /// must not go through [read]'s UTF-8 decode. Unlike [read], there is no
+  /// best-effort fallback: bytes are opaque, so a missing file or I/O error
+  /// always throws [RepoStorageException]. Callers that need total behavior in
+  /// the face of a missing/corrupt file (e.g. an image preview) must catch this
+  /// themselves (AD-8 at the call site).
+  Future<Uint8List> readBytes(String path);
 
   /// Writes [contents] to [path] atomically and byte-exactly: a temp file in the
   /// **same directory** followed by a rename, so the external syncer never
