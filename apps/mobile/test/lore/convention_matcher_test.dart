@@ -53,6 +53,14 @@ void main() {
           [const ConventionToken(0, 5, ConventionKind.wikilink)]);
     });
 
+    test('a markdown link [label](url) is NOT misclassified as a placeholder '
+        '(Story 2.15 review fix)', () {
+      expect(kindsOf('[label](url)'), isEmpty);
+      // A real placeholder immediately followed by prose text (not `(`) is
+      // still recognized normally.
+      expect(kindsOf('[reward] later'), {ConventionKind.placeholder});
+    });
+
     test('dialogue speaker with an emotion (Cyrillic is first-class)', () {
       final tokens = matchConventions('Селена (спокойно): реплика');
       expect(tokens.first.kind, ConventionKind.dialogueSpeaker);
@@ -81,6 +89,46 @@ void main() {
       // The wikilinked speaker must not be swallowed by dialogue-speaker detection.
       final kinds = kindsOf('[[Селена]] (спокойно): реплика');
       expect(kinds, contains(ConventionKind.wikilink));
+    });
+  });
+
+  group('matchConventions — sceneLink (Story 2.15: unified scene-navigation links)', () {
+    test('-> and <- and | all produce sceneLink, not wikilink', () {
+      expect(matchConventions('[[label->passage]]'),
+          [const ConventionToken(0, 18, ConventionKind.sceneLink)]);
+      expect(matchConventions('[[passage<-label]]'),
+          [const ConventionToken(0, 18, ConventionKind.sceneLink)]);
+      expect(matchConventions('[[label|passage]]'),
+          [const ConventionToken(0, 17, ConventionKind.sceneLink)]);
+      // The inner text must not leak a placeholder/wikilink token.
+      expect(kindsOf('[[label->passage]]'), {ConventionKind.sceneLink});
+    });
+
+    test('sceneLink is a valid convention, not an error', () {
+      expect(isError(ConventionKind.sceneLink), isFalse);
+      expect(errorKinds, isNot(contains(ConventionKind.sceneLink)));
+    });
+
+    test('a bracket pair with no separator still resolves to wikilink '
+        '(regression guard for the core disambiguation rule)', () {
+      expect(matchConventions('[[Title]]'),
+          [const ConventionToken(0, 9, ConventionKind.wikilink)]);
+      expect(matchConventions('[[Selena]]'),
+          [const ConventionToken(0, 10, ConventionKind.wikilink)]);
+    });
+
+    test('Cyrillic sceneLink content is first-class', () {
+      expect(kindsOf('[[Селена->станция]]'), {ConventionKind.sceneLink});
+    });
+
+    test('sceneLink is CRLF-safe', () {
+      expect(kindsOf('<<if>>\r\n[[a->b]]'),
+          {ConventionKind.leakedTwee, ConventionKind.sceneLink});
+    });
+
+    test('an empty label/target does not crash (AD-8, degenerate but total)', () {
+      expect(() => matchConventions('[[->]]'), returnsNormally);
+      expect(kindsOf('[[->]]'), {ConventionKind.sceneLink});
     });
   });
 
@@ -122,15 +170,6 @@ void main() {
           [const ConventionToken(0, 15, ConventionKind.leakedHtml)]);
     });
 
-    test('scene passage-link syntax is an error, not a wikilink', () {
-      expect(matchConventions('[[label->passage]]'),
-          [const ConventionToken(0, 18, ConventionKind.scenePassageLink)]);
-      expect(matchConventions('[[passage<-label]]'),
-          [const ConventionToken(0, 18, ConventionKind.scenePassageLink)]);
-      // The inner text must not leak a placeholder/wikilink token.
-      expect(kindsOf('[[label->passage]]'), {ConventionKind.scenePassageLink});
-    });
-
     test('a plain wikilink stays valid (no false error)', () {
       expect(matchConventions('[[Title]]'),
           [const ConventionToken(0, 9, ConventionKind.wikilink)]);
@@ -144,7 +183,6 @@ void main() {
     });
 
     test('Cyrillic is first-class inside error markup', () {
-      expect(kindsOf('[[Селена->станция]]'), {ConventionKind.scenePassageLink});
       expect(kindsOf('<<если>>'), {ConventionKind.leakedTwee});
     });
 
@@ -158,10 +196,10 @@ void main() {
     test('errorKinds / isError expose the error set as one source of truth', () {
       expect(isError(ConventionKind.leakedTwee), isTrue);
       expect(isError(ConventionKind.leakedHtml), isTrue);
-      expect(isError(ConventionKind.scenePassageLink), isTrue);
       expect(isError(ConventionKind.malformedMarkup), isTrue);
       expect(isError(ConventionKind.wikilink), isFalse);
       expect(isError(ConventionKind.bold), isFalse);
+      expect(isError(ConventionKind.sceneLink), isFalse);
       expect(errorKinds, everyElement(predicate<ConventionKind>(isError)));
     });
 
@@ -180,8 +218,8 @@ void main() {
     });
 
     test('error markup is CRLF-safe', () {
-      expect(kindsOf('<<if>>\r\n[[a->b]]'),
-          {ConventionKind.leakedTwee, ConventionKind.scenePassageLink});
+      expect(kindsOf('<<if>>\r\n<b>'),
+          {ConventionKind.leakedTwee, ConventionKind.leakedHtml});
     });
 
     test('adversarial input stays linear — never hangs (ReDoS guard)', () {

@@ -32,6 +32,25 @@ void main() {
       expect(styleForConvention(ConventionKind.emDash, scheme, base).color,
           scheme.primary);
     });
+
+    test('sceneLink is not an error kind and its style is distinct from both '
+        'wikilink and the shared error style', () {
+      expect(errorKinds, isNot(contains(ConventionKind.sceneLink)));
+
+      final sceneLink = styleForConvention(ConventionKind.sceneLink, scheme, base);
+      final wikilink = styleForConvention(ConventionKind.wikilink, scheme, base);
+      final error = styleForConvention(ConventionKind.leakedHtml, scheme, base);
+
+      expect(sceneLink.decorationStyle, isNot(TextDecorationStyle.wavy));
+      expect(
+        sceneLink.fontWeight != wikilink.fontWeight || sceneLink.color != wikilink.color,
+        isTrue,
+        reason: 'sceneLink must be visually distinguishable from wikilink',
+      );
+      expect(sceneLink.color != error.color || sceneLink.decorationStyle != error.decorationStyle,
+          isTrue,
+          reason: 'sceneLink must be visually distinguishable from the error style');
+    });
   });
 
   group('buildConventionSpans', () {
@@ -75,6 +94,12 @@ void main() {
           base: base, apply: ConventionKind.values.toSet(), styleFor: styleFor);
       expect(spans.length, 1);
       expect((spans.first as TextSpan).text, '');
+    });
+  });
+
+  group('previewConventionKinds', () {
+    test('includes sceneLink (a valid inline kind the preview should style)', () {
+      expect(previewConventionKinds, contains(ConventionKind.sceneLink));
     });
   });
 }

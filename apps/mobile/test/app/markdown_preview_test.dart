@@ -88,10 +88,12 @@ void main() {
       expect(span.style?.decorationStyle, TextDecorationStyle.wavy);
     });
 
-    testWidgets('a scene passage-link [[a->b]] is flagged as an error', (tester) async {
-      await pumpPreview(tester, 'bad [[label->passage]] link');
-      final span = spanWith(tester, '[[label->passage]]');
-      expect(span.style?.decorationStyle, TextDecorationStyle.wavy);
+    testWidgets('a scene passage-link [[a->b]] is styled distinctly, not as an '
+        'error (Story 2.15: unified link forms)', (tester) async {
+      await pumpPreview(tester, 'go [[Choice->Passage]] here');
+      final span = spanWith(tester, '[[Choice->Passage]]');
+      expect(span.style?.decorationStyle, isNot(TextDecorationStyle.wavy));
+      expect(span.text, '[[Choice->Passage]]'); // split into its own run
     });
 
     testWidgets('a plain wikilink is NOT given the error style', (tester) async {

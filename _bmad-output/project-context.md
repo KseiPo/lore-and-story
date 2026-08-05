@@ -160,9 +160,10 @@ a `server.js` route + a `<script>` tag — never an `import`.
   foreign-language names (imported lore carries RU + EN aliases).
 - **Mentions** (implicit edges): case-insensitive word-boundary match of
   title+aliases against passage text and other cards.
-- **Wikilinks** (explicit edges): `[[Title]]` anywhere in an entity → edge between
-  entities. `[[…]]` is reserved for **lore entity references only** — in scene
-  prose they are NEVER passage jumps.
+- **Wikilinks** (explicit edges): `[[Title]]` (no separator) anywhere in an
+  entity → edge between entities, lore-reference only. A `[[...]]` pair
+  **with** a separator (`->`, `|`, `<-`) is a scene-navigation link instead
+  (2026-08-05), not a lore reference — see the Scene file conventions below.
 - No frontmatter unless a concrete feature requires it. Everything else is free-form.
 
 **Scene file (plain-prose) conventions (§3.3):**
@@ -173,12 +174,20 @@ a `server.js` route + a `<script>` tag — never an `import`.
 - **Bilingual scenes are paired files:** `base.ru.md` + `base.en.md`. A missing
   `.en.md` is a deliberate "needs translation" signal — not a defect. The model
   merges the pair into one item titled `<ru> — <en>` (original language first).
-- Canonical player-choice / link form (2026-07-17): `**Choice text** _(→ Passage
-  Name)_` — underscore emphasis (stable under Prettier). Bold-only `**Choice**`
-  when there's no target.
+- Canonical player-choice / link form (2026-08-05, supersedes the 2026-07-17
+  prose form): `[[Choice text->Passage Name]]` / `[[Choice text|Passage Name]]`
+  — label before the separator, target passage name after. Bold-only
+  `**Choice**` (no brackets) when there's no target.
 - **Return links** (widgets that go back, not to a named target):
-  `**Label** _(↩ back)_` / `**Label** _(↩ wake up)_`. Passages with a
-  `returnMacros` widget are never dead ends.
+  `[[back<-Label]]` / `[[wake up<-Label]]` — the backlink type (by convention,
+  naming a configured `returnMacros` entry — not validated by the matcher,
+  which recognizes the bracket shape only) sits before the reverse arrow, the
+  label after. Passages with a `returnMacros` widget are never dead ends.
+  Arrow direction is semantic: `->`/`|` always mean "forward to a passage,"
+  `<-` always means "return, no target."
+- `[[Title]]` with **no** separator is a lore-entity wikilink, unchanged —
+  disambiguation from a scene link is purely syntactic (separator presence),
+  never a lookup against a passage/entity namespace.
 - Dialogue `Name (emotion): phrase.`; inner monologue `Мысль: …` / `*Thought:* …`;
   variable placeholders in readable brackets `[имя героя]` — never `<<=$var>>`.
 - Multi-passage scenes stay ONE file with a `# <Passage Name>` section per passage,
@@ -210,7 +219,9 @@ a `server.js` route + a `<script>` tag — never an `import`.
 - ❌ Reformatting a user's file while making a surgical edit.
 - ❌ `import`-ing a frontend lib instead of adding a `/vendor` route + `<script>`.
 - ❌ Adding an npm dependency to `lib/`.
-- ❌ Treating `[[wikilinks]]` as passage jumps (they are lore references).
+- ❌ Treating a separator-less `[[Title]]` as a passage jump (it's a lore
+  reference) — or a separator-bearing `[[a->b]]`/`[[a|b]]`/`[[a<-b]]` as a
+  lore reference (it's a scene-navigation link, 2026-08-05).
 - ❌ Treating a lone `.en.md` or a missing `.en.md` as an error.
 - ❌ Silently propagating a scene↔passage edit (must be a reviewable diff).
 

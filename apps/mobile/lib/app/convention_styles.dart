@@ -37,9 +37,13 @@ TextStyle styleForConvention(ConventionKind kind, ColorScheme scheme, TextStyle 
       return base.copyWith(color: scheme.tertiary, fontStyle: FontStyle.italic);
     case ConventionKind.emDash:
       return base.copyWith(color: scheme.primary);
+    case ConventionKind.sceneLink:
+      // Distinct from both wikilink (bold+tertiary) and the error style
+      // (wavy underline) — a solid underline reads as "this is a link"
+      // without looking like flagged suspect markup.
+      return base.copyWith(color: scheme.primary, decoration: TextDecoration.underline);
     case ConventionKind.leakedTwee:
     case ConventionKind.leakedHtml:
-    case ConventionKind.scenePassageLink:
     case ConventionKind.malformedMarkup:
       return base.copyWith(
         color: scheme.error,
@@ -69,7 +73,7 @@ const Set<ConventionKind> previewConventionKinds = {
   ConventionKind.emDash,
   ConventionKind.leakedTwee,
   ConventionKind.leakedHtml,
-  ConventionKind.scenePassageLink,
+  ConventionKind.sceneLink,
 };
 
 /// [previewConventionKinds] plus the line-anchored `dialogueSpeaker` — applied

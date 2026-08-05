@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-20
-last_updated: 2026-07-31
+last_updated: 2026-08-05
 project: Lore & Story
 project_key: NOKEY
 tracking_system: file-system
@@ -73,7 +73,7 @@ development_status:
   2-12-retire-the-raw-file-picker: done
   2-13-preview-the-entity-card-on-the-detail-screen: done
   2-14-reflect-active-formatting-and-toggle-off: done
-  2-15-expand-toolbar-tokens-and-link-format-decision: backlog
+  2-15-expand-toolbar-tokens-and-link-format-decision: done
   2-16-render-local-repo-images-in-the-preview: backlog
   2-17-promote-a-simple-entity-to-an-entity-folder: backlog
   2-18-assign-language-to-bare-md-file: backlog

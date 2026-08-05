@@ -373,6 +373,23 @@ class _EditorToolbarState extends State<EditorToolbar> {
     widget.controller.value = op(widget.controller.value);
   }
 
+  /// Inserts the dialogue-line template on exactly one line, regardless of
+  /// how much text is selected. `prefixLines` repeats its prefix on every
+  /// touched line — the right behavior for a short repeatable marker (H1,
+  /// `- `, …), but `'Name (emotion): '` is a one-off template, not a marker;
+  /// applied to a multi-line selection it would duplicate the literal text
+  /// onto every line. Collapsing to the selection's start first keeps this a
+  /// single-line insert no matter what was selected.
+  void _insertDialogueLine() {
+    _apply((v) {
+      final collapsed = TextEditingValue(
+        text: v.text,
+        selection: TextSelection.collapsed(offset: _sel(v).start),
+      );
+      return prefixLines(collapsed, 'Name (emotion): ');
+    });
+  }
+
   void _toggleHeading(int level, bool active, String text, TextSelection sel) {
     if (active) {
       final lineStart = _lineStartAt(text, sel.start);
@@ -501,6 +518,30 @@ class _EditorToolbarState extends State<EditorToolbar> {
                   onPressed: () => _toggleWrap(ConventionKind.wikilink,
                       wikilinkActive, tokens, sel, '[[', ']]'),
                 ),
+                _IconBtn(
+                  Icons.chat_bubble_outline,
+                  'Dialogue line',
+                  onPressed: _insertDialogueLine,
+                ),
+                _IconBtn(
+                  Icons.call_made,
+                  'Passage link',
+                  onPressed: () => _apply(
+                      (v) => insertAtCursor(v, '[[Choice->Passage Name]]')),
+                ),
+                _IconBtn(
+                  Icons.keyboard_return,
+                  'Return link',
+                  onPressed: () =>
+                      _apply((v) => insertAtCursor(v, '[[back<-Label]]')),
+                ),
+                _IconBtn(
+                  Icons.link,
+                  'External link',
+                  onPressed: () =>
+                      _apply((v) => insertAtCursor(v, '[label](url)')),
+                ),
+                const VerticalDivider(width: 8, indent: 8, endIndent: 8),
                 _TextBtn(
                   '[',
                   'Open bracket',

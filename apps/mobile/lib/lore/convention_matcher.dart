@@ -25,10 +25,13 @@ enum ConventionKind {
   dialogueSpeaker,
   placeholder,
   emDash,
+  // Scene-navigation link (Story 2.15) — a `[[...]]` bracket pair containing a
+  // separator (`->`, `<-`, `|`). Distinguished from `wikilink` (no separator)
+  // purely by shape — see the unified-link decision in that story's spec.
+  sceneLink,
   // Error kinds (Story 2.6, FR9a) — suspect/invalid markup to flag, not hide.
   leakedTwee,
   leakedHtml,
-  scenePassageLink,
   malformedMarkup,
 }
 
@@ -38,7 +41,6 @@ enum ConventionKind {
 const Set<ConventionKind> errorKinds = {
   ConventionKind.leakedTwee,
   ConventionKind.leakedHtml,
-  ConventionKind.scenePassageLink,
   ConventionKind.malformedMarkup,
 };
 
@@ -82,11 +84,22 @@ final RegExp _dialogue =
 
 // Inline patterns (scanned across the line via allMatches).
 final RegExp _wikilink = RegExp(r'\[\[[^\[\]\n]+\]\]');
-final RegExp _placeholder = RegExp(r'\[[^\[\]\n]+\]');
+// A negative lookahead excludes `[label](url)` — standard markdown link
+// syntax (Story 2.15's External link button), never a project-specific
+// placeholder. Markdown owns rendering it; the matcher should stay quiet
+// rather than mislabel it as a variable placeholder.
+final RegExp _placeholder = RegExp(r'\[[^\[\]\n]+\](?!\()');
 final RegExp _bold = RegExp(r'\*\*[^*\n]+\*\*');
 final RegExp _italicUnderscore = RegExp(r'_[^_\n]+_');
 final RegExp _italicStar = RegExp(r'\*[^*\n]+\*');
 final RegExp _emDash = RegExp('—'); // — (U+2014)
+// Scene-navigation link (Story 2.15): a `[[...]]` bracket pair containing a
+// separator. `->`/`|` mean "forward to a named passage" (label before, target
+// after); `<-` means "return, no target" (backlink type before, label after —
+// see ARCHITECTURE.md §3.3). A bracket pair with NO separator is a `wikilink`
+// instead — the two are disambiguated purely by shape, never by looking up
+// whether the content resolves to a real passage/entity.
+final RegExp _sceneLink = RegExp(r'\[\[[^\[\]\n]*(?:->|<-|\|)[^\[\]\n]*\]\]');
 
 // Error patterns (FR9a). All linear (negated classes, no nested quantifiers) so
 // they can never backtrack into a hang — "never crash" includes "never hang".
@@ -106,9 +119,6 @@ final RegExp _tweeDelimiter = RegExp(r'<<|>>');
 // An HTML tag. The required letter after `<`/`</` keeps prose like `5 < 10`,
 // `<3`, and `>:(` from matching (no false positives).
 final RegExp _leakedHtml = RegExp(r'</?[A-Za-z][^>\n]*>');
-// Twine passage-link syntax inside double brackets (`[[label->passage]]`,
-// `[[passage<-label]]`). `[[…]]` is reserved for lore refs, never passage jumps.
-final RegExp _scenePassageLink = RegExp(r'\[\[[^\[\]\n]*(?:->|<-)[^\[\]\n]*\]\]');
 // An unterminated `[[` — a wikilink opener with no `]]` reachable before the
 // next bracket/end of line. A balanced `[[]]` is terminated, so not flagged
 // (this is exactly what the toolbar's `[[` button inserts). Broader malformed
@@ -153,9 +163,8 @@ void _matchLine(String line, int base, List<ConventionToken> out) {
   }
 
   // Error candidates (FR9a) — added alongside the valid ones; precedence in
-  // _resolveOverlaps lets an error win over the valid kind it shadows
-  // (`[[a->b]]` is a passage-link error, not a wikilink; a `<<…>>`/`<tag>`
-  // interior is never partially styled).
+  // _resolveOverlaps lets an error win over the valid kind it shadows (a
+  // `<<…>>`/`<tag>` interior is never partially styled).
   //
   // Each is gated on its closing delimiter being present first. This is a cheap
   // correctness-preserving guard (the pattern can't match without it) that also
@@ -168,11 +177,16 @@ void _matchLine(String line, int base, List<ConventionToken> out) {
   if (line.contains('>')) {
     _collect(_leakedHtml, line, ConventionKind.leakedHtml, cands);
   }
-  if (line.contains(']]')) {
-    _collect(_scenePassageLink, line, ConventionKind.scenePassageLink, cands);
-  }
   _collect(_unterminatedWikilink, line, ConventionKind.malformedMarkup, cands);
 
+  // A separator-bearing bracket pair also matches _wikilink's broader content
+  // class; sceneLink wins that overlap via _priority() (below), not via being
+  // collected first — collection order here is just grouping for readability,
+  // it has no effect on precedence. Same gate style as the error patterns
+  // above (cheap precondition, keeps a delimiter-less line linear).
+  if (line.contains(']]')) {
+    _collect(_sceneLink, line, ConventionKind.sceneLink, cands);
+  }
   _collect(_wikilink, line, ConventionKind.wikilink, cands);
   _collect(_placeholder, line, ConventionKind.placeholder, cands);
   _collect(_bold, line, ConventionKind.bold, cands);
@@ -204,8 +218,11 @@ int _priority(ConventionKind k) {
       return 1; // a `<<…>>` run beats any inline valid kind inside it
     case ConventionKind.leakedHtml:
       return 2; // a `<tag>` beats inline valid kinds inside it
-    case ConventionKind.scenePassageLink:
-      return 3; // `[[a->b]]` is an error, not a wikilink/placeholder
+    // sceneLink is not an error, but must still outrank the generic wikilink
+    // pattern it would otherwise also match — a separator-bearing bracket
+    // pair is a more specific match than a plain wikilink.
+    case ConventionKind.sceneLink:
+      return 3; // `[[a->b]]` is a scene link, not a wikilink/placeholder
     case ConventionKind.malformedMarkup:
       return 4;
     case ConventionKind.dialogueSpeaker:

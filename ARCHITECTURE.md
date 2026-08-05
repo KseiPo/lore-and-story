@@ -229,16 +229,22 @@ twee exists only in the final passages.
 - Inner monologue: `Мысль: …` (RU) / `*Thought:* …` (EN).
 - Variable placeholders: readable square brackets — `[имя героя]`,
   `[награда]`, `[станция назначения]` — never `<<=$var>>`.
-- Player choices / passage links — ONE canonical form (2026-07-17):
-  `**Choice text** _(→ Passage Name)_` — underscore emphasis, stable under
-  VSCode/Prettier md formatting. Bold-only `**Choice**` when no target.
-- **Return links** (dialog/popup pattern, 2026-07-17): some widgets return the
-  reader to wherever they came from instead of naming a target —
-  `<<linkBack>>` (back to previous passage) and `<<wakeupLink>>` (ends a dream,
-  back to `$sleepLocation`). Prose form: `**Label** _(↩ back)_` /
-  `**Label** _(↩ wake up)_` — return arrow, no target. Config `returnMacros`
-  lists such widgets; passages containing one are never dead ends
-  (analysis: 87 → 68 endings, 23 returners on the reference project).
+- Player choices / passage links — unified bracket form (2026-08-05,
+  supersedes the 2026-07-17 prose form): `[[Choice text->Passage Name]]` or
+  `[[Choice text|Passage Name]]` — label before the separator, target passage
+  name after. Bold-only `**Choice**` (no brackets) when there's no target.
+- **Return links** (dialog/popup pattern; bracket form 2026-08-05, supersedes
+  the 2026-07-17 prose form): some widgets return the reader to wherever they
+  came from instead of naming a target — `<<linkBack>>` (back to previous
+  passage) and `<<wakeupLink>>` (ends a dream, back to `$sleepLocation`).
+  Bracket form: `[[back<-Label]]` / `[[wake up<-Label]]` — the backlink type
+  (by convention, naming a configured `returnMacros` entry — not validated by
+  the matcher, which recognizes the bracket shape only) sits before the
+  reverse arrow, the display label after. Config `returnMacros` lists such
+  widgets; passages containing one are never dead ends (analysis: 87 → 68
+  endings, 23 returners on the reference project).
+  Arrow direction is semantic, not stylistic: `->`/`|` always mean "forward to
+  a named passage," `<-` always means "return, no target."
 - **Multi-passage scenes:** when a story is split across several passages for
   UX, keep it as ONE scene file with a `# <Passage Name>` section per passage,
   each carrying its own `scene ⇄ passage` comment; choices between sections
@@ -249,8 +255,11 @@ twee exists only in the final passages.
   a lone `.en.md` is not a defect.
 - Authoring conditionals: em-dash markers — `— если игрок знаком с доктором
   Джулией — … — иначе — … — конец условия —`.
-- `[[Wikilinks]]` are reserved for lore entity references (cards/overviews);
-  they are never passage jumps.
+- `[[Wikilinks]]` (no separator) are lore entity references (cards/overviews).
+  A `[[...]]` pair **with** a separator (`->`, `|`, `<-`) is a scene-navigation
+  link instead (2026-08-05) — see the passage/return link forms above.
+  Disambiguation is purely syntactic (presence/kind of separator), never a
+  lookup against a passage or entity namespace.
 
 - **Bilingual scenes are paired files:** `echoes-of-the-past.ru.md` +
   `echoes-of-the-past.en.md` (decision 2026-07-14). A missing `.en.md` is a

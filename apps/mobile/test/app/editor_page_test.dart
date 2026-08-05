@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/app/editor_page.dart';
 import 'package:lore_and_story/app/editor_toolbar.dart';
 import 'package:lore_and_story/app/markdown_preview.dart';
+import 'package:lore_and_story/lore/lore.dart';
 
 import '../fakes.dart';
 import 'editor_test_helpers.dart';
@@ -504,6 +505,104 @@ void main() {
       await tester.pump();
 
       expect(find.widgetWithText(TextField, 'word****'), findsOneWidget);
+    });
+  });
+
+  group('unified scene-link and expanded tokens (Story 2.15)', () {
+    testWidgets('Dialogue line inserts the full template as a line prefix', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': ''});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, 'Name (emotion): '), findsOneWidget);
+    });
+
+    testWidgets('Dialogue line with a multi-line selection prefixes only one '
+        'line, not every touched line (review fix)', (tester) async {
+      final storage =
+          FakeRepoStorage('/repo', fileContents: {'a.md': 'first\nsecond\nthird'});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      final controller = tester.widget<TextField>(find.byType(TextField)).controller!;
+      // Select across all three lines.
+      controller.selection = const TextSelection(baseOffset: 0, extentOffset: 18);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+      await tester.pump();
+
+      expect(
+        find.widgetWithText(
+            TextField, 'Name (emotion): first\nsecond\nthird'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Passage link inserts the bracket template', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': ''});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.call_made));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, '[[Choice->Passage Name]]'), findsOneWidget);
+    });
+
+    testWidgets('Return link inserts the bracket template', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': ''});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.keyboard_return));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, '[[back<-Label]]'), findsOneWidget);
+    });
+
+    testWidgets('External link inserts the markdown template', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': ''});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.link));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, '[label](url)'), findsOneWidget);
+    });
+
+    testWidgets('a passage-link insert round-trips through matchConventions as '
+        'sceneLink, not left as generic bold+italic', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': ''});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.call_made));
+      await tester.pump();
+
+      final buffer =
+          tester.widget<TextField>(find.byType(TextField)).controller!.text;
+      final kinds = matchConventions(buffer).map((t) => t.kind).toSet();
+      expect(kinds, contains(ConventionKind.sceneLink));
+    });
+
+    testWidgets('a dialogue-line insert round-trips through matchConventions as '
+        'dialogueSpeaker (no matcher change needed for this button)', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': ''});
+      await pumpEditor(tester, storage, 'a.md');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+      await tester.pump();
+
+      final buffer =
+          tester.widget<TextField>(find.byType(TextField)).controller!.text;
+      final kinds = matchConventions(buffer).map((t) => t.kind).toSet();
+      expect(kinds, contains(ConventionKind.dialogueSpeaker));
     });
   });
 }
