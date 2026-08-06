@@ -145,12 +145,27 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
     final result = await _showCreateSubEntryDialog(context, existingGroups);
     if (result == null || !mounted) return;
 
-    final groupSlug = _slugify(result.group);
+    final groupInput = result.group.trim();
+    // A group exactly matching an existing raw folder name (i.e. a
+    // suggestion chip was tapped, or its exact text was typed) writes to
+    // that folder as-is — never re-slugified. Suggestion labels are raw,
+    // on-disk directory names (`LoreNode.name`), which are not guaranteed to
+    // already be a `_slugify`-stable string ("Events" vs "events", or a
+    // non-Latin name like "События" that `_slugify` would strip to ''); a
+    // chip must not be able to write somewhere other than the folder it
+    // names.
+    final matchedGroup =
+        existingGroups.firstWhere((g) => g == groupInput, orElse: () => '');
+    final groupSlug =
+        matchedGroup.isNotEmpty ? matchedGroup : _slugify(result.group);
     final entrySlug = _slugify(result.title);
     // An empty group is no longer an error (Story 2.19, AC1) — it means
-    // "create at the entity root" instead of inside a subfolder. Only an
-    // empty title still produces an unusable filename.
-    if (entrySlug.isEmpty) {
+    // "create at the entity root" instead of inside a subfolder. Typed text
+    // that isn't empty but produces no usable slug (e.g. punctuation-only,
+    // or a name that doesn't match any existing group) is still an error —
+    // AC1 only covers a field genuinely left blank, not mistyped input
+    // silently falling back to root. An empty title is always an error.
+    if (entrySlug.isEmpty || (groupInput.isNotEmpty && groupSlug.isEmpty)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Names produce invalid filenames.')),
@@ -395,6 +410,11 @@ Future<_SubEntryResult?> _showCreateSubEntryDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('New sub-entry'),
+      // The chip row makes content height variable (and the group field is
+      // autofocus'd, so the soft keyboard is up as soon as this opens) —
+      // without this, an entity with several sections can overflow the
+      // fixed-height AlertDialog content and clip the Title field/actions.
+      scrollable: true,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -407,7 +427,10 @@ Future<_SubEntryResult?> _showCreateSubEntryDialog(
                   ActionChip(
                     key: Key('sub-entry-group-chip-$g'),
                     label: Text(g),
-                    onPressed: () => groupController.text = g,
+                    onPressed: () => groupController.value = TextEditingValue(
+                      text: g,
+                      selection: TextSelection.collapsed(offset: g.length),
+                    ),
                   ),
               ],
             ),
@@ -419,7 +442,8 @@ Future<_SubEntryResult?> _showCreateSubEntryDialog(
             autofocus: true,
             decoration: const InputDecoration(
               labelText: 'Group',
-              hintText: 'e.g. events — leave empty for entity root',
+              hintText: 'e.g. events',
+              helperText: 'Leave empty to create at the entity root',
             ),
           ),
           const SizedBox(height: 8),

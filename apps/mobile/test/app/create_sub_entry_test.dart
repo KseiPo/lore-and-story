@@ -57,6 +57,37 @@ LoreEntry _folderEntry() {
   );
 }
 
+/// An entity folder entry whose only section is named `Side Quests` — a raw
+/// on-disk folder name that does NOT already equal its own `_slugify` form
+/// (`side-quests`). Used to prove a suggestion chip writes into the exact
+/// folder it names, never a re-slugified guess at it.
+LoreEntry _mixedCaseGroupEntry() {
+  return const LoreEntry(
+    id: 'characters/selena/selena.md',
+    title: 'Selena',
+    aliases: ['Selena'],
+    category: 'characters',
+    relDir: 'characters/selena',
+    text: '# Selena\n',
+    tree: LoreNode(
+      name: '',
+      title: '',
+      overview: null,
+      items: [],
+      children: [
+        LoreNode(
+          name: 'Side Quests',
+          title: 'Side Quests',
+          overview: null,
+          items: [],
+          children: [],
+        ),
+      ],
+    ),
+    children: [],
+  );
+}
+
 /// A simple entity (no folder / no tree) — the FAB should be hidden.
 LoreEntry _simpleEntry() {
   return const LoreEntry(
@@ -215,52 +246,60 @@ void main() {
       expect(find.byType(EditorPage), findsOneWidget);
     });
 
-    testWidgets(
-        'a clobber at the entity root is still caught, no write (Story '
-        '2.19)', (tester) async {
-      final storage = FakeRepoStorage(
-        '/storage/emulated/0/repo',
-        dirEntries: {
-          '': const [
-            RepoEntry(name: 'characters', path: 'characters', isDirectory: true),
-          ],
-          'characters': const [
-            RepoEntry(
-                name: 'selena', path: 'characters/selena', isDirectory: true),
-          ],
-          'characters/selena': const [
-            RepoEntry(
-                name: 'selena.md',
-                path: 'characters/selena/selena.md',
-                isDirectory: false),
-            RepoEntry(
-                name: 'some-event.ru.md',
-                path: 'characters/selena/some-event.ru.md',
-                isDirectory: false),
-          ],
-        },
-        fileContents: {
-          'characters/selena/selena.md': '# Selena\n',
-          'characters/selena/some-event.ru.md': '# Some Event\n',
-        },
-      );
-      await _pumpDetail(tester, storage, _folderEntry());
+    for (final clobberFile in [
+      'some-event.ru.md',
+      'some-event.md',
+      'some-event.en.md',
+    ]) {
+      testWidgets(
+          'a clobber at the entity root ($clobberFile) is still caught, no '
+          'write (Story 2.19)', (tester) async {
+        final storage = FakeRepoStorage(
+          '/storage/emulated/0/repo',
+          dirEntries: {
+            '': const [
+              RepoEntry(
+                  name: 'characters', path: 'characters', isDirectory: true),
+            ],
+            'characters': const [
+              RepoEntry(
+                  name: 'selena', path: 'characters/selena', isDirectory: true),
+            ],
+            'characters/selena': [
+              const RepoEntry(
+                  name: 'selena.md',
+                  path: 'characters/selena/selena.md',
+                  isDirectory: false),
+              RepoEntry(
+                  name: clobberFile,
+                  path: 'characters/selena/$clobberFile',
+                  isDirectory: false),
+            ],
+          },
+          fileContents: {
+            'characters/selena/selena.md': '# Selena\n',
+            'characters/selena/$clobberFile': '# Some Event\n',
+          },
+        );
+        await _pumpDetail(tester, storage, _folderEntry());
 
-      await _tapFab(tester);
-      await tester.enterText(
-          find.byKey(const Key('sub-entry-title-field')), 'Some Event');
-      await tester.tap(find.byKey(const Key('create-sub-entry-confirm')));
-      await tester.pumpAndSettle();
+        await _tapFab(tester);
+        await tester.enterText(
+            find.byKey(const Key('sub-entry-title-field')), 'Some Event');
+        await tester.tap(find.byKey(const Key('create-sub-entry-confirm')));
+        await tester.pumpAndSettle();
 
-      expect(storage.writeCalls, isEmpty);
-      expect(find.text('A sub-entry with this name already exists.'),
-          findsOneWidget);
-    });
+        expect(storage.writeCalls, isEmpty);
+        expect(storage.ensureDirCalls, isEmpty);
+        expect(find.text('A sub-entry with this name already exists.'),
+            findsOneWidget);
+      });
+    }
 
     testWidgets(
         'existing groups render as tappable chips, and tapping one fills '
-        'the group field and still creates in that group (Story 2.19, AC2)',
-        (tester) async {
+        'the group field (without submitting) and still creates in that '
+        'group (Story 2.19, AC2)', (tester) async {
       final storage = _storage();
       await _pumpDetail(tester, storage, _folderEntry());
 
@@ -269,7 +308,16 @@ void main() {
 
       await tester.tap(find.byKey(const Key('sub-entry-group-chip-events')));
       await tester.pump();
-      expect(find.widgetWithText(TextField, 'events'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('sub-entry-group-field')),
+          matching: find.text('events'),
+        ),
+        findsOneWidget,
+      );
+      // Tapping the chip only fills the field — it must not submit.
+      expect(storage.writeCalls, isEmpty);
+      expect(find.text('New sub-entry'), findsOneWidget);
 
       await tester.enterText(
           find.byKey(const Key('sub-entry-title-field')), 'Departure');
@@ -280,6 +328,49 @@ void main() {
       expect(storage.writeCalls, [
         ('characters/selena/events/departure.ru.md', '# Departure\n'),
       ]);
+    });
+
+    testWidgets(
+        'a chip for a group whose raw name is not already slug-safe writes '
+        'into that exact folder, never a re-slugified guess at it (Story '
+        '2.19 review fix)', (tester) async {
+      final storage = _storage();
+      await _pumpDetail(tester, storage, _mixedCaseGroupEntry());
+
+      await _tapFab(tester);
+      await tester.tap(find.byKey(const Key('sub-entry-group-chip-Side Quests')));
+      await tester.pump();
+      await tester.enterText(
+          find.byKey(const Key('sub-entry-title-field')), 'New Quest');
+      await tester.tap(find.byKey(const Key('create-sub-entry-confirm')));
+      await tester.pumpAndSettle();
+
+      // Writes into "Side Quests" exactly as it exists on disk — NOT
+      // "side-quests", which would silently create a near-duplicate folder.
+      expect(storage.ensureDirCalls, ['characters/selena/Side Quests']);
+      expect(storage.writeCalls, [
+        ('characters/selena/Side Quests/new-quest.ru.md', '# New Quest\n'),
+      ]);
+    });
+
+    testWidgets(
+        'typed group text that slugifies to nothing (but was not left '
+        'blank) still errors, instead of silently falling back to root '
+        '(Story 2.19 review fix)', (tester) async {
+      final storage = _storage();
+      await _pumpDetail(tester, storage, _folderEntry());
+
+      await _tapFab(tester);
+      await tester.enterText(
+          find.byKey(const Key('sub-entry-group-field')), '!!!');
+      await tester.enterText(
+          find.byKey(const Key('sub-entry-title-field')), 'Some Event');
+      await tester.tap(find.byKey(const Key('create-sub-entry-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(storage.writeCalls, isEmpty);
+      expect(storage.ensureDirCalls, isEmpty);
+      expect(find.text('Names produce invalid filenames.'), findsOneWidget);
     });
 
     testWidgets(
