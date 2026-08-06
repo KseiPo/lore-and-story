@@ -125,3 +125,7 @@
 - **`movePath(from, to)` with identical paths has unhandled, platform-dependent rename-onto-self behavior** — not reachable via this story's only call site (`_promoteEntity`'s `from`/`to` always differ structurally, since `to` nests inside a new folder), but the port method itself has no guard against it. Revisit if a second `movePath` caller is ever added. [apps/mobile/lib/storage/all_files_repo_storage.dart]
 - **The promotion collision-guard snackbar always says "A folder with this name already exists"** even when the actual collision is a stray *file* (not a folder) sitting at the target path — narrow, cosmetic mismatch (would require a filename with no extension coinciding with a promotion slug). [apps/mobile/lib/app/category_entities_page.dart]
 - **The promote confirm dialog interpolates the entity title unescaped** — a title containing a double quote renders with odd nested-quote punctuation. Cosmetic only; no injection risk (`Text` is not HTML). [apps/mobile/lib/app/category_entities_page.dart]
+
+## Deferred from: code review of story-2-18-assign-language-to-bare-md-file (2026-08-06)
+
+- **TOCTOU race between `storage.exists(newPath)` and `storage.movePath(...)`** — a concurrent syncer write landing on the target path between the check and the move would be silently overwritten (`File.rename` replaces an existing target). Deferred, pre-existing: the same unguarded exists-then-move pattern is already used in Story 2.17's `_promoteEntity` flow, so this isn't newly introduced risk. [apps/mobile/lib/app/undetermined_language_page.dart:124-131]

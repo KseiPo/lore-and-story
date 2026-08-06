@@ -89,14 +89,42 @@ class _PairedEditorPageState extends State<PairedEditorPage>
         ));
       }
     }
+    // Mirror of the above: a lone `.en.md` with no `.ru.md` (Story 2.18's
+    // undetermined-language flow can produce this, confirming EN on a bare
+    // file) gets an empty RU create tab the same way.
+    if (langs.containsKey('en') && !langs.containsKey('ru')) {
+      final enFile = langs['en']!.file;
+      final ruFile = enFile.replaceFirst(
+        RegExp(r'\.en\.md$', caseSensitive: false),
+        '.ru.md',
+      );
+      if (ruFile != enFile) {
+        // Insert (not append) so the visual tab order stays RU-then-EN — the
+        // convention every other pairing in this app follows — even though EN
+        // is the real/confirmed variant here and RU is the synthetic one.
+        _variants.insert(
+          0,
+          _Variant(
+            'ru',
+            _labels['ru']!,
+            _repoPath(ruFile),
+            createIfMissing: true,
+          ),
+        );
+      }
+    }
     // Default tab = the primary variant (orig ?? ru ?? en), matching the
     // loader's own primary selection. For the canonical ru+en pair there is no
-    // `orig`, so this is the RU tab (FR12's "RU default").
+    // `orig`, so this is the RU tab (FR12's "RU default"). For a lone
+    // confirmed `en` (Story 2.18's undetermined-language flow), the real
+    // content lives on the EN tab, so that's the default instead.
     final primaryKey = langs.containsKey('orig')
         ? 'orig'
         : langs.containsKey('ru')
             ? 'ru'
-            : _variants.first.lang;
+            : langs.containsKey('en')
+                ? 'en'
+                : _variants.first.lang;
     final initial = _variants.indexWhere((v) => v.lang == primaryKey);
     _tabController = TabController(
       length: _variants.length,

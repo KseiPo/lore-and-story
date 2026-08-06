@@ -5,6 +5,7 @@ import '../storage/storage.dart';
 import 'editor_page.dart';
 import 'markdown_preview.dart';
 import 'paired_editor_page.dart';
+import 'undetermined_language_page.dart';
 
 /// The entity **card on top**, then its folder-named sections (Events, Quests)
 /// with their items, nested sections rendered nested — the navigable outline of
@@ -71,11 +72,34 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
   static bool _needsTranslation(LoreItem item) =>
       item.langs.containsKey('ru') && !item.langs.containsKey('en');
 
-  /// Opens a sub-entry: a bilingual pair (2+ variants, Story 2.8) or a
-  /// translation candidate (RU with no EN, Story 2.9) opens the tabbed
+  /// A bare `.md` sub-entry with no declared language yet — the loader tags
+  /// it `langs == {'orig': ...}` and nothing else (Story 2.18/FR12/FR13). Its
+  /// stem can never match its own parent folder's name (the loader diverts
+  /// that case to become a `LoreOverview` instead — see `lore_loader.dart`'s
+  /// `_buildNode`), so an entity-folder/section-overview card can never reach
+  /// this branch — AC6 is satisfied by construction, no extra guard needed.
+  static bool _isUndeterminedLanguage(LoreItem item) =>
+      item.langs.length == 1 && item.langs.containsKey('orig');
+
+  /// Opens a sub-entry: an undetermined-language item (Story 2.18) opens
+  /// [UndeterminedLanguagePage]; a bilingual pair (2+ variants, Story 2.8) or
+  /// a translation candidate (RU with no EN, Story 2.9) opens the tabbed
   /// [PairedEditorPage]; any other single-file item opens the plain
-  /// [EditorPage]. Both re-walk on return (AD-10/FR3).
+  /// [EditorPage]. All three re-walk on return (AD-10/FR3).
   Future<void> _openItem(LoreItem item) async {
+    if (_isUndeterminedLanguage(item)) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => UndeterminedLanguagePage(
+            storage: widget.storage,
+            item: item,
+            loreDir: widget.loreDir,
+          ),
+        ),
+      );
+      if (mounted) await _rescan();
+      return;
+    }
     if (item.langs.length >= 2 || _needsTranslation(item)) {
       await Navigator.of(context).push<void>(
         MaterialPageRoute(

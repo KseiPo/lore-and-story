@@ -17,23 +17,31 @@ import 'test_image_fixtures.dart';
 /// ```
 /// selena/
 ///   selena.md                         (card — # Selena)
-///   bio.md                            (root sub-entry — # Bio)
+///   bio.en.md                         (root sub-entry, English-only — # Bio)
 ///   events/
 ///     events.md                       (section overview — # Events)
-///     first-meeting.md                (# First Meeting)
+///     first-meeting.en.md             (# First Meeting)
 ///   quests/
 ///     relationship-quest-1/
-///       01-hobby.md                   (# Hobby)
+///       01-hobby.en.md                (# Hobby)
 ///   media/                            (excluded by the walk)
 ///     portrait.png
 /// ```
+///
+/// Every sub-entry here is seeded English-only (`.en.md`, not bare `.md`)
+/// deliberately — a bare `.md` sub-entry is now an *undetermined-language*
+/// item (Story 2.18) that opens `UndeterminedLanguagePage`, not the plain
+/// editor this fixture's tests need to reach a `TextField` through. A lone
+/// `.en.md` with no `.ru.md` sibling is the still-unaffected "legitimate
+/// English-only scene" case (ARCHITECTURE.md) and keeps exercising the same
+/// plain-editor route these tests were written to cover.
 FakeRepoStorage _repo() => FakeRepoStorage(
       '/storage/emulated/0/repo',
       dirEntries: {
         '': const [RepoEntry(name: 'selena', path: 'selena', isDirectory: true)],
         'selena': const [
           RepoEntry(name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
-          RepoEntry(name: 'bio.md', path: 'selena/bio.md', isDirectory: false),
+          RepoEntry(name: 'bio.en.md', path: 'selena/bio.en.md', isDirectory: false),
           RepoEntry(name: 'events', path: 'selena/events', isDirectory: true),
           RepoEntry(name: 'quests', path: 'selena/quests', isDirectory: true),
           RepoEntry(name: 'media', path: 'selena/media', isDirectory: true),
@@ -41,8 +49,8 @@ FakeRepoStorage _repo() => FakeRepoStorage(
         'selena/events': const [
           RepoEntry(name: 'events.md', path: 'selena/events/events.md', isDirectory: false),
           RepoEntry(
-              name: 'first-meeting.md',
-              path: 'selena/events/first-meeting.md',
+              name: 'first-meeting.en.md',
+              path: 'selena/events/first-meeting.en.md',
               isDirectory: false),
         ],
         'selena/quests': const [
@@ -53,8 +61,8 @@ FakeRepoStorage _repo() => FakeRepoStorage(
         ],
         'selena/quests/relationship-quest-1': const [
           RepoEntry(
-              name: '01-hobby.md',
-              path: 'selena/quests/relationship-quest-1/01-hobby.md',
+              name: '01-hobby.en.md',
+              path: 'selena/quests/relationship-quest-1/01-hobby.en.md',
               isDirectory: false),
         ],
         'selena/media': const [
@@ -63,10 +71,10 @@ FakeRepoStorage _repo() => FakeRepoStorage(
       },
       fileContents: {
         'selena/selena.md': '# Selena\n',
-        'selena/bio.md': '# Bio\n',
+        'selena/bio.en.md': '# Bio\n',
         'selena/events/events.md': '# Events\n',
-        'selena/events/first-meeting.md': '# First Meeting\n',
-        'selena/quests/relationship-quest-1/01-hobby.md': '# Hobby\n',
+        'selena/events/first-meeting.en.md': '# First Meeting\n',
+        'selena/quests/relationship-quest-1/01-hobby.en.md': '# Hobby\n',
       },
     );
 
@@ -84,21 +92,22 @@ Future<void> _pump(WidgetTester tester, FakeRepoStorage storage, LoreEntry entry
 }
 
 /// A `selena/` folder with one **paired** sub-entry (`scene.ru.md` + `scene.en.md`)
-/// and one single-file sub-entry (`bio.md`).
+/// and one single-file, English-only sub-entry (`bio.en.md` — see `_repo()`'s
+/// doc comment for why this isn't a bare `.md` file post-Story-2.18).
 FakeRepoStorage _pairRepo() => FakeRepoStorage(
       '/repo',
       dirEntries: {
         '': const [RepoEntry(name: 'selena', path: 'selena', isDirectory: true)],
         'selena': const [
           RepoEntry(name: 'selena.md', path: 'selena/selena.md', isDirectory: false),
-          RepoEntry(name: 'bio.md', path: 'selena/bio.md', isDirectory: false),
+          RepoEntry(name: 'bio.en.md', path: 'selena/bio.en.md', isDirectory: false),
           RepoEntry(name: 'scene.ru.md', path: 'selena/scene.ru.md', isDirectory: false),
           RepoEntry(name: 'scene.en.md', path: 'selena/scene.en.md', isDirectory: false),
         ],
       },
       fileContents: {
         'selena/selena.md': '# Selena\n',
-        'selena/bio.md': '# Bio\n',
+        'selena/bio.en.md': '# Bio\n',
         'selena/scene.ru.md': '# Сцена\n',
         'selena/scene.en.md': '# Scene\n',
       },
