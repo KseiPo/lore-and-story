@@ -110,6 +110,20 @@ abstract interface class RepoStorage {
   /// already exists. Throws [RepoStorageException] on failure.
   Future<void> ensureDir(String path);
 
+  /// Atomically moves (renames) the file at [from] to [to] — a single
+  /// filesystem rename, not a copy-then-delete, so content is never re-encoded
+  /// and bytes are preserved exactly by construction (NFR1). This is the
+  /// **only** operation in the port that relocates content (FR26); nothing
+  /// else moves or deletes a file. [to]'s parent directory must already exist
+  /// (callers `ensureDir` first, matching the existing create-entity /
+  /// create-sub-entry pattern). Callers are responsible for checking [exists]
+  /// on [to] before calling — `movePath` does not itself re-check or refuse an
+  /// existing target, mirroring [writeAtomic]'s "just do it" contract; the
+  /// guard belongs at the call site. Throws [RepoStorageException] if [from]
+  /// doesn't exist or the OS rename fails for any other reason; on failure
+  /// [from] is left untouched — a rename either fully succeeds or not at all.
+  Future<void> movePath(String from, String to);
+
   /// Whether a file or directory exists at [path].
   Future<bool> exists(String path);
 }

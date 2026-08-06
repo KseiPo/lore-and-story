@@ -166,6 +166,29 @@ class AllFilesRepoStorage implements RepoStorage {
     return await File(osPath).exists() || await Directory(osPath).exists();
   }
 
+  @override
+  Future<void> movePath(String from, String to) async {
+    final normalizedFrom = _normalizeRepoPath(from);
+    final normalizedTo = _normalizeRepoPath(to);
+    // Same guard as writeAtomic: the repo root is not a file to move.
+    if (normalizedFrom.isEmpty || normalizedTo.isEmpty) {
+      throw RepoStorageException(
+        'cannot move the repo root',
+        normalizedFrom.isEmpty ? from : to,
+      );
+    }
+    final fromOsPath = _toOsPath(normalizedFrom);
+    final toOsPath = _toOsPath(normalizedTo);
+    try {
+      // A rename is atomic and never re-encodes content — bytes are preserved
+      // exactly by construction (FR26/NFR1), unlike writeAtomic's read/encode
+      // path.
+      await File(fromOsPath).rename(toOsPath);
+    } on FileSystemException catch (e) {
+      throw RepoStorageException(e.message, from, osErrorCode: e.osError?.errorCode);
+    }
+  }
+
   // --- path translation --------------------------------------------------
 
   /// Repo-relative (forward-slash) → absolute OS path under [_root].

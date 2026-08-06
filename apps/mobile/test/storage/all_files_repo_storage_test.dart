@@ -83,6 +83,42 @@ void main() {
     );
   });
 
+  test('movePath moves a file — source gone, destination has identical bytes',
+      () async {
+    Directory('${tmp.path}/characters').createSync();
+    const cyrillic = '# Селена\n«Тест» — реплика.\n';
+    File('${tmp.path}/characters/selena.md').writeAsStringSync(cyrillic);
+    Directory('${tmp.path}/characters/selena').createSync();
+
+    await storage.movePath(
+      'characters/selena.md',
+      'characters/selena/selena.md',
+    );
+
+    expect(await storage.exists('characters/selena.md'), isFalse);
+    expect(await storage.read('characters/selena/selena.md'), cyrillic);
+  });
+
+  test('movePath of a missing source throws RepoStorageException (not dart:io)',
+      () async {
+    expect(
+      () => storage.movePath('characters/ghost.md', 'characters/ghost/ghost.md'),
+      throwsA(isA<RepoStorageException>()),
+    );
+  });
+
+  test('movePath requires the destination directory to already exist',
+      () async {
+    File('${tmp.path}/frank.md').writeAsStringSync('# Frank\n');
+    expect(
+      () => storage.movePath('frank.md', 'no-such-dir/frank.md'),
+      throwsA(isA<RepoStorageException>()),
+    );
+    // The source is untouched on failure — a rename either fully succeeds or
+    // not at all.
+    expect(await storage.exists('frank.md'), isTrue);
+  });
+
   test('exists distinguishes files, directories, and absent paths', () async {
     Directory('${tmp.path}/world').createSync();
     File('${tmp.path}/world/intro.md').writeAsStringSync('x');

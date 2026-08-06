@@ -62,6 +62,9 @@ class _SyncThrowingStorage implements RepoStorage {
 
   @override
   Future<bool> exists(String path) async => false;
+
+  @override
+  Future<void> movePath(String from, String to) async {}
 }
 
 void main() {

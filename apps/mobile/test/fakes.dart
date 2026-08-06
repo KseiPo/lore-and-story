@@ -66,9 +66,16 @@ class FakeRepoStorage implements RepoStorage {
   /// Every path passed to [ensureDir], in call order.
   final List<String> ensureDirCalls = [];
 
+  /// Every `(from, to)` passed to [movePath], in call order.
+  final List<(String from, String to)> moveCalls = [];
+
   /// When true, [writeAtomic] throws instead of recording — lets tests cover
   /// the save-failure path.
   final bool failWrites;
+
+  /// When true, [movePath] throws instead of moving — lets tests cover the
+  /// promotion-failure path (mirrors [failWrites]).
+  final bool failMove;
 
   /// When true, [listDir] throws — lets tests cover the scan-failure/error-state
   /// path (an unexpected storage failure during a refresh).
@@ -81,9 +88,16 @@ class FakeRepoStorage implements RepoStorage {
     Map<String, String> fileContents = const {},
     this.fileBytes = const {},
     this.failWrites = false,
+    this.failMove = false,
     this.throwOnListDir = false,
   })  : _entries = entries, // ignore: prefer_initializing_formals
-        _dirEntries = dirEntries { // ignore: prefer_initializing_formals
+        // A shallow copy: a fresh Map so ensureDir/movePath below can add or
+        // replace *keys* without mutating the caller's map, but the *list*
+        // values keep their original identity — some tests hold onto a seeded
+        // list and `.add()` to it directly to simulate an external change
+        // between scans (see widget_test.dart's "resume/refresh re-scans"
+        // tests), which depends on that shared reference surviving.
+        _dirEntries = Map.of(dirEntries) {
     _fileContents.addAll(fileContents);
   }
 
@@ -124,6 +138,25 @@ class FakeRepoStorage implements RepoStorage {
   Future<void> ensureDir(String path) async {
     ensureDirCalls.add(path);
     _dirEntries.putIfAbsent(path, () => []);
+    // Register the new directory as a child of its parent's listing too, so a
+    // subsequent listDir/rescan discovers it — mirrors a real filesystem.
+    // Copy-on-write (never mutate the existing list in place): a seeded list
+    // may be an immutable `const [...]` literal, and some tests hold their own
+    // reference to a seeded list expecting it to stay untouched by the fake.
+    _addSibling(path, isDirectory: true);
+  }
+
+  /// Adds a `RepoEntry` for [path] to its parent's listing in [_dirEntries],
+  /// replacing that key's list rather than mutating it in place (see
+  /// [ensureDir]'s comment). A no-op if an entry for [path] is already there.
+  void _addSibling(String path, {required bool isDirectory}) {
+    final parent = _parentOf(path);
+    final siblings = _dirEntries[parent] ?? const [];
+    if (siblings.any((e) => e.path == path)) return;
+    _dirEntries[parent] = [
+      ...siblings,
+      RepoEntry(name: _basenameOf(path), path: path, isDirectory: isDirectory),
+    ];
   }
 
   @override
@@ -142,4 +175,46 @@ class FakeRepoStorage implements RepoStorage {
   // (e.g. a resolved loreDir that doesn't exist under the chosen root).
   Future<bool> exists(String path) async =>
       path.isEmpty || _dirEntries.containsKey(path) || _fileContents.containsKey(path);
+
+  @override
+  Future<void> movePath(String from, String to) async {
+    if (failMove) {
+      throw RepoStorageException('move failed (fake)', from);
+    }
+    if (!_fileContents.containsKey(from)) {
+      throw RepoStorageException('not found (fake)', from);
+    }
+    // Mirrors AllFilesRepoStorage: the destination's parent directory must
+    // already exist (a real OS rename throws ENOENT otherwise) — checked
+    // before touching anything, so a caller that forgot to `ensureDir` first
+    // fails the same way here as it would in production (Review fix).
+    final toParent = _parentOf(to);
+    if (toParent.isNotEmpty && !_dirEntries.containsKey(toParent)) {
+      throw RepoStorageException('destination directory does not exist (fake)', to);
+    }
+
+    final content = _fileContents.remove(from)!;
+    moveCalls.add((from, to));
+    _fileContents[to] = content;
+
+    // Keep listDir consistent with the move (mirrors a real filesystem), so a
+    // rescan afterward sees the new shape instead of a stale, now-unreadable
+    // entry. Copy-on-write, same reasoning as `_addSibling`.
+    final fromParent = _parentOf(from);
+    final fromSiblings = _dirEntries[fromParent];
+    if (fromSiblings != null) {
+      _dirEntries[fromParent] = fromSiblings.where((e) => e.path != from).toList();
+    }
+    _addSibling(to, isDirectory: false);
+  }
+}
+
+String _parentOf(String path) {
+  final i = path.lastIndexOf('/');
+  return i == -1 ? '' : path.substring(0, i);
+}
+
+String _basenameOf(String path) {
+  final i = path.lastIndexOf('/');
+  return i == -1 ? path : path.substring(i + 1);
 }
