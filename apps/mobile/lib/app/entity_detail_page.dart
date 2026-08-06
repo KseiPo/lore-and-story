@@ -138,12 +138,19 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
   }
 
   Future<void> _createSubEntry() async {
-    final result = await _showCreateSubEntryDialog(context);
+    // Top-level sections only (Story 2.19's group suggestions never nest —
+    // the group field has only ever held a single path segment).
+    final existingGroups =
+        _entry?.tree?.children.map((n) => n.name).toList() ?? const <String>[];
+    final result = await _showCreateSubEntryDialog(context, existingGroups);
     if (result == null || !mounted) return;
 
     final groupSlug = _slugify(result.group);
     final entrySlug = _slugify(result.title);
-    if (groupSlug.isEmpty || entrySlug.isEmpty) {
+    // An empty group is no longer an error (Story 2.19, AC1) — it means
+    // "create at the entity root" instead of inside a subfolder. Only an
+    // empty title still produces an unusable filename.
+    if (entrySlug.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Names produce invalid filenames.')),
@@ -163,15 +170,19 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
     final entryId = widget.entry.id;
     final lastSlash = entryId.lastIndexOf('/');
     final entityFolder = lastSlash < 0 ? '' : entryId.substring(0, lastSlash);
-    final groupFolder = '$entityFolder/$groupSlug';
-    final filePath = '$groupFolder/$entrySlug.ru.md';
+    final targetFolder =
+        groupSlug.isEmpty ? entityFolder : '$entityFolder/$groupSlug';
+    final filePath = '$targetFolder/$entrySlug.ru.md';
 
     try {
-      await widget.storage.ensureDir(_repoPath(groupFolder));
+      // The entity folder already exists; only a real group needs creating.
+      if (groupSlug.isNotEmpty) {
+        await widget.storage.ensureDir(_repoPath(targetFolder));
+      }
 
       if (await widget.storage.exists(_repoPath(filePath)) ||
-          await widget.storage.exists(_repoPath('$groupFolder/$entrySlug.md')) ||
-          await widget.storage.exists(_repoPath('$groupFolder/$entrySlug.en.md'))) {
+          await widget.storage.exists(_repoPath('$targetFolder/$entrySlug.md')) ||
+          await widget.storage.exists(_repoPath('$targetFolder/$entrySlug.en.md'))) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('A sub-entry with this name already exists.')),
@@ -376,7 +387,8 @@ class _SubEntryResult {
   const _SubEntryResult(this.group, this.title);
 }
 
-Future<_SubEntryResult?> _showCreateSubEntryDialog(BuildContext context) {
+Future<_SubEntryResult?> _showCreateSubEntryDialog(
+    BuildContext context, List<String> existingGroups) {
   final groupController = TextEditingController();
   final titleController = TextEditingController();
   return showDialog<_SubEntryResult>(
@@ -386,13 +398,28 @@ Future<_SubEntryResult?> _showCreateSubEntryDialog(BuildContext context) {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (existingGroups.isNotEmpty) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final g in existingGroups)
+                  ActionChip(
+                    key: Key('sub-entry-group-chip-$g'),
+                    label: Text(g),
+                    onPressed: () => groupController.text = g,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
           TextField(
             key: const Key('sub-entry-group-field'),
             controller: groupController,
             autofocus: true,
             decoration: const InputDecoration(
               labelText: 'Group',
-              hintText: 'e.g. events',
+              hintText: 'e.g. events — leave empty for entity root',
             ),
           ),
           const SizedBox(height: 8),

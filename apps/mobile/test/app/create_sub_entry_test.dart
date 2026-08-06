@@ -174,7 +174,29 @@ void main() {
       expect(find.byType(FloatingActionButton), findsNothing);
     });
 
-    testWidgets('empty group → error, no write', (tester) async {
+    testWidgets(
+        'empty group creates the sub-entry at the entity root, no subfolder '
+        '(Story 2.19, AC1)', (tester) async {
+      final storage = _storage();
+      await _pumpDetail(tester, storage, _folderEntry());
+
+      await _tapFab(tester);
+      // Leave the group field untouched entirely.
+      await tester.enterText(
+          find.byKey(const Key('sub-entry-title-field')), 'Some Event');
+      await tester.tap(find.byKey(const Key('create-sub-entry-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(storage.ensureDirCalls, isEmpty);
+      expect(storage.writeCalls, [
+        ('characters/selena/some-event.ru.md', '# Some Event\n'),
+      ]);
+      expect(find.byType(EditorPage), findsOneWidget);
+    });
+
+    testWidgets(
+        'whitespace-only group also creates at the entity root (same as '
+        'empty — both slugify to "")', (tester) async {
       final storage = _storage();
       await _pumpDetail(tester, storage, _folderEntry());
 
@@ -186,9 +208,127 @@ void main() {
       await tester.tap(find.byKey(const Key('create-sub-entry-confirm')));
       await tester.pumpAndSettle();
 
-      expect(storage.writeCalls, isEmpty);
       expect(storage.ensureDirCalls, isEmpty);
-      expect(find.text('Names produce invalid filenames.'), findsOneWidget);
+      expect(storage.writeCalls, [
+        ('characters/selena/some-event.ru.md', '# Some Event\n'),
+      ]);
+      expect(find.byType(EditorPage), findsOneWidget);
+    });
+
+    testWidgets(
+        'a clobber at the entity root is still caught, no write (Story '
+        '2.19)', (tester) async {
+      final storage = FakeRepoStorage(
+        '/storage/emulated/0/repo',
+        dirEntries: {
+          '': const [
+            RepoEntry(name: 'characters', path: 'characters', isDirectory: true),
+          ],
+          'characters': const [
+            RepoEntry(
+                name: 'selena', path: 'characters/selena', isDirectory: true),
+          ],
+          'characters/selena': const [
+            RepoEntry(
+                name: 'selena.md',
+                path: 'characters/selena/selena.md',
+                isDirectory: false),
+            RepoEntry(
+                name: 'some-event.ru.md',
+                path: 'characters/selena/some-event.ru.md',
+                isDirectory: false),
+          ],
+        },
+        fileContents: {
+          'characters/selena/selena.md': '# Selena\n',
+          'characters/selena/some-event.ru.md': '# Some Event\n',
+        },
+      );
+      await _pumpDetail(tester, storage, _folderEntry());
+
+      await _tapFab(tester);
+      await tester.enterText(
+          find.byKey(const Key('sub-entry-title-field')), 'Some Event');
+      await tester.tap(find.byKey(const Key('create-sub-entry-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(storage.writeCalls, isEmpty);
+      expect(find.text('A sub-entry with this name already exists.'),
+          findsOneWidget);
+    });
+
+    testWidgets(
+        'existing groups render as tappable chips, and tapping one fills '
+        'the group field and still creates in that group (Story 2.19, AC2)',
+        (tester) async {
+      final storage = _storage();
+      await _pumpDetail(tester, storage, _folderEntry());
+
+      await _tapFab(tester);
+      expect(find.byKey(const Key('sub-entry-group-chip-events')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('sub-entry-group-chip-events')));
+      await tester.pump();
+      expect(find.widgetWithText(TextField, 'events'), findsOneWidget);
+
+      await tester.enterText(
+          find.byKey(const Key('sub-entry-title-field')), 'Departure');
+      await tester.tap(find.byKey(const Key('create-sub-entry-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(storage.ensureDirCalls, ['characters/selena/events']);
+      expect(storage.writeCalls, [
+        ('characters/selena/events/departure.ru.md', '# Departure\n'),
+      ]);
+    });
+
+    testWidgets(
+        'a chip can still be overridden by typing a different group name '
+        '(Story 2.19, AC3)', (tester) async {
+      final storage = _storage();
+      await _pumpDetail(tester, storage, _folderEntry());
+
+      await _tapFab(tester);
+      await tester.tap(find.byKey(const Key('sub-entry-group-chip-events')));
+      await tester.pump();
+      await tester.enterText(
+          find.byKey(const Key('sub-entry-group-field')), 'quests');
+      await tester.enterText(
+          find.byKey(const Key('sub-entry-title-field')), 'New Quest');
+      await tester.tap(find.byKey(const Key('create-sub-entry-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(storage.ensureDirCalls, ['characters/selena/quests']);
+      expect(storage.writeCalls, [
+        ('characters/selena/quests/new-quest.ru.md', '# New Quest\n'),
+      ]);
+    });
+
+    testWidgets(
+        'an entity with no sections yet shows no group chips (Story 2.19)',
+        (tester) async {
+      const noSectionsEntry = LoreEntry(
+        id: 'characters/selena/selena.md',
+        title: 'Selena',
+        aliases: ['Selena'],
+        category: 'characters',
+        relDir: 'characters/selena',
+        text: '# Selena\n',
+        tree: LoreNode(
+          name: '',
+          title: '',
+          overview: null,
+          items: [],
+          children: [],
+        ),
+        children: [],
+      );
+      final storage = _storage();
+      await _pumpDetail(tester, storage, noSectionsEntry);
+
+      await _tapFab(tester);
+      expect(find.byType(ActionChip), findsNothing);
+      expect(find.text('New sub-entry'), findsOneWidget);
     });
 
     testWidgets('empty title → error, no write', (tester) async {
