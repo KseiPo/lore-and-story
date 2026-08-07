@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../storage/storage.dart';
 import 'file_editor.dart';
+import 'lint_panel.dart';
 
 /// Key for the dirty indicator, so tests bind to identity rather than to a
 /// particular icon's visual styling.
@@ -18,7 +19,18 @@ class EditorPage extends StatefulWidget {
   /// Repo-relative path of the file being edited.
   final String path;
 
-  const EditorPage({super.key, required this.storage, required this.path});
+  /// The resolved `loreDir` (model ids are loreDir-relative; [RepoStorage] is
+  /// repo-relative). Used only by the Story 3.1 Lint action to reload the
+  /// entity list for dangling-wikilink checks — nothing else in this page
+  /// needs it, unlike every other page that already carries this field.
+  final String loreDir;
+
+  const EditorPage({
+    super.key,
+    required this.storage,
+    required this.path,
+    required this.loreDir,
+  });
 
   @override
   State<EditorPage> createState() => _EditorPageState();
@@ -28,6 +40,10 @@ class _EditorPageState extends State<EditorPage> {
   final GlobalKey<FileEditorState> _editorKey = GlobalKey<FileEditorState>();
 
   FileEditorState? get _editor => _editorKey.currentState;
+
+  /// Re-entrancy guard — a double-tap on Lint must not start two concurrent
+  /// `loadLore` walks or stack two panels.
+  bool _linting = false;
 
   /// Back with unsaved edits must not silently discard them. Saves first when
   /// the buffer is safe to write; otherwise (e.g. a lossy load, which can never
@@ -53,6 +69,26 @@ class _EditorPageState extends State<EditorPage> {
     }
     final discard = await confirmDiscardUnsaved(context, lossy: editor.isLossy);
     if (discard && mounted) Navigator.of(context).pop();
+  }
+
+  /// Story 3.1 — lints the live buffer and shows the findings panel. See
+  /// `runLintAndShowPanel`'s own doc comment for the shared implementation.
+  Future<void> _runLint() async {
+    if (_linting) return;
+    setState(() => _linting = true);
+    await runLintAndShowPanel(
+      context,
+      storage: widget.storage,
+      loreDir: widget.loreDir,
+      getEditor: () => _editor,
+      // Clears the spinner once findings are ready, not once the panel is
+      // dismissed — showModalBottomSheet's Future only completes on
+      // dismissal, so guarding on that would show the spinner the whole
+      // time the panel is open.
+      onLoaded: () {
+        if (mounted) setState(() => _linting = false);
+      },
+    );
   }
 
   @override
@@ -93,6 +129,20 @@ class _EditorPageState extends State<EditorPage> {
                       ? Icons.edit_outlined
                       : Icons.visibility_outlined,
                 ),
+              ),
+            // Story 3.1 — convention lint findings (FR18).
+            if (editor?.isReady ?? false)
+              IconButton(
+                key: const Key('lint-action'),
+                tooltip: 'Lint',
+                onPressed: _linting ? null : _runLint,
+                icon: _linting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.fact_check_outlined),
               ),
             IconButton(
               tooltip: 'Save',

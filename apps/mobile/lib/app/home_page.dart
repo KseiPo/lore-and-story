@@ -287,7 +287,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!mounted) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => EditorPage(storage: storage, path: filePath),
+        builder: (_) => EditorPage(
+          storage: storage,
+          path: filePath,
+          loreDir: _loreDir,
+        ),
       ),
     );
     if (mounted) await _refresh();

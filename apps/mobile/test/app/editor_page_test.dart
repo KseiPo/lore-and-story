@@ -4,6 +4,7 @@ import 'package:lore_and_story/app/editor_page.dart';
 import 'package:lore_and_story/app/editor_toolbar.dart';
 import 'package:lore_and_story/app/markdown_preview.dart';
 import 'package:lore_and_story/lore/lore.dart';
+import 'package:lore_and_story/storage/storage.dart';
 
 import '../fakes.dart';
 import 'editor_test_helpers.dart';
@@ -20,7 +21,7 @@ Future<void> pumpEditor(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: EditorPage(storage: storage, path: path),
+      home: EditorPage(storage: storage, path: path, loreDir: ''),
     ),
   );
   await tester.pumpAndSettle();
@@ -245,7 +246,7 @@ void main() {
         body: Builder(
           builder: (ctx) => ElevatedButton(
             onPressed: () => Navigator.of(ctx).push(MaterialPageRoute<void>(
-              builder: (_) => EditorPage(storage: storage, path: 'a.md'),
+              builder: (_) => EditorPage(storage: storage, path: 'a.md', loreDir: ''),
             )),
             child: const Text('open'),
           ),
@@ -622,6 +623,160 @@ void main() {
           tester.widget<TextField>(find.byType(TextField)).controller!.text;
       final kinds = matchConventions(buffer).map((t) => t.kind).toSet();
       expect(kinds, contains(ConventionKind.dialogueSpeaker));
+    });
+  });
+
+  group('Lint action (Story 3.1)', () {
+    testWidgets('shows findings for both a syntax error and a dangling '
+        'wikilink, and tapping one exits preview and jumps the editor',
+        (tester) async {
+      final storage = FakeRepoStorage(
+        '/repo',
+        dirEntries: {
+          '': const [
+            RepoEntry(name: 'characters', path: 'characters', isDirectory: true),
+            RepoEntry(name: 'scene.md', path: 'scene.md', isDirectory: false),
+          ],
+          'characters': const [
+            RepoEntry(
+                name: 'selena.md',
+                path: 'characters/selena.md',
+                isDirectory: false),
+          ],
+        },
+        fileContents: {
+          'characters/selena.md': '# Selena\n',
+          'scene.md': 'intro line\n<<if \$x>>\ntext [[Nobody]] here\n',
+        },
+      );
+      // Start in preview (Story 2.7 default) so a jump demonstrably exits it.
+      await pumpEditor(tester, storage, 'scene.md', edit: false);
+
+      await tester.tap(find.byKey(const Key('lint-action')));
+      // The `_linting` spinner now clears before the panel opens (`onLoaded`
+      // fires pre-open — see runLintAndShowPanel's doc comment), so a plain
+      // pumpAndSettle no longer risks hanging on an indeterminate animation;
+      // it also settles the sheet's entrance transition, which a bare
+      // tree-presence check would not — a row can exist in the tree mid-
+      // slide-up and still be positioned off the visible viewport.
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('lint-finding-0')), findsOneWidget);
+      expect(find.byKey(const Key('lint-finding-1')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('lint-finding-1')),
+          matching: find.textContaining('Nobody'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(TextField), findsNothing,
+          reason: 'still in preview until a finding is tapped');
+
+      await tester.tap(find.byKey(const Key('lint-finding-1')));
+      await tester.pumpAndSettle();
+
+      // Panel dismissed and the editor jumped out of preview.
+      expect(find.byKey(const Key('lint-finding-0')), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('a clean file shows "No issues found"', (tester) async {
+      final storage =
+          FakeRepoStorage('/repo', fileContents: {'a.md': 'Just prose.'});
+      await pumpEditor(tester, storage, 'a.md', edit: false);
+
+      await tester.tap(find.byKey(const Key('lint-action')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('lint-no-issues')), findsOneWidget);
+    });
+
+    testWidgets('wikilinks to a section overview and a sub-entry are not '
+        'reported dangling (AC4 — ARCHITECTURE.md: wikilinks reference '
+        '"cards/overviews", not just top-level entity cards)', (tester) async {
+      final storage = FakeRepoStorage(
+        '/repo',
+        dirEntries: {
+          '': const [
+            RepoEntry(name: 'characters', path: 'characters', isDirectory: true),
+            RepoEntry(name: 'scene.md', path: 'scene.md', isDirectory: false),
+          ],
+          'characters': const [
+            RepoEntry(name: 'selena', path: 'characters/selena', isDirectory: true),
+          ],
+          'characters/selena': const [
+            RepoEntry(
+                name: 'selena.md',
+                path: 'characters/selena/selena.md',
+                isDirectory: false),
+            RepoEntry(
+                name: 'events',
+                path: 'characters/selena/events',
+                isDirectory: true),
+          ],
+          'characters/selena/events': const [
+            RepoEntry(
+                name: 'events.md',
+                path: 'characters/selena/events/events.md',
+                isDirectory: false),
+            RepoEntry(
+                name: 'meeting.ru.md',
+                path: 'characters/selena/events/meeting.ru.md',
+                isDirectory: false),
+          ],
+        },
+        fileContents: {
+          'characters/selena/selena.md': '# Selena\n',
+          'characters/selena/events/events.md': '# Events\n',
+          'characters/selena/events/meeting.ru.md': '# Meeting\n',
+          'scene.md': 'See [[Events]] and [[Meeting]].',
+        },
+      );
+      await pumpEditor(tester, storage, 'scene.md', edit: false);
+
+      await tester.tap(find.byKey(const Key('lint-action')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('lint-no-issues')), findsOneWidget,
+          reason: 'both [[Events]] (a section overview) and [[Meeting]] (a '
+              'sub-entry) are legitimate wikilink targets, not dangling');
+    });
+
+    testWidgets('a loadLore failure degrades to syntax-only findings, never '
+        'blocks the panel (AC4/AC7, AD-8)', (tester) async {
+      final storage = FakeRepoStorage(
+        '/repo',
+        fileContents: {'a.md': '<<if \$x>> and [[Anything]]'},
+        throwOnListDir: true,
+      );
+      await pumpEditor(tester, storage, 'a.md', edit: false);
+
+      await tester.tap(find.byKey(const Key('lint-action')));
+      await tester.pumpAndSettle();
+
+      // The syntax error still shows...
+      expect(find.byKey(const Key('lint-finding-0')), findsOneWidget);
+      // ...but the wikilink is never reported dangling — the entity list
+      // couldn't load, so that check was skipped entirely, not run against
+      // an empty (falsely "nothing exists") set.
+      expect(find.byKey(const Key('lint-finding-1')), findsNothing);
+    });
+
+    testWidgets('a loadLore failure on an otherwise-clean file says so, '
+        'instead of an unqualified "No issues found" (AC7)', (tester) async {
+      final storage = FakeRepoStorage(
+        '/repo',
+        fileContents: {'a.md': 'See [[Anything]].'},
+        throwOnListDir: true,
+      );
+      await pumpEditor(tester, storage, 'a.md', edit: false);
+
+      await tester.tap(find.byKey(const Key('lint-action')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('lint-no-issues')), findsOneWidget);
+      expect(find.textContaining('could not be loaded'), findsOneWidget);
     });
   });
 }

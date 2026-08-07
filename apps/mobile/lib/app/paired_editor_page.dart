@@ -4,6 +4,7 @@ import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart' show kDirtyIndicatorKey, confirmDiscardUnsaved;
 import 'file_editor.dart';
+import 'lint_panel.dart';
 
 /// One language tab of a paired item.
 class _Variant {
@@ -180,6 +181,28 @@ class _PairedEditorPageState extends State<PairedEditorPage>
 
   bool get _anyDirty => _variants.any((v) => v.key.currentState?.isDirty ?? false);
 
+  /// Re-entrancy guard, same as `EditorPage._linting`.
+  bool _linting = false;
+
+  /// Story 3.1 — lints the **active tab's** live buffer (mirrors Save/Preview,
+  /// which also target the active tab). `getEditor: () => _active` — not a
+  /// captured snapshot — so `runLintAndShowPanel` re-reads the active tab
+  /// fresh if it changes while the entity list is loading, instead of
+  /// linting or jumping a tab the author isn't looking at anymore.
+  Future<void> _runLint() async {
+    if (_linting) return;
+    setState(() => _linting = true);
+    await runLintAndShowPanel(
+      context,
+      storage: widget.storage,
+      loreDir: widget.loreDir,
+      getEditor: () => _active,
+      onLoaded: () {
+        if (mounted) setState(() => _linting = false);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final active = _active;
@@ -243,6 +266,20 @@ class _PairedEditorPageState extends State<PairedEditorPage>
                       ? Icons.edit_outlined
                       : Icons.visibility_outlined,
                 ),
+              ),
+            // Story 3.1 — convention lint findings (FR18), active tab only.
+            if (active?.isReady ?? false)
+              IconButton(
+                key: const Key('lint-action'),
+                tooltip: 'Lint',
+                onPressed: _linting ? null : _runLint,
+                icon: _linting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.fact_check_outlined),
               ),
             IconButton(
               tooltip: 'Save',

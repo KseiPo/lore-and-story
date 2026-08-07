@@ -4,6 +4,7 @@ import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart' show kDirtyIndicatorKey, confirmDiscardUnsaved;
 import 'file_editor.dart';
+import 'lint_panel.dart';
 import 'paired_editor_page.dart';
 
 /// Lets the author declare which language a bare `.md` sub-entry (no `.ru.md`/
@@ -220,6 +221,25 @@ class _UndeterminedLanguagePageState extends State<UndeterminedLanguagePage>
     if (discard && mounted) Navigator.of(context).pop();
   }
 
+  /// Re-entrancy guard, same as `EditorPage._linting`.
+  bool _linting = false;
+
+  /// Story 3.1 — lints the one always-visible `FileEditor`'s live buffer. See
+  /// `runLintAndShowPanel`'s own doc comment for the shared implementation.
+  Future<void> _runLint() async {
+    if (_linting) return;
+    setState(() => _linting = true);
+    await runLintAndShowPanel(
+      context,
+      storage: widget.storage,
+      loreDir: widget.loreDir,
+      getEditor: () => _editor,
+      onLoaded: () {
+        if (mounted) setState(() => _linting = false);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_isUndetermined) {
@@ -285,6 +305,20 @@ class _UndeterminedLanguagePageState extends State<UndeterminedLanguagePage>
                       ? Icons.edit_outlined
                       : Icons.visibility_outlined,
                 ),
+              ),
+            // Story 3.1 — convention lint findings (FR18).
+            if (editor?.isReady ?? false)
+              IconButton(
+                key: const Key('lint-action'),
+                tooltip: 'Lint',
+                onPressed: _linting ? null : _runLint,
+                icon: _linting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.fact_check_outlined),
               ),
             IconButton(
               tooltip: 'Save',

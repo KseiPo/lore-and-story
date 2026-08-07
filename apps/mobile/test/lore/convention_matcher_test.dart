@@ -80,6 +80,15 @@ void main() {
     });
 
     test('em-dash conditional marker', () {
+      // Written before Story 3.1 added conditional-marker recognition
+      // (`— если …` / `— конец условия —`, FR18). `'— если —'` alone has no
+      // closer anywhere, and the check requires at least one "конец условия"
+      // in the text before it reports anything at all (a review-fix
+      // narrowing — see the "unpaired conditional markers" group's own
+      // comment) — so this stays two generic emDash tokens, same as before
+      // Story 3.1, not because the feature doesn't exist but because a lone
+      // "если" with zero convention evidence anywhere in the file is
+      // indistinguishable from ordinary prose.
       final tokens = matchConventions('— если —');
       expect(tokens.map((t) => t.kind), everyElement(ConventionKind.emDash));
       expect(tokens.length, 2);
@@ -129,6 +138,17 @@ void main() {
     test('an empty label/target does not crash (AD-8, degenerate but total)', () {
       expect(() => matchConventions('[[->]]'), returnsNormally);
       expect(kindsOf('[[->]]'), {ConventionKind.sceneLink});
+    });
+
+    test('Story 3.1\'s new error kinds never flag a sceneLink — FR9a/FR18\'s '
+        'old "Twine passage-link syntax is an error" wording is stale and '
+        'superseded by this story (2026-08-05), see the story\'s Context '
+        'section', () {
+      expect(kindsOf('[[Continue->Next Scene]]'),
+          isNot(contains(ConventionKind.malformedDialogue)));
+      expect(kindsOf('[[Continue->Next Scene]]'),
+          isNot(contains(ConventionKind.unpairedConditional)));
+      expect(kindsOf('[[Continue->Next Scene]]'), {ConventionKind.sceneLink});
     });
   });
 
@@ -238,6 +258,168 @@ void main() {
       sw.stop();
       expect(sw.elapsedMilliseconds, lessThan(500),
           reason: 'error regexes must be linear, not backtracking');
+    });
+  });
+
+  group('matchConventions — malformed dialogue (Story 3.1, FR18)', () {
+    test('a dialogue-shaped colon with no trailing space is flagged', () {
+      expect(matchConventions('Frank:hello').first,
+          const ConventionToken(0, 6, ConventionKind.malformedDialogue));
+      expect(kindsOf('Иван:привет'), {ConventionKind.malformedDialogue});
+    });
+
+    test('a well-formed dialogue line is never also flagged as malformed', () {
+      expect(kindsOf('Frank: hi'), {ConventionKind.dialogueSpeaker});
+      expect(kindsOf('Frank:'), {ConventionKind.dialogueSpeaker});
+      expect(kindsOf('Селена (спокойно): реплика'),
+          {ConventionKind.dialogueSpeaker});
+    });
+
+    test('a single-symbol "prefix" (e.g. an emoticon) is never flagged — '
+        'regression guard for the >:( false positive found while adding '
+        'this pattern', () {
+      expect(kindsOf('>:( face'), isEmpty);
+      expect(kindsOf('>:(no space'), isEmpty);
+    });
+
+    test('ordinary prose with an early colon and no space after it is '
+        'flagged (accepted, narrow tradeoff — see the pattern\'s own '
+        'comment)', () {
+      // Two words minimum avoids single-symbol false positives (above) but
+      // does not attempt to distinguish real dialogue intent from prose.
+      expect(kindsOf('Note:see below'), {ConventionKind.malformedDialogue});
+    });
+
+    test('URLs, timestamps, and ratios are never flagged (review fix — '
+        'regression guard for false positives found by the code review)',
+        () {
+      expect(kindsOf('http://example.com/page'), isEmpty);
+      expect(kindsOf('https://example.com'), isEmpty);
+      expect(kindsOf('12:30 he arrived'), isEmpty);
+      expect(kindsOf('Ratio 3:1 is fine'), isEmpty);
+      expect(kindsOf('Ratio 10:1 here'), isEmpty);
+      // The exact shape the Story 2.15 "External link" toolbar button
+      // inserts — must not be flagged as broken dialogue.
+      expect(kindsOf('See [link](http://x) here'), isEmpty);
+    });
+  });
+
+  group('matchConventions — unpaired conditional markers (Story 3.1, FR18)', () {
+    test('the exact ARCHITECTURE.md example, fully paired, is never flagged', () {
+      const text = '— если игрок знаком с доктором Джулией — что-то — '
+          'иначе — что-то ещё — конец условия —';
+      expect(kindsOf(text), isNot(contains(ConventionKind.unpairedConditional)));
+    });
+
+    test('a file that never uses this convention (no "конец условия" '
+        'anywhere) is never flagged, even with an unmatched "если" — '
+        '(review fix) the whole check requires evidence the convention is '
+        'in use at all, since an ordinary literary em-dash aside using '
+        '"если" is indistinguishable from a real open marker on its own',
+        () {
+      const withoutCloser = '— если игрок знаком с доктором Джулией — что-то';
+      expect(matchConventions(withoutCloser),
+          everyElement(isA<ConventionToken>().having(
+              (t) => t.kind, 'kind', isNot(ConventionKind.unpairedConditional))));
+
+      // The exact false-positive case the review caught: an ordinary
+      // literary aside, not this app's structural marker at all.
+      const literaryAside =
+          'Она замолчала — если бы он знал, что будет дальше — и вздохнула.';
+      expect(kindsOf(literaryAside),
+          isNot(contains(ConventionKind.unpairedConditional)));
+    });
+
+    test('an unclosed opener IS flagged once the file has at least one '
+        'closer elsewhere — evidence the convention is genuinely in use',
+        () {
+      const text = '— если A — текст — конец условия — '
+          'позже — если B — без конца совсем';
+      final tokens = matchConventions(text)
+          .where((t) => t.kind == ConventionKind.unpairedConditional);
+      expect(tokens, hasLength(1));
+      expect(text.substring(tokens.first.start, tokens.first.end),
+          contains('если B'));
+    });
+
+    test('a stray closer with no opener is flagged at the closer', () {
+      const text = 'какой-то текст — конец условия —';
+      final tokens = matchConventions(text);
+      expect(tokens, hasLength(1));
+      expect(tokens.first.kind, ConventionKind.unpairedConditional);
+      expect(text.substring(tokens.first.start, tokens.first.end),
+          contains('конец условия'));
+    });
+
+    test('two opens and one close leaves exactly one opener unpaired '
+        '(LIFO stack)', () {
+      const text = '— если A — текст — если B — текст — конец условия —';
+      final tokens = matchConventions(text);
+      expect(
+          tokens.where((t) => t.kind == ConventionKind.unpairedConditional),
+          hasLength(1));
+    });
+
+    test('is case-insensitive', () {
+      // A capitalized "Если" pairs correctly with a lowercase closer.
+      const paired = '— Если что-то — текст — конец условия —';
+      expect(kindsOf(paired), isNot(contains(ConventionKind.unpairedConditional)));
+
+      // A second, unmatched capitalized "Если" is still detected as
+      // unpaired, once the file has evidence of the convention (the closer
+      // above already satisfies the file-level gate).
+      const withExtra = '$paired позже — Если этот — не закрыт';
+      expect(kindsOf(withExtra), contains(ConventionKind.unpairedConditional));
+    });
+
+    test('an opener on one line paired with a closer on a later line is '
+        'correctly recognized as balanced — this check is cross-line, '
+        'unlike every other kind in this file', () {
+      const text = '— если что-то —\nтекст на другой строке\n— конец условия —';
+      expect(kindsOf(text), isNot(contains(ConventionKind.unpairedConditional)));
+    });
+
+    test('two overlapping markers sharing one em-dash delimiter never '
+        'produce overlapping tokens (review fix — regression guard for a '
+        'violation of the documented non-overlapping contract)', () {
+      const text = 'текст — конец условия — если A — далее';
+      final tokens = matchConventions(text);
+      for (var i = 1; i < tokens.length; i++) {
+        expect(tokens[i - 1].end <= tokens[i].start, isTrue,
+            reason: 'overlap between ${tokens[i - 1]} and ${tokens[i]}');
+      }
+    });
+
+    test('a wikilink inside a condition clause is preserved — never '
+        'swallowed into the marker span (review fix — this fed a silent '
+        'hole in the AC4 dangling-wikilink check)', () {
+      const text = '— если [[Selena]] знает — что-то — конец условия —';
+      expect(kindsOf(text), contains(ConventionKind.wikilink));
+    });
+
+    test('bold inside an UNPAIRED marker\'s span is still swallowed — '
+        'consistent with every other error kind in this file ("the '
+        'interior is never partially styled"); a PAIRED marker never '
+        'produces a token at all, so it never swallows anything', () {
+      // The first "если" pairs cleanly with the closer (no token emitted,
+      // nothing swallowed there). The second, bold-containing "если" has no
+      // closer left to pair with, so it's the one that ends up unpaired —
+      // and swallows the bold inside its own span.
+      const text = '— если этот — текст — конец условия — '
+          'потом — если **важно** — без конца';
+      final tokens = matchConventions(text);
+      for (var i = 1; i < tokens.length; i++) {
+        expect(tokens[i - 1].end <= tokens[i].start, isTrue,
+            reason: 'overlap between ${tokens[i - 1]} and ${tokens[i]}');
+      }
+      expect(kindsOf(text), isNot(contains(ConventionKind.bold)));
+      expect(kindsOf(text), contains(ConventionKind.unpairedConditional));
+    });
+
+    test('an ordinary em-dash aside with no "если" is never flagged '
+        '(baseline — emDash alone is not a marker)', () {
+      expect(kindsOf('Она замолчала — надолго.'),
+          isNot(contains(ConventionKind.unpairedConditional)));
     });
   });
 

@@ -59,7 +59,10 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) =>
-            EditorPage(storage: widget.storage, path: _repoPath(loreRelId)),
+            EditorPage(
+                storage: widget.storage,
+                path: _repoPath(loreRelId),
+                loreDir: widget.loreDir),
       ),
     );
     // A title edit (or a new/removed file) changes the tree — re-walk so the
@@ -226,8 +229,11 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
     if (!mounted) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) =>
-            EditorPage(storage: widget.storage, path: _repoPath(filePath)),
+        builder: (_) => EditorPage(
+          storage: widget.storage,
+          path: _repoPath(filePath),
+          loreDir: widget.loreDir,
+        ),
       ),
     );
     if (mounted) await _rescan();

@@ -241,4 +241,35 @@ void main() {
       ('events/scene.en.md', '# EN bg\n'),
     ]));
   });
+
+  group('Lint action (Story 3.1)', () {
+    testWidgets('lints the active tab only — a leaked-twee error on the RU '
+        'tab shows; switching to EN (clean) and re-linting shows none',
+        (tester) async {
+      final storage = FakeRepoStorage(
+        '/repo',
+        fileContents: {
+          'events/scene.ru.md': '# Сцена\n<<if \$x>>\n',
+          'events/scene.en.md': '# Scene\n',
+        },
+      );
+      await pumpPaired(tester, storage, pairItem());
+
+      // RU is the default active tab (FR12) and has a leaked-twee error.
+      await tester.tap(find.byKey(const Key('lint-action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('lint-finding-0')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('lint-finding-0')));
+      await tester.pumpAndSettle();
+
+      // Switch to EN (clean) and lint again — targets the now-active tab.
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lint-action')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('lint-no-issues')), findsOneWidget);
+    });
+  });
 }

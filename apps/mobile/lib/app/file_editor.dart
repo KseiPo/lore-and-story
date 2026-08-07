@@ -84,6 +84,12 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
   /// Prevents two `writeAtomic` calls overlapping for the same buffer.
   bool _saving = false;
 
+  /// Owns focus for the raw-editor `TextField` — `jumpToLine` (Story 3.1)
+  /// requests focus here after moving the caret, since Flutter only scrolls
+  /// a selection into view for a field that actually has focus (a bare
+  /// `selection` change on an unfocused field is invisible).
+  final FocusNode _focusNode = FocusNode();
+
   /// Set when a save is requested while one is already in flight. The in-flight
   /// save re-runs once on completion, so a deferred save is never dropped (a
   /// plain "return if busy" guard would silently lose the newer text).
@@ -109,11 +115,45 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
   /// Whether the read-only preview is showing (vs. the raw editor).
   bool get previewing => _previewing;
 
+  /// The current buffer text — the live, possibly-unsaved content, not
+  /// last-saved disk content. Used by the Story 3.1 linter, which must lint
+  /// what the author is actually looking at.
+  String get text => _controller.text;
+
   /// Toggle between the read-only preview and the raw editor (ready state only).
   void togglePreview() {
     if (_loadState != _LoadState.ready) return;
     setState(() => _previewing = !_previewing);
     _notify();
+  }
+
+  /// Switches out of preview (if showing) and moves the caret to the start of
+  /// [line] (1-indexed) — used by the Story 3.1 lint panel to jump to a
+  /// finding. The raw text must be visible to actually edit at that line, so
+  /// this always lands in edit mode. A no-op before the buffer is ready.
+  ///
+  /// (Review fix) Setting `_controller.selection` alone moves the caret in
+  /// the buffer's *state* but is invisible on screen for an off-screen line:
+  /// Flutter only scrolls a selection into view for a field that has focus,
+  /// and the `TextField` doesn't exist in the tree until this frame's build
+  /// (which flips `_previewing` off) completes. Request focus in a
+  /// post-frame callback, once the field is actually there to focus.
+  void jumpToLine(int line) {
+    if (_loadState != _LoadState.ready) return;
+    final lines = _controller.text.split('\n');
+    var offset = 0;
+    for (var i = 0; i < line - 1 && i < lines.length; i++) {
+      offset += lines[i].length + 1;
+    }
+    offset = offset.clamp(0, _controller.text.length);
+    setState(() {
+      _previewing = false;
+      _controller.selection = TextSelection.collapsed(offset: offset);
+    });
+    _notify();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
   }
 
   /// Save the buffer to this file, if safe (see [canSave]). Returns whether it
@@ -138,6 +178,7 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_onChanged);
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -313,6 +354,7 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
                   padding: const EdgeInsets.all(12),
                   child: TextField(
                     controller: _controller,
+                    focusNode: _focusNode,
                     maxLines: null,
                     expands: true,
                     keyboardType: TextInputType.multiline,

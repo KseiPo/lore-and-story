@@ -45,6 +45,8 @@ TextStyle styleForConvention(ConventionKind kind, ColorScheme scheme, TextStyle 
     case ConventionKind.leakedTwee:
     case ConventionKind.leakedHtml:
     case ConventionKind.malformedMarkup:
+    case ConventionKind.malformedDialogue:
+    case ConventionKind.unpairedConditional:
       return base.copyWith(
         color: scheme.error,
         decoration: TextDecoration.underline,

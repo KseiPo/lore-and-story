@@ -54,7 +54,11 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
     final Widget destination = entry.tree != null
         ? EntityDetailPage(
             storage: widget.storage, entry: entry, loreDir: widget.loreDir)
-        : EditorPage(storage: widget.storage, path: _repoPath(entry.id));
+        : EditorPage(
+            storage: widget.storage,
+            path: _repoPath(entry.id),
+            loreDir: widget.loreDir,
+          );
     await Navigator.of(context).push<void>(
       MaterialPageRoute(builder: (_) => destination),
     );
@@ -111,7 +115,11 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
     if (!mounted) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => EditorPage(storage: widget.storage, path: filePath),
+        builder: (_) => EditorPage(
+          storage: widget.storage,
+          path: filePath,
+          loreDir: widget.loreDir,
+        ),
       ),
     );
     if (mounted) await _rescan();

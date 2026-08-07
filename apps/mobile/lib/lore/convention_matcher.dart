@@ -33,15 +33,23 @@ enum ConventionKind {
   leakedTwee,
   leakedHtml,
   malformedMarkup,
+  // Error kinds (Story 3.1, FR18) — extends the above with two checks Story
+  // 2.6 deliberately deferred: a dialogue-shaped line whose colon is missing
+  // its required trailing space, and an em-dash conditional marker
+  // (`— если …` / `— конец условия —`) with no matching counterpart.
+  malformedDialogue,
+  unpairedConditional,
 }
 
-/// The [ConventionKind]s that denote suspect/invalid markup (FR9a). One source
-/// of truth so the highlighter's error styling and the Story 3.1 linter agree
-/// on what an "error" is — neither hardcodes its own set (AD-7).
+/// The [ConventionKind]s that denote suspect/invalid markup (FR9a/FR18). One
+/// source of truth so the highlighter's error styling and the Story 3.1
+/// linter agree on what an "error" is — neither hardcodes its own set (AD-7).
 const Set<ConventionKind> errorKinds = {
   ConventionKind.leakedTwee,
   ConventionKind.leakedHtml,
   ConventionKind.malformedMarkup,
+  ConventionKind.malformedDialogue,
+  ConventionKind.unpairedConditional,
 };
 
 /// Whether [kind] denotes suspect/invalid markup (a member of [errorKinds]).
@@ -81,6 +89,29 @@ final RegExp _listMarker = RegExp(r'^[ \t]*(?:[-*]|\d+\.)[ \t]');
 // keeps its own highlight.
 final RegExp _dialogue =
     RegExp(r'^[ \t]*[^\s:.!?\[][^\n:.!?]{0,39}?(?:\s*\([^)\n]*\))?[ \t]*:(?=\s|$)');
+// Malformed dialogue (Story 3.1, FR18): the exact same dialogue-speaker shape
+// as [_dialogue], but the colon is immediately followed by a non-whitespace
+// character instead of a space or end-of-line — the precise way a dialogue
+// line breaks when the author forgets the space after the colon (e.g.
+// `Frank:hello`). The two patterns are mutually exclusive on the same colon
+// ((?=\s|$) vs (?=\S) can never both match), so a line is never double-flagged
+// as both valid and malformed. Deliberately this narrow — broadening it to
+// "any line that looks like it might be dialogue" would amplify the
+// [_dialogue] heuristic's existing false-positive surface on ordinary prose
+// with an early colon (see Story 2.5's deferred-work note on that). The
+// prefix requires at least 2 characters (`{1,39}?`, not `{0,39}?`) so a
+// one-symbol "prefix" like an emoticon (`>:( face`) can't match — a single
+// punctuation character is never a plausible speaker name.
+//
+// (Review fix) The prefix and the character right after the colon both
+// exclude digits and `/`: without this, `12:30`, `Ratio 3:1`, and
+// `http://...` (including the exact markdown link the Story 2.15 External
+// Link toolbar button inserts) all matched — a name-like prefix never
+// contains a digit, and a scheme/path separator right after the colon is a
+// URL, not a missing space. Verified against those exact cases in
+// convention_matcher_test.dart.
+final RegExp _malformedDialogue = RegExp(
+    r'^[ \t]*[^\s:.!?\[\d][^\n:.!?\d]{1,39}?(?:\s*\([^)\n]*\))?[ \t]*:(?=[^\s/])');
 
 // Inline patterns (scanned across the line via allMatches).
 final RegExp _wikilink = RegExp(r'\[\[[^\[\]\n]+\]\]');
@@ -125,6 +156,101 @@ final RegExp _leakedHtml = RegExp(r'</?[A-Za-z][^>\n]*>');
 // detection (unpaired conditionals, dangling wikilinks) is the Story 3.1 linter.
 final RegExp _unterminatedWikilink = RegExp(r'\[\[(?![^\[\]\n]*\]\])');
 
+// Authoring-conditional em-dash markers (Story 3.1, FR18) — a prose block
+// delimited by `— если <condition> —` (open) ... `— конец условия —` (close),
+// with an optional `— иначе —` in between that is NOT itself checked for
+// pairing — only если/конец условия balance matters (ARCHITECTURE.md's own
+// example).
+//
+// (Review fix) The first draft's reasoning was backwards: requiring the
+// closing dash on the open marker does NOT protect ordinary literary em-dash
+// asides that use "если" (e.g. "она замолчала — если бы он знал..." —
+// verified by probe to match `_condOpen` and, having no later "конец
+// условия", to be flagged as unpaired) — that shape is exactly what the
+// convention's own open-marker form looks like from the outside. The actual
+// fix: this whole check now requires **at least one "конец условия" anywhere
+// in the text** before it reports anything at all (see the early-return in
+// [_matchConditionalMarkers]). A file that never uses this rare, specific
+// convention produces zero conditional findings, full stop — the same
+// precision-over-recall tradeoff `malformedMarkup` already made deliberately
+// (Story 2.6: scoped to only the unterminated-`[[` case).
+//
+// The condition body also excludes `[`/`]` (in addition to em-dash/newline):
+// without this, a wikilink written inside a condition clause (e.g. "— если
+// [[Selena]] знает — ...") was swallowed whole into the marker's span and
+// vanished from the token list entirely — invisible to both the highlighter
+// and the Story 3.1 dangling-wikilink check (AC4). Excluding brackets means
+// `_condOpen` simply can't match across a wikilink, so the marker isn't
+// recognized there at all and the wikilink is tokenized normally instead —
+// preferable to inventing a token-splitting/clipping scheme.
+//
+// The 300-char bound on the condition body keeps this linear (no unbounded
+// backtracking) — same discipline as every other error pattern in this file.
+// A condition longer than that, or one whose closing dash is on a different
+// line, is a known, accepted residual gap (documented, not silently claimed
+// solved): the open marker fails to match, so a later real "конец условия"
+// reports as a stray closer instead of the true opener as unclosed. Fixing
+// this fully would mean unbounded/cross-line matching, working against the
+// ReDoS-safety bound every pattern in this file is built around.
+//
+// No `\b` after "если": Dart's `\b` is defined in terms of ASCII `\w`, so it
+// silently fails to anchor right after Cyrillic text (Cyrillic letters aren't
+// `\w` by default) — found by a failing test while adding this pattern, not
+// assumed. The `—\s*` prefix is specific enough on its own.
+final RegExp _condOpen =
+    RegExp(r'—\s*если[^—\n\[\]]{1,300}—', caseSensitive: false);
+final RegExp _condClose =
+    RegExp(r'—\s*конец\s+условия\s*—', caseSensitive: false);
+
+/// Cross-line pass (unlike every other check in this file, which is
+/// per-line): scans the whole [text] for em-dash conditional markers and
+/// returns a token for each **unpaired** one — a stray close with no
+/// preceding open, or an open with no later close. Pairing is a simple
+/// stack (LIFO): the source convention doesn't document nesting, but a stack
+/// degrades to a reasonable default if markers are ever interleaved.
+///
+/// Returns nothing at all unless the text contains at least one closer —
+/// see [_condOpen]'s doc comment for why.
+List<ConventionToken> _matchConditionalMarkers(String text) {
+  if (!_condClose.hasMatch(text)) return const [];
+
+  final rawMarkers = <(int start, int end, bool isOpen)>[
+    for (final m in _condOpen.allMatches(text)) (m.start, m.end, true),
+    for (final m in _condClose.allMatches(text)) (m.start, m.end, false),
+  ]..sort((a, b) => a.$1 - b.$1);
+
+  // An open and a close match can share their delimiting em-dash (the
+  // close's trailing `—` is the same character as the next open's leading
+  // `—`), which would otherwise produce two overlapping tokens — violating
+  // this file's documented non-overlapping guarantee. Drop any marker that
+  // overlaps the one immediately before it; keeping the earlier one is an
+  // arbitrary but reasonable call for what is, either way, a pathological
+  // adjacency no real authoring would intend.
+  final markers = <(int start, int end, bool isOpen)>[];
+  for (final m in rawMarkers) {
+    if (markers.isNotEmpty && m.$1 < markers.last.$2) continue;
+    markers.add(m);
+  }
+
+  final openStack = <(int start, int end)>[];
+  final unpaired = <ConventionToken>[];
+  for (final marker in markers) {
+    if (marker.$3) {
+      openStack.add((marker.$1, marker.$2));
+    } else if (openStack.isNotEmpty) {
+      openStack.removeLast();
+    } else {
+      unpaired.add(ConventionToken(
+          marker.$1, marker.$2, ConventionKind.unpairedConditional));
+    }
+  }
+  for (final open in openStack) {
+    unpaired.add(
+        ConventionToken(open.$1, open.$2, ConventionKind.unpairedConditional));
+  }
+  return unpaired;
+}
+
 /// Parses [text] into a sorted, non-overlapping list of convention tokens.
 ///
 /// Never throws: any internal failure returns the tokens collected so far.
@@ -135,6 +261,20 @@ List<ConventionToken> matchConventions(String text) {
     for (final line in text.split('\n')) {
       _matchLine(line, offset, tokens);
       offset += line.length + 1; // + the consumed '\n'
+    }
+    // Cross-line pass — see [_matchConditionalMarkers]. A conditional
+    // marker's span can legitimately contain inline markup the per-line pass
+    // already tokenized (e.g. `**bold**` inside the condition text), so
+    // marker tokens take precedence: drop any per-line token they overlap
+    // before merging, preserving the documented "non-overlapping" guarantee
+    // without a full document-wide _resolveOverlaps pass (conditional
+    // markers are rare per file, so this stays cheap in practice).
+    final conditionals = _matchConditionalMarkers(text);
+    if (conditionals.isNotEmpty) {
+      tokens.removeWhere((t) =>
+          conditionals.any((c) => t.start < c.end && c.start < t.end));
+      tokens.addAll(conditionals);
+      tokens.sort((a, b) => a.start - b.start);
     }
   } catch (_) {
     // Total (AD-8): return whatever was collected.
@@ -160,6 +300,10 @@ void _matchLine(String line, int base, List<ConventionToken> out) {
   final dlg = _dialogue.matchAsPrefix(line);
   if (dlg != null) {
     cands.add(ConventionToken(0, dlg.end, ConventionKind.dialogueSpeaker));
+  }
+  final badDlg = _malformedDialogue.matchAsPrefix(line);
+  if (badDlg != null) {
+    cands.add(ConventionToken(0, badDlg.end, ConventionKind.malformedDialogue));
   }
 
   // Error candidates (FR9a) — added alongside the valid ones; precedence in
@@ -227,6 +371,15 @@ int _priority(ConventionKind k) {
       return 4;
     case ConventionKind.dialogueSpeaker:
       return 5;
+    // Mutually exclusive with dialogueSpeaker on the same colon (see
+    // [_malformedDialogue]'s comment), so this precedence never actually
+    // competes with it in practice — placed here for readability only.
+    case ConventionKind.malformedDialogue:
+      return 5;
+    // Resolved separately by [_matchConditionalMarkers], never a per-line
+    // candidate — priority is irrelevant but every enum value needs a case.
+    case ConventionKind.unpairedConditional:
+      return 11;
     case ConventionKind.wikilink:
       return 6; // beats placeholder so `[[x]]` is a wikilink, not `[x]`
     case ConventionKind.bold:

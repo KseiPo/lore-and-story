@@ -35,7 +35,11 @@ class ConflictsPage extends StatelessWidget {
   Future<void> _open(BuildContext context, ConflictCopy c) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => EditorPage(storage: storage, path: _repoPath(c.id)),
+        builder: (_) => EditorPage(
+          storage: storage,
+          path: _repoPath(c.id),
+          loreDir: loreDir,
+        ),
       ),
     );
   }
