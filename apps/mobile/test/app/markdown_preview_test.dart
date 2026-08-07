@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart' show TapGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/app/markdown_preview.dart';
@@ -14,6 +15,19 @@ import 'test_image_fixtures.dart';
 /// tree via `find`. A real MaterialApp gives it a Theme.
 Future<void> pumpPreview(WidgetTester tester, String text) async {
   await tester.pumpWidget(MaterialApp(home: Scaffold(body: MarkdownPreview(text: text))));
+  await tester.pump();
+}
+
+/// Pumps [MarkdownPreview] with [onWikilinkTap] wired (Story 3.2), so tap
+/// recognizers actually get created.
+Future<void> pumpPreviewWithTap(
+  WidgetTester tester,
+  String text, {
+  required void Function(String title) onWikilinkTap,
+}) async {
+  await tester.pumpWidget(MaterialApp(
+    home: Scaffold(body: MarkdownPreview(text: text, onWikilinkTap: onWikilinkTap)),
+  ));
   await tester.pump();
 }
 
@@ -394,6 +408,63 @@ void main() {
       await pumpPreview(tester, '- item\n\n  ---');
       expect(find.textContaining('item'), findsWidgets);
       expect(find.byType(Divider), findsWidgets);
+    });
+  });
+
+  group('wikilink tap-navigation (Story 3.2, FR19)', () {
+    testWidgets('a [[wikilink]] span gets a tap recognizer that fires '
+        'onWikilinkTap with the inner title', (tester) async {
+      String? tapped;
+      await pumpPreviewWithTap(tester, 'see [[Selena]] here',
+          onWikilinkTap: (title) => tapped = title);
+
+      final span = spanWith(tester, '[[Selena]]');
+      final recognizer = span.recognizer;
+      expect(recognizer, isA<TapGestureRecognizer>());
+      (recognizer as TapGestureRecognizer).onTap!();
+      expect(tapped, 'Selena');
+    });
+
+    testWidgets('a [[wikilink]] span has no recognizer when onWikilinkTap is '
+        'null (default) — the AbsorbPointer-wrapped card preview stays inert',
+        (tester) async {
+      await pumpPreview(tester, 'see [[Selena]] here');
+      final span = spanWith(tester, '[[Selena]]');
+      // (Review fix) `spanWith`'s `orElse` returns a blank TextSpan when
+      // nothing matches — assert the span was actually found before trusting
+      // its `recognizer` is meaningfully null, or a rendering regression
+      // would pass this test just as well as correct behavior.
+      expect(span.text, '[[Selena]]');
+      expect(span.recognizer, isNull);
+    });
+
+    testWidgets('a scene passage-link [[a->b]] is never tappable, even with '
+        'onWikilinkTap set (AC6 — sceneLink and wikilink are disjoint)',
+        (tester) async {
+      var tapCount = 0;
+      await pumpPreviewWithTap(tester, 'go [[Choice->Passage]] here',
+          onWikilinkTap: (_) => tapCount++);
+      final span = spanWith(tester, '[[Choice->Passage]]');
+      expect(span.text, '[[Choice->Passage]]'); // sanity: the span exists
+      expect(span.recognizer, isNull);
+      expect(tapCount, 0);
+    });
+
+    testWidgets('rebuilding with new text disposes the old recognizers '
+        'without throwing (recognizer lifecycle)', (tester) async {
+      await pumpPreviewWithTap(tester, 'see [[Selena]] here',
+          onWikilinkTap: (_) {});
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: MarkdownPreview(
+            text: 'now [[Frank]] instead',
+            onWikilinkTap: (_) {},
+          ),
+        ),
+      ));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(spanWith(tester, '[[Frank]]').recognizer, isA<TapGestureRecognizer>());
     });
   });
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../lore/lore.dart';
 import '../storage/storage.dart';
+import 'entity_navigation.dart';
 import 'file_editor.dart';
 import 'lint_panel.dart';
 
@@ -44,6 +46,18 @@ class _EditorPageState extends State<EditorPage> {
   /// Re-entrancy guard — a double-tap on Lint must not start two concurrent
   /// `loadLore` walks or stack two panels.
   bool _linting = false;
+
+  /// Wikilink tap-navigation (Story 3.2, FR19) — pushes the tapped entity via
+  /// the shared `navigateToEntity` (the one place the folder-vs-card branch
+  /// rule lives, AD-7). (Review fix) Reloads this editor's own entity list on
+  /// return, since the pushed screen may have renamed the entity we just
+  /// navigated to (or another one) — without this, `_entries` here would
+  /// silently go stale for the rest of this editor's lifetime.
+  Future<void> _navigateToEntity(LoreEntry entry) async {
+    await navigateToEntity(context,
+        storage: widget.storage, entry: entry, loreDir: widget.loreDir);
+    if (mounted) _editor?.reloadEntries();
+  }
 
   /// Back with unsaved edits must not silently discard them. Saves first when
   /// the buffer is safe to write; otherwise (e.g. a lossy load, which can never
@@ -155,9 +169,11 @@ class _EditorPageState extends State<EditorPage> {
           key: _editorKey,
           storage: widget.storage,
           path: widget.path,
+          loreDir: widget.loreDir,
           onStateChanged: () {
             if (mounted) setState(() {});
           },
+          onNavigateToEntity: _navigateToEntity,
         ),
       ),
     );

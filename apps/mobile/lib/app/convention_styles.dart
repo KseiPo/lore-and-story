@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show GestureRecognizer;
 import 'package:flutter/material.dart';
 
 import '../lore/lore.dart';
@@ -90,6 +91,13 @@ const Set<ConventionKind> previewLineStartConventionKinds = {
 /// style only for kinds in [apply]. Shared by the editor and the preview so the
 /// **span-text-equals-input** invariant lives in one place.
 ///
+/// [recognizerFor] (Story 3.2) is optional and defaults to null — every
+/// existing caller (the editable highlighter, which must stay non-interactive)
+/// is unaffected. When provided, it's asked for a `GestureRecognizer` for each
+/// **applied** token's kind + matched text; a non-null result is attached to
+/// that token's span. The caller owns the recognizer's lifecycle (creating and
+/// disposing it) — this function only wires it in.
+///
 /// Total (AD-8): out-of-range/overlapping tokens are skipped defensively, and
 /// any failure falls back to a single plain span — a character is never dropped,
 /// added, reordered, or hidden. Returns at least one span for non-empty [text].
@@ -99,6 +107,7 @@ List<InlineSpan> buildConventionSpans(
   required TextStyle? base,
   required Set<ConventionKind> apply,
   required TextStyle Function(ConventionKind kind) styleFor,
+  GestureRecognizer? Function(ConventionKind kind, String matchedText)? recognizerFor,
 }) {
   try {
     final spans = <InlineSpan>[];
@@ -110,7 +119,12 @@ List<InlineSpan> buildConventionSpans(
       if (t.start > i) {
         spans.add(TextSpan(text: text.substring(i, t.start), style: base));
       }
-      spans.add(TextSpan(text: text.substring(t.start, t.end), style: styleFor(t.kind)));
+      final matchedText = text.substring(t.start, t.end);
+      spans.add(TextSpan(
+        text: matchedText,
+        style: styleFor(t.kind),
+        recognizer: recognizerFor?.call(t.kind, matchedText),
+      ));
       i = t.end;
     }
     if (i < text.length) spans.add(TextSpan(text: text.substring(i), style: base));

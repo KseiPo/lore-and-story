@@ -1,5 +1,5 @@
 # generated: 2026-07-20
-# last_updated: 2026-08-06
+# last_updated: 2026-08-07
 # project: Lore & Story
 # project_key: NOKEY
 # tracking_system: file-system
@@ -83,7 +83,7 @@ development_status:
   # Epic 3: Convention tooling (v0.2)
   epic-3: in-progress
   3-1-lint-a-file-for-convention-errors: done
-  3-2-autocomplete-and-navigate-wikilinks: backlog
+  3-2-autocomplete-and-navigate-wikilinks: done
   epic-3-retrospective: optional
 
   # Epic 4: AI writing assist (AI phases)

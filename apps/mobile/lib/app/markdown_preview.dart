@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart' show GestureRecognizer, TapGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:markdown/markdown.dart' as md;
 
@@ -27,7 +28,7 @@ import 'convention_styles.dart';
 /// survives into text nodes verbatim — that is what lets the convention styling
 /// (see `_conventionSpans`) flag it, and what keeps the display free of
 /// `&lt;`-style HTML entities.
-class MarkdownPreview extends StatelessWidget {
+class MarkdownPreview extends StatefulWidget {
   final String text;
 
   /// When non-null (together with [filePath]), a local-relative image `src` is
@@ -42,33 +43,81 @@ class MarkdownPreview extends StatelessWidget {
   /// [storage] is also set.
   final String? filePath;
 
+  /// Called with an entity title when a `[[wikilink]]` is tapped (Story 3.2,
+  /// FR19). `null` (the default) leaves wikilinks styled but not tappable —
+  /// e.g. `EntityDetailPage`'s card preview, which is intentionally
+  /// non-interactive (wrapped in `AbsorbPointer`).
+  final void Function(String title)? onWikilinkTap;
+
   const MarkdownPreview({
     super.key,
     required this.text,
     this.storage,
     this.filePath,
+    this.onWikilinkTap,
   });
 
   @override
+  State<MarkdownPreview> createState() => _MarkdownPreviewState();
+}
+
+class _MarkdownPreviewState extends State<MarkdownPreview> {
+  /// Recognizers created by the current build's `_MarkdownRenderer` — a
+  /// `TapGestureRecognizer` leaks if never disposed.
+  List<TapGestureRecognizer> _recognizers = [];
+
+  /// (Review fix) Disposal is deferred one frame past the build that
+  /// orphaned these recognizers, not run synchronously at the start of the
+  /// very next `build()`. A rebuild can land between a pointer-down and
+  /// pointer-up on a wikilink (e.g. `_loadEntries`'s one-time `setState` in
+  /// the hosting `FileEditor` while the user is mid-tap) — disposing the
+  /// in-arena recognizer immediately risks silently dropping that gesture.
+  /// Deferring past paint gives the current frame's gesture handling a
+  /// chance to resolve first.
+  void _scheduleDisposal(List<TapGestureRecognizer> orphaned) {
+    if (orphaned.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final r in orphaned) {
+        r.dispose();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final newRecognizers = <TapGestureRecognizer>[];
     Widget child;
     try {
       final document = md.Document(
         extensionSet: md.ExtensionSet.gitHubFlavored,
         encodeHtml: false,
       );
-      final nodes = document.parseLines(const LineSplitter().convert(text));
-      final blocks =
-          _MarkdownRenderer(context, storage: storage, filePath: filePath)
-              .blocks(nodes);
+      final nodes = document.parseLines(const LineSplitter().convert(widget.text));
+      final blocks = _MarkdownRenderer(
+        context,
+        storage: widget.storage,
+        filePath: widget.filePath,
+        onWikilinkTap: widget.onWikilinkTap,
+        registerRecognizer: newRecognizers.add,
+      ).blocks(nodes);
       child = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: blocks.isEmpty ? const [SizedBox.shrink()] : blocks,
       );
     } catch (_) {
       // Never an error screen: show the raw buffer best-effort.
-      child = SelectableText(text);
+      child = SelectableText(widget.text);
     }
+    _scheduleDisposal(_recognizers);
+    _recognizers = newRecognizers;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: child,
@@ -82,11 +131,28 @@ class _MarkdownRenderer {
   final BuildContext context;
   final RepoStorage? storage;
   final String? filePath;
+
+  /// Story 3.2 — fires with an entity title when a `[[wikilink]]` is tapped.
+  /// Null when the host [MarkdownPreview] wasn't given `onWikilinkTap`.
+  final void Function(String title)? onWikilinkTap;
+
+  /// Story 3.2 — every `TapGestureRecognizer` this renderer creates is handed
+  /// to the host state via this callback so it can be disposed later; this
+  /// renderer itself is a fresh, per-build, non-State object with nowhere to
+  /// own that lifecycle.
+  final void Function(TapGestureRecognizer recognizer) registerRecognizer;
+
   late final ThemeData theme = Theme.of(context);
   late final TextTheme textTheme = theme.textTheme;
   late final ColorScheme scheme = theme.colorScheme;
 
-  _MarkdownRenderer(this.context, {this.storage, this.filePath});
+  _MarkdownRenderer(
+    this.context, {
+    this.storage,
+    this.filePath,
+    this.onWikilinkTap,
+    required this.registerRecognizer,
+  });
 
   static const _blockGap = SizedBox(height: 8);
 
@@ -343,7 +409,10 @@ class _MarkdownRenderer {
             ));
             break;
           case 'a':
-            // Styled, not tappable in v0.1 (navigation is Story 3.2 / FR19).
+            // Styled, not tappable. Story 3.2 (FR19) made [[wikilinks]]
+            // tap-navigable (see `_wikilinkRecognizer` below) but did not
+            // extend that to markdown `[label](url)` links — this remains
+            // display-only.
             spans.addAll(_inline(
               node.children ?? const [],
               base.copyWith(
@@ -392,7 +461,22 @@ class _MarkdownRenderer {
           ? previewLineStartConventionKinds
           : previewConventionKinds,
       styleFor: (kind) => styleForConvention(kind, scheme, base),
+      recognizerFor: _wikilinkRecognizer,
     );
+  }
+
+  /// Story 3.2 (AC6) — only `wikilink` gets a tap recognizer; `sceneLink` (a
+  /// separator-bearing `[[a->b]]` pair, disjoint from `wikilink` by the
+  /// matcher's own precedence — see `convention_matcher.dart`) is never
+  /// tappable here. Returns null (no recognizer) when there's no callback to
+  /// invoke, so a bare `MarkdownPreview` stays exactly as inert as before.
+  GestureRecognizer? _wikilinkRecognizer(ConventionKind kind, String matchedText) {
+    final onTap = onWikilinkTap;
+    if (kind != ConventionKind.wikilink || onTap == null) return null;
+    final title = matchedText.substring(2, matchedText.length - 2);
+    final recognizer = TapGestureRecognizer()..onTap = () => onTap(title);
+    registerRecognizer(recognizer);
+    return recognizer;
   }
 
   /// Renders an `img` node: a local-relative `src` loads via [_RepoImage]

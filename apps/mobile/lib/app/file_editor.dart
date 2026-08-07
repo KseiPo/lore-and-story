@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../lore/lore.dart' as lore;
@@ -5,6 +6,7 @@ import '../storage/storage.dart';
 import 'convention_highlighting_controller.dart';
 import 'editor_toolbar.dart';
 import 'markdown_preview.dart';
+import 'wikilink_autocomplete.dart';
 
 /// The per-file editing surface — everything about editing **one** file, minus
 /// any `Scaffold`/`AppBar` chrome. Hosted by [EditorPage] (a single file) and by
@@ -27,6 +29,14 @@ class FileEditor extends StatefulWidget {
   /// Repo-relative path of the file being edited.
   final String path;
 
+  /// The resolved `loreDir` (model ids are loreDir-relative; [RepoStorage] is
+  /// repo-relative). Used by the Story 3.2 `[[` autocomplete and
+  /// wikilink-tap-navigation features to load the entity list once per
+  /// instance (Story 3.1's Lint action needed this too, but reloads fresh
+  /// each time at the host-page level instead — this field is `FileEditor`'s
+  /// own, separate need).
+  final String loreDir;
+
   /// Fired whenever host-visible state changes (dirty / load-state / preview),
   /// so the host can rebuild its chrome.
   final VoidCallback? onStateChanged;
@@ -37,12 +47,21 @@ class FileEditor extends StatefulWidget {
   /// a missing file is a load error (the single-file editor's behavior).
   final bool createIfMissing;
 
+  /// Called with the resolved entity when a `[[wikilink]]` is tapped in the
+  /// preview (Story 3.2, FR19). `null` (the default) leaves wikilinks styled
+  /// but not tappable. The host owns navigation (it knows how to reach
+  /// [EntityDetailPage]/[EditorPage] and holds the `Navigator`); this widget
+  /// only resolves the tapped title to a [lore.LoreEntry] via [_entries].
+  final void Function(lore.LoreEntry entry)? onNavigateToEntity;
+
   const FileEditor({
     super.key,
     required this.storage,
     required this.path,
+    required this.loreDir,
     this.onStateChanged,
     this.createIfMissing = false,
+    this.onNavigateToEntity,
   });
 
   @override
@@ -171,7 +190,38 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _controller.addListener(_onChanged);
     _load();
+    _loadEntries();
   }
+
+  /// The loaded entity list — Story 3.2's `[[` autocomplete and
+  /// wikilink-tap-navigation both need it. Loaded once per instance, not on
+  /// every keystroke/tap (unlike Story 3.1's Lint action, which deliberately
+  /// reloads fresh each time — a different tradeoff for a different,
+  /// occasional action). A failure (AD-8) just leaves this empty: no
+  /// suggestions, no tap-resolution — never a crash.
+  List<lore.LoreEntry> _entries = const [];
+
+  Future<void> _loadEntries() async {
+    try {
+      final model = await lore.loadLore(widget.storage, widget.loreDir);
+      if (!mounted) return;
+      setState(() => _entries = model.entries);
+      // (Review fix) The user may have already typed `[[query` while this
+      // walk was in flight — without this, AC5's own scenario (suggestions
+      // arrive once the walk lands) never actually surfaces them until the
+      // next keystroke or caret move.
+      _updateWikilinkQuery();
+    } catch (_) {
+      // _entries stays empty (AD-8) — see the field's own doc comment.
+    }
+  }
+
+  /// Re-runs the entity-list load (Story 3.2 review fix) — a host page calls
+  /// this after returning from a pushed wikilink-navigation destination,
+  /// since an edit made there (e.g. a title rename) would otherwise leave
+  /// this instance's `_entries`/suggestions/tap-resolution silently stale for
+  /// the rest of this editor's lifetime.
+  void reloadEntries() => _loadEntries();
 
   @override
   void dispose() {
@@ -232,6 +282,52 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
       setState(() => _dirty = dirty);
       _notify();
     }
+    _updateWikilinkQuery();
+  }
+
+  /// The `[[query` span the caret is currently inside (Story 3.2), if any,
+  /// and the suggestion titles it currently matches. Recomputed on every
+  /// text/selection change — including a pure caret move with no text
+  /// change, so moving out of a span hides the row just as reliably as
+  /// closing it with `]` does.
+  WikilinkQuery? _activeQuery;
+  List<lore.LoreEntry> _suggestions = const [];
+
+  /// (Review fix) Guarded like `_onChanged`'s own `_dirty` check one function
+  /// up — without this, every keystroke *and* every pure caret move
+  /// `setState`s the whole `FileEditor` subtree even when the query/
+  /// suggestions didn't actually change (the overwhelmingly common case).
+  void _updateWikilinkQuery() {
+    final query = findOpenWikilinkQuery(_controller.value);
+    final suggestions = query == null
+        ? const <lore.LoreEntry>[]
+        : matchWikilinkSuggestions(_entries, query.query);
+    if (query == _activeQuery && listEquals(suggestions, _suggestions)) return;
+    setState(() {
+      _activeQuery = query;
+      _suggestions = suggestions;
+    });
+  }
+
+  /// Replaces the active `[[query` span with `[[title]]` — the controller
+  /// change this triggers runs back through [_onChanged]/[_updateWikilinkQuery]
+  /// on its own, which naturally clears `_activeQuery`/`_suggestions` (the
+  /// caret now sits right after `]]`, which `findOpenWikilinkQuery` correctly
+  /// reads as "not inside an open query" — no separate reset needed here).
+  void _completeWikilink(lore.LoreEntry entry) {
+    final query = _activeQuery;
+    if (query == null) return;
+    _controller.value = completeWikilink(_controller.value, query, entry.title);
+  }
+
+  /// Resolves a tapped wikilink's title against the loaded entity list and
+  /// forwards it to the host (Story 3.2, FR19). An unresolved title (the
+  /// entity list hasn't loaded yet, or the link is dangling — Story 3.1's
+  /// own concern, not re-litigated here) is silently ignored: AD-8, never a
+  /// crash, and there's nowhere sensible to navigate to anyway.
+  void _handleWikilinkTap(String title) {
+    final entry = findEntryByName(_entries, title);
+    if (entry != null) widget.onNavigateToEntity?.call(entry);
   }
 
   bool get _canSave => _dirty && !_lossyLoad && _loadState == _LoadState.ready;
@@ -346,6 +442,7 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
                   text: _controller.text,
                   storage: widget.storage,
                   filePath: widget.path,
+                  onWikilinkTap: _handleWikilinkTap,
                 ),
               )
             else ...[
@@ -363,6 +460,33 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
                   ),
                 ),
               ),
+              // `[[` autocomplete suggestion row (Story 3.2, FR19) — docked
+              // between the text and the toolbar, not a caret-positioned
+              // floating overlay (see the story's Context for why).
+              if (_activeQuery != null && _suggestions.isNotEmpty)
+                SizedBox(
+                  height: 44,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    children: [
+                      for (final entry in _suggestions)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                          child: ActionChip(
+                            // (Review fix) Keyed by id, not title — two
+                            // entities can share a title (this codebase
+                            // supports that, see CategoryEntitiesPage), and a
+                            // title-only key would make two chips
+                            // indistinguishable.
+                            key: Key('wikilink-suggestion-${entry.id}'),
+                            label: Text(entry.title),
+                            onPressed: () => _completeWikilink(entry),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               // Helper toolbar above the keyboard (FR8) — editing only.
               EditorToolbar(controller: _controller),
             ],

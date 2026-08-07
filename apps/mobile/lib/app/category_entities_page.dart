@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart';
-import 'entity_detail_page.dart';
+import 'entity_navigation.dart';
 
 /// Lists the entities in one [LoreCategory] and opens the tapped entity (Story
 /// 2.2 — FR5 + "navigate to any card"; Story 2.3 — detail tree).
@@ -49,19 +49,8 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
       widget.loreDir.isEmpty ? id : '${widget.loreDir}/$id';
 
   Future<void> _openEntity(LoreEntry entry) async {
-    // Entity folder → the detail-tree outline (Story 2.3); simple entity →
-    // straight to its card in the editor (no tree to navigate).
-    final Widget destination = entry.tree != null
-        ? EntityDetailPage(
-            storage: widget.storage, entry: entry, loreDir: widget.loreDir)
-        : EditorPage(
-            storage: widget.storage,
-            path: _repoPath(entry.id),
-            loreDir: widget.loreDir,
-          );
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => destination),
-    );
+    await navigateToEntity(context,
+        storage: widget.storage, entry: entry, loreDir: widget.loreDir);
     // The edit may have changed this entity's title (or the files under it) —
     // re-walk so the list reflects it without popping back to Home (AC3/FR3),
     // mirroring the Home page's rescan-on-editor-return.

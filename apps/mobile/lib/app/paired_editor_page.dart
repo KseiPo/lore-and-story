@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart' show kDirtyIndicatorKey, confirmDiscardUnsaved;
+import 'entity_navigation.dart';
 import 'file_editor.dart';
 import 'lint_panel.dart';
 
@@ -153,6 +154,15 @@ class _PairedEditorPageState extends State<PairedEditorPage>
 
   FileEditorState? get _active => _variants[_tabController.index].key.currentState;
 
+  /// Wikilink tap-navigation (Story 3.2, FR19) — pushes via the shared
+  /// `navigateToEntity` (AD-7) and reloads the active tab's entity list on
+  /// return (Review fix — see `EditorPage._navigateToEntity`'s doc comment).
+  Future<void> _navigateToEntity(LoreEntry entry) async {
+    await navigateToEntity(context,
+        storage: widget.storage, entry: entry, loreDir: widget.loreDir);
+    if (mounted) _active?.reloadEntries();
+  }
+
   /// Back with unsaved edits in any tab must not silently discard them: save the
   /// ones that can be saved; if any dirty tab can't be saved (lossy), ask once.
   Future<void> _handlePop() async {
@@ -301,10 +311,12 @@ class _PairedEditorPageState extends State<PairedEditorPage>
                   key: v.key,
                   storage: widget.storage,
                   path: v.repoPath,
+                  loreDir: widget.loreDir,
                   createIfMissing: v.createIfMissing,
                   onStateChanged: () {
                     if (mounted) setState(() {});
                   },
+                  onNavigateToEntity: _navigateToEntity,
                 ),
               ),
           ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart' show kDirtyIndicatorKey, confirmDiscardUnsaved;
+import 'entity_navigation.dart';
 import 'file_editor.dart';
 import 'lint_panel.dart';
 import 'paired_editor_page.dart';
@@ -85,6 +86,15 @@ class _UndeterminedLanguagePageState extends State<UndeterminedLanguagePage>
 
   String _repoPath(String id) =>
       widget.loreDir.isEmpty ? id : '${widget.loreDir}/$id';
+
+  /// Wikilink tap-navigation (Story 3.2, FR19) — pushes via the shared
+  /// `navigateToEntity` (AD-7) and reloads this editor's entity list on
+  /// return (Review fix — see `EditorPage._navigateToEntity`'s doc comment).
+  Future<void> _navigateToEntity(LoreEntry entry) async {
+    await navigateToEntity(context,
+        storage: widget.storage, entry: entry, loreDir: widget.loreDir);
+    if (mounted) _editor?.reloadEntries();
+  }
 
   bool get _isUndetermined =>
       _item.langs.length == 1 && _item.langs.containsKey('orig');
@@ -331,9 +341,11 @@ class _UndeterminedLanguagePageState extends State<UndeterminedLanguagePage>
           key: _editorKey,
           storage: widget.storage,
           path: _repoPath(orig.file),
+          loreDir: widget.loreDir,
           onStateChanged: () {
             if (mounted) setState(() {});
           },
+          onNavigateToEntity: _navigateToEntity,
         ),
       ),
     );
