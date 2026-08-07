@@ -6,7 +6,12 @@ plugins {
 
 android {
     namespace = "dev.kseipo.lore_and_story"
-    compileSdk = flutter.compileSdkVersion
+    // Story 4.1: flutter_secure_storage requires compileSdk 37+; Flutter's own
+    // bundled default (flutter.compileSdkVersion) was still 36 at the time this
+    // was pinned. Backward compatible — raising compileSdk doesn't change
+    // minSdk/targetSdk behavior, only which APIs are available to compile
+    // against.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
