@@ -63,6 +63,7 @@ Future<void> _pumpReady(WidgetTester tester, FakeRepoStorage storage) async {
     rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
     permission: FakeStoragePermission(granted: true),
     storageFactory: (root) => storage,
+    keyStore: FakeKeyStore(),
   ));
   await tester.pumpAndSettle();
 }

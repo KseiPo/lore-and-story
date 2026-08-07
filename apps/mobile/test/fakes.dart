@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:lore_and_story/ai/ai.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
 /// In-memory [RepoRootStore] for widget tests (no plugin channel).
@@ -16,6 +17,48 @@ class FakeRepoRootStore extends RepoRootStore {
 
   @override
   Future<void> clear() async => _root = null;
+}
+
+/// In-memory [KeyStore] for widget tests (no `flutter_secure_storage`
+/// platform channel) — replaces `MessagesApiClient`/`SettingsPage` tests'
+/// previous hand-rolled `implements KeyStore` doubles with the one shared
+/// double every other port already gets here.
+///
+/// [failing] makes every operation throw (mirrors [FakeRepoStorage]'s
+/// `failWrites`/`failMove` flags) — for exercising the AD-8 never-crash
+/// paths. [failWrites] fails only [write], for the narrower "load succeeded,
+/// but secure storage became unavailable before the save" case.
+class FakeKeyStore extends KeyStore {
+  String? _key;
+  final bool failing;
+  final bool failWrites;
+
+  FakeKeyStore({String? initial, this.failing = false, this.failWrites = false})
+      : _key = initial;
+
+  @override
+  Future<bool> isConfigured() async {
+    if (failing) throw Exception('secure storage unavailable (fake)');
+    return _key != null && _key!.isNotEmpty;
+  }
+
+  @override
+  Future<String?> read() async {
+    if (failing) throw Exception('secure storage unavailable (fake)');
+    return _key;
+  }
+
+  @override
+  Future<void> write(String apiKey) async {
+    if (failing || failWrites) throw Exception('secure storage unavailable (fake)');
+    _key = apiKey;
+  }
+
+  @override
+  Future<void> clear() async {
+    if (failing) throw Exception('secure storage unavailable (fake)');
+    _key = null;
+  }
 }
 
 /// [StoragePermission] whose grant state is set by the test, avoiding the real

@@ -6,10 +6,23 @@
          runtime dialog. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
+    <!-- Story 4.1: the AI features' Messages API calls need real network access.
+         The debug/profile manifest overlays already declare this for Flutter's
+         own tooling (hot reload), but that overlay is NOT present in a release
+         build — without this line here, release builds could install and run
+         but every AI call would fail with a permission denial. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="Lore &amp; Story"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
+        <!-- Story 4.1 review: allowBackup=false so the AI API key (secure
+             storage, Android Keystore-encrypted) is never included in Android
+             Auto Backup — matches this app's local-only security stance
+             (NFR5). The only other affected app data is the small repo-root
+             preference, easily re-chosen after a restore. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

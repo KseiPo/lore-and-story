@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'ai/ai.dart';
 import 'app/app.dart';
 import 'storage/all_files_repo_storage.dart';
 import 'storage/storage.dart';
@@ -10,6 +11,7 @@ import 'storage/storage.dart';
 void main() {
   final rootStore = RepoRootStore();
   final permission = StoragePermission();
+  final keyStore = KeyStore();
   RepoStorage buildStorage(String rootPath) => AllFilesRepoStorage(rootPath);
 
   runApp(
@@ -17,6 +19,7 @@ void main() {
       rootStore: rootStore,
       permission: permission,
       storageFactory: buildStorage,
+      keyStore: keyStore,
     ),
   );
 }

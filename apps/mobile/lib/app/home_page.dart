@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'app.dart';
@@ -7,6 +8,7 @@ import 'category_entities_page.dart';
 import 'conflicts_page.dart';
 import 'editor_page.dart';
 import 'root_picker_page.dart';
+import 'settings_page.dart';
 
 /// The states of the v0.1 landing surface. A real browsing UI is Epic 2 — this
 /// stays deliberately thin.
@@ -21,11 +23,16 @@ class HomePage extends StatefulWidget {
   final StoragePermission permission;
   final RepoStorageFactory storageFactory;
 
+  /// Story 4.1 — where the AI provider API key is stored, so the Settings
+  /// entry point reached from this page's AppBar can manage it.
+  final KeyStore keyStore;
+
   const HomePage({
     super.key,
     required this.rootStore,
     required this.permission,
     required this.storageFactory,
+    required this.keyStore,
   });
 
   @override
@@ -309,10 +316,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _refresh();
   }
 
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => SettingsPage(keyStore: widget.keyStore)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Lore & Story')),
+      appBar: AppBar(
+        title: const Text('Lore & Story'),
+        actions: [
+          IconButton(
+            key: const Key('settings-action'),
+            tooltip: 'Settings',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Center(child: _buildStage()),

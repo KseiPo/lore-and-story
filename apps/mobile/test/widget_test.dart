@@ -15,6 +15,7 @@ void main() {
       rootStore: FakeRepoRootStore(),
       permission: FakeStoragePermission(granted: false),
       storageFactory: (root) => FakeRepoStorage(root),
+      keyStore: FakeKeyStore(),
     ));
     await tester.pumpAndSettle();
 
@@ -28,6 +29,7 @@ void main() {
       rootStore: FakeRepoRootStore(),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => FakeRepoStorage(root),
+      keyStore: FakeKeyStore(),
     ));
     await tester.pumpAndSettle();
 
@@ -57,6 +59,7 @@ void main() {
       rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
+      keyStore: FakeKeyStore(),
     ));
     await tester.pumpAndSettle();
 
@@ -85,6 +88,7 @@ void main() {
       rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
+      keyStore: FakeKeyStore(),
     ));
     await tester.pumpAndSettle();
 
@@ -121,6 +125,7 @@ void main() {
       rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
+      keyStore: FakeKeyStore(),
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('conflict-banner')), findsNothing);
@@ -151,11 +156,30 @@ void main() {
       rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
+      keyStore: FakeKeyStore(),
     ));
     await tester.pumpAndSettle();
 
     expect(find.text('Something went wrong'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('(review fix) the AppBar settings icon navigates to '
+      'SettingsPage — Task 3.2\'s wiring, not just Task 4.3\'s pumping of '
+      'SettingsPage directly', (tester) async {
+    await tester.pumpWidget(LoreStoryApp(
+      rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
+      permission: FakeStoragePermission(granted: true),
+      storageFactory: (root) => FakeRepoStorage('/storage/emulated/0/repo'),
+      keyStore: FakeKeyStore(),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('settings-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.byKey(const Key('settings-key-field')), findsOneWidget);
   });
 }

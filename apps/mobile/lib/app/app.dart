@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai.dart';
 import '../storage/storage.dart';
 import 'home_page.dart';
 
@@ -14,11 +15,15 @@ class LoreStoryApp extends StatelessWidget {
   final StoragePermission permission;
   final RepoStorageFactory storageFactory;
 
+  /// Story 4.1 — where the AI provider API key is stored.
+  final KeyStore keyStore;
+
   const LoreStoryApp({
     super.key,
     required this.rootStore,
     required this.permission,
     required this.storageFactory,
+    required this.keyStore,
   });
 
   @override
@@ -30,6 +35,7 @@ class LoreStoryApp extends StatelessWidget {
         rootStore: rootStore,
         permission: permission,
         storageFactory: storageFactory,
+        keyStore: keyStore,
       ),
     );
   }

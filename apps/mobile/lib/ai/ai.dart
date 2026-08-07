@@ -1,6 +1,14 @@
-/// The `ai/` slice: `AiClient` port + Messages-API/SSE adapter + secure key
-/// store + context-preview / translate / grammar UI.
+/// Public interface (barrel) of the `ai/` slice. Other slices depend only on
+/// these exports, never on the slice's internal files (AD-12).
 ///
-/// Placeholder for Epic 4. Produces text only — it never writes files; generated
-/// output is persisted by the `lore/` slice via [RepoStorage] (AD-11).
+/// The concrete `MessagesApiClient` adapter is deliberately NOT exported: only
+/// the composition root (`main.dart`, and this slice's own tests) may name it,
+/// by importing its file directly — mirrors `storage/storage.dart` withholding
+/// `AllFilesRepoStorage`.
+///
+/// The `ai/` slice produces text only — it never writes files; generated
+/// output is persisted by the `lore/` slice via `RepoStorage` (AD-11).
 library;
+
+export 'ai_client.dart';
+export 'key_store.dart';
