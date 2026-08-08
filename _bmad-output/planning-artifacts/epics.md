@@ -168,6 +168,14 @@ so the same features can run against OpenRouter or a local server (e.g. LM
 Studio, which speaks *both* protocols) without forking any downstream feature
 code. **FRs covered (extension):** FR27, FR28
 
+### Epic 5: Improvements backlog (post-AI)
+
+A holding area for scoped correctness fixes and refinements identified along
+the way — not a new PRD phase or a fixed release unit, just where such stories
+accumulate until picked up, sequenced after Epic 4 (AI writing assist) ships.
+**Stories so far:** 5.1 — fix image-path breakage when promoting an entity to
+a folder (Story 2.17 × Story 2.16 interaction; extends FR26).
+
 ---
 
 ## Epic 1: Edit a file end-to-end (v0.1 — thin vertical slice)
@@ -662,3 +670,67 @@ So that I can use OpenRouter, or a local OpenAI-compatible server such as LM Stu
 **Given** a Custom local address configured with the OpenAI protocol (e.g. LM Studio's OpenAI-compatible endpoint), **When** I tap Test Connection, **Then** it succeeds against a real local server, with the API key field optional (a local server on the LAN typically doesn't require one).
 
 **Given** the same failure classes Story 4.1 defined for the Anthropic client (auth, invalid request, rate limit, server error, network failure, timeout), **When** using the OpenAI protocol, **Then** equivalent typed errors and the same retry/backoff discipline apply — one shared `AiClient` port, two protocol adapters behind it.
+
+## Epic 5: Improvements backlog (post-AI)
+
+A holding area for scoped correctness fixes and refinements identified along the way
+— not a fixed release unit like the other epics, just where such stories accumulate
+until picked up. Sequenced after Epic 4 (AI writing assist) ships.
+
+**Epic Definition of Done (every story):** works fully offline (NFR4) unless the
+story is itself AI-related; no regression in the stories it touches.
+
+### Story 5.1: Preserve image paths when promoting an entity to a folder
+
+As the author,
+I want image references inside a promoted card to keep pointing at the right file,
+So that promoting an entity to hold events doesn't silently break its illustrations.
+
+**Context:** Story 2.17's promotion moves `<slug>.md` to `<slug>/<slug>.md` — a pure
+filesystem rename with no content rewriting, deliberately, to keep the card's bytes
+byte-exact. But Story 2.16 resolves `![alt](src)` image paths **relative to the
+file's own directory, at render time**. Moving the file one directory level deeper
+(e.g. `characters/frank.md` → `characters/frank/frank.md`) without adjusting
+relative image references silently breaks any reference that resolved correctly
+before the move (e.g. `media/frank.jpg`, which lived at `characters/media/frank.jpg`,
+now resolves to the nonexistent `characters/frank/media/frank.jpg`) — the image
+just degrades to its alt-text placeholder with no error, because Story 2.16's own
+AD-8 "never crash" handling masks the regression instead of surfacing it. Confirmed
+by tracing both implementations directly: `_promoteEntity`
+(`apps/mobile/lib/app/category_entities_page.dart`) never parses or rewrites the
+card's markdown body, and `_resolveImage`
+(`apps/mobile/lib/app/markdown_preview.dart`) recomputes the image path fresh from
+the file's *current* location on every render, with no stored absolute path to fall
+back on. Neither Story 2.17 nor its code review mentions image paths at all, and
+`apps/mobile/test/app/promote_entity_test.dart` has zero coverage of this
+interaction.
+
+**Acceptance Criteria:**
+
+1. **(Core fix)** Given a card being promoted contains one or more relative local
+   image references (`![alt](src)`, not `http(s)://`), **When** promotion runs,
+   **Then** those references are rewritten so they still resolve to the same image
+   file after the move (e.g. `media/frank.jpg` → `../media/frank.jpg`) — verified by
+   actually rendering the promoted card's preview and confirming the image loads,
+   not just by string-diffing the rewritten markdown.
+2. **(No false positives)** Given a card with no image references, or only
+   already-correct/absolute/network (`http(s)://`) references, **When** promotion
+   runs, **Then** the file content is unchanged apart from the rewritten relative
+   paths — network and absolute references are left untouched.
+3. **(Never breaks the move)** Given a card whose image markup is malformed or
+   unparseable, **When** promotion runs, **Then** the move still completes (a
+   rewrite failure never blocks promotion) and any reference that couldn't be
+   safely rewritten is left as-is rather than corrupted. *(AD-8/NFR7)*
+4. **(Regression coverage)** Given the existing Story 2.17 promotion tests, **When**
+   this story ships, **Then** they stay green, and new tests cover: a card with one
+   image reference promotes and still resolves; a card with multiple image
+   references (including one already `../`-relative, and one pointing into a
+   subfolder) promotes correctly; a card with no images promotes unchanged (today's
+   behavior preserved byte-for-byte).
+
+**Notes:** Depends on Story 2.16 (image rendering/path resolution) and Story 2.17
+(promotion), both done. A correctness fix for an interaction between two shipped
+stories, not tied to a new FR — extends FR26. Also worth checking during
+implementation, not assuming: whether Story 2.18's bare-`.md` rename (same
+directory, not a cross-directory move) is genuinely unaffected by this same class of
+bug, or only appears unaffected.

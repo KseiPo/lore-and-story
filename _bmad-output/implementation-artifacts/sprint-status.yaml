@@ -95,3 +95,8 @@ development_status:
   4-5-configure-the-ai-server-and-protocol: backlog
   4-6-connect-via-an-openai-compatible-server: backlog
   epic-4-retrospective: optional
+
+  # Epic 5: Improvements backlog (post-AI)
+  epic-5: backlog
+  5-1-preserve-image-paths-when-promoting-an-entity-to-a-folder: backlog
+  epic-5-retrospective: optional
