@@ -56,6 +56,8 @@ and MOBILE.md serve as the technical-requirements source.)
 - **FR26** *(Promotion phase)*: Promote a simple entity to an entity folder (`<slug>.md` → `<slug>/<slug>.md`, card bytes preserved) so it can hold sub-entries; the only authoring op that moves a file.
 - **FR27** *(AI phases)*: Let the author choose an AI Server (official Anthropic API, OpenRouter, or a custom/local network address) and, independently, an API Protocol (Anthropic Messages format or OpenAI chat-completions format) — not a single hardcoded provider — and verify a chosen configuration with a live "test connection" check before relying on it.
 - **FR28** *(AI phases)*: Implement an OpenAI-compatible chat-completions client (streamed, with the same typed-error/retry discipline as the Story 4.1 Anthropic client) as a second protocol adapter, so the app can talk to OpenAI-protocol servers — OpenRouter, or a self-hosted local server such as LM Studio.
+- **FR29** *(AI phases)*: Let the author override the AI instructions/conventions text an AI action sends from a plain file in the synced repo (`ai-prompts.md` at the repo root) instead of the app's hardcoded defaults — per-section (an author may override only one piece), never blocking when the file is absent, unreadable, or defines neither recognized section.
+- **FR30** *(AI phases)*: Let the author (re-)translate a pair that already has content on **both** sides — not just a lone RU file missing its EN pair — in **either direction** (RU→EN or EN→RU), to refresh a translation after editing the source language. Translating into a tab that already has content (saved or unsaved) asks for confirmation before replacing it.
 
 ### NonFunctional Requirements
 
@@ -115,6 +117,8 @@ _None — no UX design document exists for this project. The PRD's journeys (UJ-
 - **FR26**: Epic 2 — promote simple → folder (Story 2.17)
 - **FR27**: Epic 4 — AI server + protocol selection, test connection
 - **FR28**: Epic 4 — OpenAI-compatible protocol adapter (OpenRouter / local servers)
+- **FR29**: Epic 4 — customizable AI prompt (instructions/conventions) via a repo file (Story 4.4)
+- **FR30**: Epic 4 — bidirectional re-translation of an already-paired file (Story 4.5)
 
 ## Epic List
 
@@ -158,11 +162,23 @@ Configure an AI key and get help under a mandatory send-preview: RU→EN transla
 first, then grammar/style findings. One epic (shared HTTP client, key store, and
 context-preview sheet). **Release checkpoint: translation (FR21) ships before
 grammar (FR23)** — the deliberate PRD phasing.
-**FRs covered:** FR20, FR21, FR22, FR23
-**Multi-provider extension (Stories 4.5–4.6, added post-4.1):** the Story 4.1
+**FRs covered:** FR20, FR21, FR22, FR23, FR29, FR30
+**Prompt customization (Story 4.4, added post-4.3):** Story 4.3 hardcoded the
+instructions/conventions text every AI action sends. Story 4.4 makes both
+overridable from a plain file in the synced repo (`ai-prompts.md`, per-section,
+never blocking) — sequenced **before** grammar (Story 4.6) specifically so
+grammar's own prompt reuses the same mechanism from the start.
+**Bidirectional re-translation (Story 4.5, added post-4.3):** Story 4.3 was
+create-only (a lone RU file missing its EN pair) and RU→EN-only by design.
+Story 4.5 lets the author re-run translation on a pair that already has
+content on both sides, in either direction, to refresh a stale side after
+editing the other — sequenced after 4.4 so it can extend that story's
+`ai-prompts.md` section scheme (direction-aware headings) rather than
+redesigning it.
+**Multi-provider extension (Stories 4.7–4.8, added post-4.1):** the Story 4.1
 Anthropic client was scoped single-provider on purpose (its own Non-goals said
-so explicitly). Once the core AI features (4.2–4.4) work end-to-end against it,
-Stories 4.5–4.6 generalize AI Server (Anthropic / OpenRouter / a custom local
+so explicitly). Once the core AI features (4.2–4.6) work end-to-end against it,
+Stories 4.7–4.8 generalize AI Server (Anthropic / OpenRouter / a custom local
 address) and API Protocol (Anthropic / OpenAI) into two independent choices —
 so the same features can run against OpenRouter or a local server (e.g. LM
 Studio, which speaks *both* protocols) without forking any downstream feature
@@ -599,7 +615,7 @@ So that AI features work without exposing the key.
 
 **Given** settings, **When** I enter an API key, **Then** it is stored in secure device storage (Keystore) and never logged or shown in plain text after entry. *(FR20, NFR5)*
 
-**Given** there is no official Anthropic Dart SDK, **When** the client is built, **Then** it calls the Messages API over raw HTTPS with SSE stream parsing and retry/error handling — a reusable client for translation (4.3) and grammar (4.4).
+**Given** there is no official Anthropic Dart SDK, **When** the client is built, **Then** it calls the Messages API over raw HTTPS with SSE stream parsing and retry/error handling — a reusable client for translation (4.3) and grammar (4.6).
 
 ### Story 4.2: Preview exactly what will be sent
 
@@ -625,9 +641,53 @@ So that I can fill missing translations fast.
 
 **Given** the draft arrives, **When** I review it, **Then** I can edit it and explicitly save to `.en.md`.
 
-**Release checkpoint:** this story is independently shippable; grammar (Story 4.4) is not required for it.
+**Release checkpoint:** this story is independently shippable; grammar (Story 4.6) is not required for it.
 
-### Story 4.4: Grammar / style findings
+### Story 4.4: Customize the AI translation prompt
+
+As the author,
+I want to override the AI translation instructions and conventions from a file in my synced repo,
+So that I can tune how the AI translates without waiting for an app update.
+
+**Context:** Story 4.3 hardcoded the "AI instructions" and "Conventions" text `runTranslate` sends as part of the FR22 context pack — tuning that text (matching the project's actual conventions as they evolve, or just improving translation quality) currently requires an app code change. This story makes both pieces optionally overridable from a plain file in the synced repo rather than an in-app settings page — this project's own philosophy treats files as the source of truth, and the file syncs automatically via Syncthing and is comfortable to edit with a real desktop text editor (a big multi-paragraph prompt is not comfortable to hand-edit on a phone keyboard). Sequenced **before** Story 4.5 (grammar findings) specifically so grammar's own prompt can reuse the same mechanism from the start instead of hardcoding it and needing this same refactor again.
+
+**Acceptance Criteria:**
+
+**Given** a file named `ai-prompts.md` at the repo root with a `# Translation Instructions` section, **When** I request a translation, **Then** that section's text replaces the app's hardcoded instructions in both the context preview and the request actually sent. *(FR29)*
+
+**Given** `ai-prompts.md` has a `# Conventions` section, **When** I request a translation, **Then** that section's text replaces the app's hardcoded conventions the same way.
+
+**Given** `ai-prompts.md` is missing, unreadable, or defines neither recognized section, **When** I request a translation, **Then** today's hardcoded defaults are used unchanged — this never blocks a translation, mirroring `lore-story.json`'s own missing/invalid handling (AD-8 / FR2 precedent).
+
+**Given** `ai-prompts.md` defines only one of the two sections, **When** I request a translation, **Then** only that piece is overridden — the other still falls back to its hardcoded default (a partial override, not all-or-nothing).
+
+**Non-goal:** no in-app editor for `ai-prompts.md` in this story — it is edited with any text editor on the synced repo, per the file-based-config decision. No change to Story 4.3's confirm gate, context-pack assembly shape, or the `AiClient` threading — this story only changes *where the instructions/conventions text comes from*.
+
+### Story 4.5: Re-translate an already-paired file, in either direction
+
+As the author,
+I want to re-run AI translation on a pair that already has content on both sides,
+So that I can refresh a translation after editing the other language, instead of only being able to create a translation that's missing entirely.
+
+**Context (KseiPo, 2026-08-08):** Story 4.3 built translation as create-only — the Translate action only ever appeared on the synthetic tab Story 2.9 adds for a lone `.ru.md` with no `.en.md`, and only ever ran RU→EN. In real use, a real pair (both `.ru.md` and `.en.md` already exist) needs to stay in sync as either side is edited — "I update text in one language and want to update the other version too." This story generalizes the rule: **Translate appears on a tab whenever the *other* language's tab has non-blank content**, and always translates FROM the other tab INTO the current one — regardless of whether the current tab is create-mode or already has saved content. That single rule subsumes Story 4.3's original RU→EN-create case, the mirrored EN→RU-create case (Story 2.18's synthetic RU tab), and this story's new case (refresh either side of a real, already-paired item).
+
+**Sequenced after Story 4.4** so it can extend that story's `ai-prompts.md` section scheme (adding direction-aware instruction headings) rather than redesigning a file format that just shipped. Backward-compatible: an existing unprefixed `# Translation Instructions` heading (Story 4.4's original, RU→EN-only shape) continues to mean the RU→EN variant.
+
+**Acceptance Criteria:**
+
+**Given** a real, already-paired item (both `.ru.md` and `.en.md` exist), **When** I open either tab, **Then** a Translate action is available on both — tapping it on the EN tab translates RU→EN (refreshing EN from the current RU buffer); tapping it on the RU tab translates EN→RU (refreshing RU from the current EN buffer). *(FR30)*
+
+**Given** the tab I'm translating INTO already has content — saved, unsaved, or both — **When** the translation completes and I would otherwise overwrite it, **Then** I'm asked to confirm replacing it before the buffer changes (regardless of whether that content had unsaved edits — a real, already-saved translation deserves the same protection as an unsaved draft).
+
+**Given** the EN→RU direction, **When** the context pack is assembled, **Then** the AI instructions and any wikilink-target translation guidance are worded for translating INTO Russian (not a copy-pasted RU→EN instruction applied backwards) — the same glossary and markup conventions apply either direction, but the direction-specific instructions text does not.
+
+**Given** Story 2.18's mirrored synthetic RU tab (an EN-original file with no RU pair yet), **When** I open it, **Then** Translate is now available there too (EN→RU, a create) — Story 4.3's AC5 restriction ("no Translate action on the mirrored tab") is superseded by this story's bidirectional support.
+
+**Given** everything Story 4.3 and Story 4.4 already shipped for the RU→EN create-only case, **When** this story ships, **Then** that exact scenario keeps working unchanged — this story only adds cases, it does not change RU→EN-create's existing behavior.
+
+**Non-goals:** automatic staleness detection (knowing *which* side is out of date without the author checking) — translation is still manually triggered, every time, per FR22's own "mandatory, not automatic" framing; canceling an in-flight translation (Story 4.3's own non-goal, unchanged); any change to how a translated buffer is saved (still an explicit Save, unchanged since Story 2.9).
+
+### Story 4.6: Grammar / style findings
 
 As the author,
 I want AI grammar/style feedback as a findings list,
@@ -637,7 +697,7 @@ So that I can improve prose while keeping my voice.
 
 **Given** a file, **When** I request a review, **Then** the app (after the FR22 preview) returns a structured findings list (`line`, `issue`, `suggestion`, `severity`) as a tappable list that jumps to the line — never a rewritten file. *(FR23)*
 
-### Story 4.5: Configure the AI server and protocol
+### Story 4.7: Configure the AI server and protocol
 
 As the author,
 I want to choose which AI server my requests go to and which API protocol it speaks, and verify the connection works,
@@ -653,9 +713,9 @@ So that I can use Anthropic directly, OpenRouter, or a server on my own local ne
 
 **Given** the existing Anthropic-direct configuration Story 4.1 shipped, **When** this story ships, **Then** it keeps working unchanged — the Anthropic-protocol client gains a configurable base URL and model (defaulting to Anthropic's own), so "Anthropic direct" and "a local server that speaks the Anthropic protocol" (e.g. LM Studio's Anthropic-compatible endpoint) both work through the same client, differing only in configuration.
 
-**Non-goal:** the OpenAI protocol itself isn't implemented yet — selecting it in this story only stores the choice; Story 4.6 makes it functional.
+**Non-goal:** the OpenAI protocol itself isn't implemented yet — selecting it in this story only stores the choice; Story 4.8 makes it functional.
 
-### Story 4.6: Connect via an OpenAI-compatible server
+### Story 4.8: Connect via an OpenAI-compatible server
 
 As the author,
 I want the app to be able to speak the OpenAI chat-completions protocol,

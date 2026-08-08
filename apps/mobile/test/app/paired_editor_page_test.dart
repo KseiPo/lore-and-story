@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/ai/ai.dart';
@@ -282,6 +284,156 @@ void main() {
       expect(button.onPressed, isNotNull,
           reason: 'must be retryable after a failure');
     });
+
+    testWidgets(
+        '(review fix) translates the RU tab\'s live unsaved buffer, not the '
+        'file on disk (Design decision 3)', (tester) async {
+      final storage = translationStorage();
+      final aiClient = FakeAiClient(response: 'ok');
+      await pumpPaired(tester, storage, translationItem(), aiClient: aiClient);
+
+      // Edit the RU buffer without saving — disk still holds the original.
+      await enterEditMode(tester);
+      await tester.enterText(find.byType(TextField), '# Сцена v2\nНовый текст.\n');
+      await tester.pump();
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('translate-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(aiClient.requests.single.userContent, '# Сцена v2\nНовый текст.\n');
+      expect(storage.writeCalls, isEmpty, reason: 'the RU edit was never saved');
+    });
+
+    testWidgets(
+        '(review fix) translate, then Save actually writes .en.md with the '
+        'translated content (AC4)', (tester) async {
+      final storage = translationStorage();
+      final aiClient = FakeAiClient(response: '# Scene\n\nTranslated prose.');
+      await pumpPaired(tester, storage, translationItem(), aiClient: aiClient);
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('translate-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.save_outlined));
+      await tester.pumpAndSettle();
+
+      expect(storage.writeCalls,
+          [('events/scene.en.md', '# Scene\n\nTranslated prose.')]);
+    });
+
+    testWidgets(
+        '(review fix) translating over a manually-edited EN draft asks '
+        'before overwriting it — "Keep editing" preserves the draft',
+        (tester) async {
+      final storage = translationStorage();
+      final aiClient = FakeAiClient(response: 'Translated.');
+      await pumpPaired(tester, storage, translationItem(), aiClient: aiClient);
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'My own draft');
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('translate-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      // Not pumpAndSettle: _translating is still true (the overwrite dialog
+      // appears before the spinner clears) — same class of continuous-
+      // animation deadlock as the context-preview sheet itself.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextField, 'My own draft'), findsOneWidget);
+      expect(find.text('Translated.'), findsNothing);
+    });
+
+    testWidgets(
+        '(review fix) confirming the overwrite replaces the manual draft '
+        'with the translation', (tester) async {
+      final storage = translationStorage();
+      final aiClient = FakeAiClient(response: 'Translated.');
+      await pumpPaired(tester, storage, translationItem(), aiClient: aiClient);
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'My own draft');
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('translate-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tester.tap(find.text('Discard'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextField, 'Translated.'), findsOneWidget);
+    });
+
+    testWidgets(
+        '(review fix) backing out while a translation is in flight is '
+        'blocked, not silently discarded', (tester) async {
+      final storage = translationStorage();
+      final aiClient = _ControllableAiClient();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () => Navigator.of(ctx).push(MaterialPageRoute<void>(
+                builder: (_) => PairedEditorPage(
+                    storage: storage,
+                    item: translationItem(),
+                    loreDir: '',
+                    aiClient: aiClient),
+              )),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('translate-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      // Translation is now in flight — the controllable stream never
+      // completes until we tell it to.
+
+      await tester.pageBack();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Still on the paired editor — the pop was blocked.
+      expect(find.byKey(const Key('translate-action')), findsOneWidget);
+      expect(find.text('A translation is still in progress.'), findsOneWidget);
+
+      aiClient.complete('# Scene\n\nDone.');
+      await tester.pumpAndSettle();
+    });
   });
 
   testWidgets('shows [RU][EN] tabs with RU selected by default (FR12)',
@@ -436,4 +588,20 @@ void main() {
       expect(find.byKey(const Key('lint-no-issues')), findsOneWidget);
     });
   });
+}
+
+/// An [AiClient] whose `sendMessage` stream stays open until [complete] is
+/// called — lets a test hold a translation "in flight" deliberately, unlike
+/// [FakeAiClient] which always resolves immediately.
+class _ControllableAiClient implements AiClient {
+  final _controller = StreamController<String>();
+
+  @override
+  Stream<String> sendMessage(AiRequest request) => _controller.stream;
+
+  void complete(String text) {
+    _controller
+      ..add(text)
+      ..close();
+  }
 }

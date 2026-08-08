@@ -261,8 +261,25 @@ class _PairedEditorPageState extends State<PairedEditorPage>
         ruText: _ruText,
       );
       if (result == null || !mounted) return;
-      final enVariant = _variants.firstWhere((v) => v.lang == 'en');
-      enVariant.key.currentState?.setText(result);
+      final enState = _variants.firstWhere((v) => v.lang == 'en').key.currentState;
+      // Review fix: a completed (and billed) translation must never vanish
+      // silently — tell the author instead of just clearing the spinner.
+      if (enState == null || !enState.isReady) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Translation ready, but the EN tab was not open to receive it — try again.')),
+        );
+        return;
+      }
+      // Review fix: a manually-edited (unsaved) EN draft must not be
+      // silently overwritten — confirm first, same as any other unsaved-edit
+      // loss in this app (AD-10 spirit).
+      if (enState.isDirty) {
+        final overwrite = await confirmDiscardUnsaved(context, lossy: false);
+        if (!overwrite || !mounted) return;
+      }
+      enState.setText(result);
     } finally {
       if (mounted) setState(() => _translating = false);
     }
@@ -272,9 +289,20 @@ class _PairedEditorPageState extends State<PairedEditorPage>
   Widget build(BuildContext context) {
     final active = _active;
     return PopScope(
-      canPop: !_anyDirty,
+      // Review fix: nothing is "dirty" yet while a translation is still
+      // streaming, so without `!_translating` the back gesture would silently
+      // discard a completed, paid-for result the moment it lands against an
+      // unmounted page (`_translate`'s own `if (!mounted) return;` guard).
+      canPop: !_anyDirty && !_translating,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _handlePop();
+        if (didPop) return;
+        if (_translating) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('A translation is still in progress.')),
+          );
+          return;
+        }
+        _handlePop();
       },
       child: Scaffold(
         appBar: AppBar(

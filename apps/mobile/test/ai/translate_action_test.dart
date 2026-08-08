@@ -52,6 +52,19 @@ Future<void> _pumpHost(
   ));
 }
 
+/// The rendered text of preview section [index] (`context-preview-section-N`,
+/// per `context_preview.dart`) — reads the actual `SelectableText` on screen
+/// rather than duplicating the private constants `translate_action.dart`
+/// builds them from, so a test comparing "previewed" against "sent" is
+/// comparing against what the author actually saw, not a guess at it.
+String _sectionText(WidgetTester tester, int index) {
+  final finder = find.descendant(
+    of: find.byKey(Key('context-preview-section-$index')),
+    matching: find.byType(SelectableText),
+  );
+  return tester.widget<SelectableText>(finder).data ?? '';
+}
+
 void main() {
   testWidgets(
       'shows the context preview with exactly the 4 expected sections, '
@@ -111,18 +124,26 @@ void main() {
     await tester.tap(find.text('translate'));
     await tester.pumpAndSettle();
 
+    // (Review fix) Read exactly what was previewed BEFORE confirming, so the
+    // comparison below is against what the author actually saw on screen —
+    // not a guess or a `contains` substring check.
+    final instructionsText = _sectionText(tester, 0);
+    final glossaryText = _sectionText(tester, 2);
+    final conventionsText = _sectionText(tester, 3);
+
     await tester.tap(find.byKey(const Key('context-preview-confirm')));
     await tester.pumpAndSettle();
 
     expect(result, 'Hello there.');
     expect(aiClient.requests, hasLength(1));
     expect(aiClient.requests.single.userContent, '# Селена\n');
-    // Every previewed section's content must be byte-for-byte in what was
-    // actually sent (AD-11) — not just similar/paraphrased.
-    expect(aiClient.requests.single.system, contains('Selena'));
-    expect(aiClient.requests.single.system, contains('Фрэнк'));
-    expect(aiClient.requests.single.system,
-        contains('Name (emotion): phrase'));
+    // (Review fix — AD-11) The sent `system` prompt must be EXACTLY the
+    // concatenation of the previewed sections — byte-for-byte, not merely
+    // "contains" — with no additional label/glue text the author never saw.
+    expect(
+      aiClient.requests.single.system,
+      [instructionsText, glossaryText, conventionsText].join('\n\n'),
+    );
   });
 
   testWidgets('cancelling the preview returns null without calling '
@@ -209,6 +230,87 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(result, isNull);
     expect(find.byType(SnackBar), findsOneWidget);
+  });
+
+  testWidgets(
+      '(review fix) a project with no other lore entries shows an honest '
+      'placeholder in the Glossary terms section instead of a blank one',
+      (tester) async {
+    await _pumpHost(
+      tester,
+      storage: FakeRepoStorage('/repo'), // no dirEntries — zero entities
+      aiClient: FakeAiClient(response: 'x'),
+      ruText: 'text',
+      onResult: (_) {},
+    );
+    await tester.tap(find.text('translate'));
+    await tester.pumpAndSettle();
+
+    expect(_sectionText(tester, 2),
+        '(no other lore entries found in this project)');
+  });
+
+  testWidgets(
+      '(review fix) an empty/whitespace-only AI response is treated as a '
+      'failure, not a successful empty translation (AC3/AD-8)',
+      (tester) async {
+    // Default FakeAiClient() with no `response` configured yields nothing —
+    // exactly the shape a misbehaving stream produces.
+    final aiClient = FakeAiClient();
+    String? result = 'unset';
+    await _pumpHost(
+      tester,
+      storage: _storageWithEntities(),
+      aiClient: aiClient,
+      ruText: 'text',
+      onResult: (r) => result = r,
+    );
+    await tester.tap(find.text('translate'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('context-preview-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(result, isNull);
+    expect(find.text('The AI returned an empty translation. Please try again.'),
+        findsOneWidget);
+  });
+
+  testWidgets(
+      '(review fix) requests a generous maxTokens for a full scene '
+      'translation, not the port\'s tight 8192 default', (tester) async {
+    final aiClient = FakeAiClient(response: 'ok');
+    await _pumpHost(
+      tester,
+      storage: _storageWithEntities(),
+      aiClient: aiClient,
+      ruText: 'text',
+      onResult: (_) {},
+    );
+    await tester.tap(find.text('translate'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('context-preview-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(aiClient.requests.single.maxTokens, greaterThan(8192));
+  });
+
+  testWidgets(
+      '(review fix) the conventions tell the model to update the scene '
+      'header\'s lang: field, not copy lang: ru verbatim', (tester) async {
+    await _pumpHost(
+      tester,
+      storage: _storageWithEntities(),
+      aiClient: FakeAiClient(response: 'x'),
+      ruText: 'text',
+      onResult: (_) {},
+    );
+    await tester.tap(find.text('translate'));
+    await tester.pumpAndSettle();
+
+    final conventions = _sectionText(tester, 3);
+    expect(conventions, contains('lang: ru'));
+    expect(conventions, contains('lang: en'));
   });
 }
 

@@ -31,7 +31,26 @@ const String _kConventions = '''
 - Player-choice / passage links: `[[Choice text->Passage Name]]` or `[[Choice text|Passage Name]]` — translate the choice text (the label before the separator); never translate or alter the Passage Name (the target after the separator) — it is an identifier, not prose.
 - Return links: `[[back<-Label]]` — translate the Label only; the backlink form itself never changes.
 - Em-dash conditional markers: `— если … — иначе … — конец условия —` — these delimit authoring conditionals, not prose to render; preserve the em-dash markers and translate only the human-readable text between them.
-- `[[Title]]` with no separator is a lore-entity wikilink (not a passage jump) — translate Title to that entity's English form from the glossary when the glossary lists one; otherwise leave it unchanged rather than guessing.''';
+- `[[Title]]` with no separator is a lore-entity wikilink (not a passage jump) — translate Title to that entity's English form from the glossary when the glossary lists one; otherwise leave it unchanged rather than guessing.
+- A file may open with a `<!-- scene ⇄ passage: "Passage Name" · lang: ru -->` comment — keep the passage name unchanged, but update `lang: ru` to `lang: en` in the translated output; if no such comment exists, do not add one.''';
+
+/// Review fix: a full scene plus glossary and conventions is a few thousand
+/// input tokens (MOBILE.md §6.4), but the translated *output* of a full
+/// scene can run to several thousand tokens on its own, and
+/// `thinking: {type: 'adaptive'}` (`messages_api_client.dart`) draws from the
+/// same budget as the visible response — the port's own 8192 default leaves
+/// too little headroom for "a full scene translation is genuinely long
+/// output" (Design decision 6). Doubled: still bounded, comfortably covers a
+/// full scene.
+const int _kMaxTokens = 16384;
+
+/// Placeholder shown (and sent) for the `Glossary terms` section when the
+/// project genuinely has no other lore entries — `loadLore` degrades an
+/// empty/unreadable `loreDir` to zero entries rather than throwing (AD-8), so
+/// an empty glossary is a real, silent outcome that must still be shown
+/// honestly (Review fix) rather than sent as a blank, easy-to-miss section.
+const String _kNoGlossaryPlaceholder =
+    '(no other lore entries found in this project)';
 
 /// Runs the Story 4.3 RU→EN translate flow: assembles the FR22 context pack
 /// (this file, the alias glossary, the prose conventions, and the fixed
@@ -52,7 +71,9 @@ Future<String?> runTranslate(
   final String glossaryText;
   try {
     final model = await loadLore(storage, loreDir);
-    glossaryText = model.entries.map((e) => e.aliases.join(', ')).join('\n');
+    glossaryText = model.entries.isEmpty
+        ? _kNoGlossaryPlaceholder
+        : model.entries.map((e) => e.aliases.join(', ')).join('\n');
   } catch (_) {
     if (context.mounted) {
       _showError(context, 'Could not build the translation glossary.');
@@ -61,29 +82,45 @@ Future<String?> runTranslate(
   }
   if (!context.mounted) return null;
 
-  final sections = [
-    const ContextSection(label: 'AI instructions', text: _kInstructions),
-    ContextSection(label: 'The file', text: ruText),
-    ContextSection(label: 'Glossary terms', text: glossaryText),
-    const ContextSection(label: 'Conventions', text: _kConventions),
-  ];
+  // Review fix (AD-11): the sent `system` prompt is built ONLY by
+  // concatenating these same section texts below (never any additional
+  // label/glue text) so what's previewed is provably, byte-for-byte, what's
+  // sent — not just similar to it.
+  const instructions = ContextSection(label: 'AI instructions', text: _kInstructions);
+  final file = ContextSection(label: 'The file', text: ruText);
+  final glossary = ContextSection(label: 'Glossary terms', text: glossaryText);
+  const conventions = ContextSection(label: 'Conventions', text: _kConventions);
+  final sections = [instructions, file, glossary, conventions];
 
   final confirmed = await showContextPreview(context, sections: sections);
   if (!confirmed) return null;
   if (!context.mounted) return null;
 
   final systemPrompt =
-      '$_kInstructions\n\nProse conventions to preserve:\n$_kConventions\n\n'
-      'Glossary — name variants (keep every mention of an entity consistent '
-      'with one of its listed forms):\n$glossaryText';
-  final request = AiRequest(system: systemPrompt, userContent: ruText);
+      [instructions.text, glossary.text, conventions.text].join('\n\n');
+  final request = AiRequest(
+    system: systemPrompt,
+    userContent: file.text,
+    maxTokens: _kMaxTokens,
+  );
 
   try {
     final buffer = StringBuffer();
     await for (final chunk in aiClient.sendMessage(request)) {
       buffer.write(chunk);
     }
-    return buffer.toString();
+    final translated = buffer.toString();
+    // Review fix: a stream that yields nothing (or only whitespace) is a
+    // real, silent failure shape — never treat it as a successful, if empty,
+    // translation (AD-8 — never lie by omission, mirroring Story 4.2's own
+    // "an empty list is a real state to show" precedent).
+    if (translated.trim().isEmpty) {
+      if (context.mounted) {
+        _showError(context, 'The AI returned an empty translation. Please try again.');
+      }
+      return null;
+    }
+    return translated;
   } on AiClientException catch (e) {
     if (context.mounted) _showError(context, e.message);
     return null;
