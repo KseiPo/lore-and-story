@@ -1,5 +1,5 @@
 # generated: 2026-07-20
-# last_updated: 2026-08-07
+# last_updated: 2026-08-08
 # project: Lore & Story
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-20
-last_updated: 2026-08-07
+last_updated: 2026-08-08
 project: Lore & Story
 project_key: NOKEY
 tracking_system: file-system
@@ -89,7 +89,9 @@ development_status:
   # Epic 4: AI writing assist (AI phases)
   epic-4: in-progress
   4-1-configure-an-ai-key-and-stand-up-the-api-client: done
-  4-2-preview-exactly-what-will-be-sent: backlog
+  4-2-preview-exactly-what-will-be-sent: done
   4-3-translate-ru-en-release-checkpoint: backlog
   4-4-grammar-style-findings: backlog
+  4-5-configure-the-ai-server-and-protocol: backlog
+  4-6-connect-via-an-openai-compatible-server: backlog
   epic-4-retrospective: optional
