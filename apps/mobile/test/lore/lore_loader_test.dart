@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/lore/lore.dart';
+import 'package:lore_and_story/storage/storage.dart';
+
+import '../fakes.dart';
 
 /// Direct unit tests for the pure helpers. The golden fixtures
 /// (`lore_model_fixtures_test.dart`) are the contract; these pin the individual
@@ -131,6 +134,58 @@ void main() {
 
     test('returns null when there is no marker', () {
       expect(passageOf('# Just a card\n'), isNull);
+    });
+  });
+
+  group('loadLore — Story 4.4 review fix', () {
+    test('ai-prompts.md at the repo root is never walked as a lore entity, '
+        'even when loreDir is the repo root (this app\'s own default)',
+        () async {
+      final storage = FakeRepoStorage(
+        '/repo',
+        dirEntries: {
+          '': [
+            RepoEntry(name: 'frank.md', path: 'frank.md', isDirectory: false),
+            RepoEntry(
+                name: 'ai-prompts.md', path: 'ai-prompts.md', isDirectory: false),
+          ],
+        },
+        fileContents: {
+          'frank.md': '# Frank\n',
+          'ai-prompts.md': '# Translation Instructions\nCustom text.\n',
+        },
+      );
+
+      final model = await loadLore(storage, '');
+
+      expect(model.entries.map((e) => e.id), ['frank.md']);
+      expect(model.entries.any((e) => e.title == 'Translation Instructions'),
+          isFalse);
+    });
+
+    test('a real lore entity named similarly (not an exact root-path match) '
+        'still loads normally', () async {
+      final storage = FakeRepoStorage(
+        '/repo',
+        dirEntries: {
+          '': [
+            RepoEntry(name: 'notes', path: 'notes', isDirectory: true),
+          ],
+          'notes': [
+            RepoEntry(
+                name: 'ai-prompts.md',
+                path: 'notes/ai-prompts.md',
+                isDirectory: false),
+          ],
+        },
+        fileContents: {
+          'notes/ai-prompts.md': '# My Notes About AI\n',
+        },
+      );
+
+      final model = await loadLore(storage, '');
+
+      expect(model.entries.map((e) => e.id), ['notes/ai-prompts.md']);
     });
   });
 }

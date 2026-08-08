@@ -81,6 +81,21 @@ const Set<String> kSyncerMetadataNames = {
 bool isSyncerMetadata(String name) =>
     kSyncerMetadataNames.contains(name.toLowerCase());
 
+/// Repo-root-relative path of the Story 4.4 AI-prompt override file — must
+/// never be treated as lore content, even though it ends in `.md` (so the
+/// generic `.md` → entity rule below would otherwise pick it up) and this
+/// app's own default `loreDir` is the repo root itself (`ProjectConfig`'s own
+/// doc comment: "the picked folder is the lore folder") — exactly the
+/// "reachable when the repo root *is* the lore folder" case `_isSkippedWalkDir`
+/// already calls out above, just for a filename that story didn't anticipate.
+/// `lore-story.json` never needed this (not `.md`).
+///
+/// Review fix: duplicated as a literal, not imported from `ai/ai_prompt_config
+/// .dart`'s `kAiPromptConfigFile` — `lore/` must not depend on `ai/` (AD-12;
+/// the established direction is the other way). Keep this in sync if that
+/// name ever changes.
+const String _kAiPromptConfigFileName = 'ai-prompts.md';
+
 /// Directories the walk never descends into: `media/` (binary assets, shared
 /// contract) and **every dot-prefixed folder** — the same rule the browse UI
 /// uses (`app/browse_filter.dart`). A 3-name allowlist was too weak: it let the
@@ -253,7 +268,8 @@ class _LoreLoader {
       } else if (isConflictCopy(item.name)) {
         // Surfaced, never parsed as an entity (FR17).
         _recordConflict(item.path);
-      } else if (item.name.endsWith('.md')) {
+      } else if (item.name.endsWith('.md') &&
+          item.path != _kAiPromptConfigFileName) {
         await _addEntry(item.path, category.isEmpty ? 'general' : category, null);
       }
     }

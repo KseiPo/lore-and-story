@@ -1,8 +1,8 @@
 # Lore & Story — Technical Reference
 
-*Contracts, technology choices, conventions and architectural decisions.
+_Contracts, technology choices, conventions and architectural decisions.
 Companion to [IDEA.md](IDEA.md) (the "why"); this document is the "how".
-Last updated: 2026-07-14.*
+Last updated: 2026-07-14._
 
 ## 1. Architectural decisions (ADRs)
 
@@ -16,12 +16,12 @@ Last updated: 2026-07-14.*
    underneath. Mobile edits markdown only (lore, scenes) and never twee;
    with a single author and small per-entity files, conflicts are rare and
    surface as the syncer's conflict copies rather than app logic.
-   *Re-examined 2026-07-16 and held, with two caveats worth tracking: the
+   _Re-examined 2026-07-16 and held, with two caveats worth tracking: the
    "any folder syncer works" premise is less free than it reads (on Android it
    forces an all-files-access permission, and Syncthing-Android's maintenance
    has changed hands twice), and embedding git would drop "never syncs /
    authenticates" while keeping "never merges" if one-tap commits are ever
-   wanted. Evaluation and trigger conditions: [MOBILE.md](MOBILE.md) §3.1, §3.3.*
+   wanted. Evaluation and trigger conditions: [MOBILE.md](MOBILE.md) §3.1, §3.3._
 3. **Shallow, config-driven twee parsing.** The parser extracts passage
    headers and link expressions; it never interprets SugarCube beyond that and
    leaves all other text untouched. Project-specific navigation (custom
@@ -42,13 +42,13 @@ Last updated: 2026-07-14.*
    git, and AI tools without any export step. Structure comes from folders and
    a few optional inline conventions, never from a schema that makes writing
    feel like data entry.
-8. **The story text exists in two representations.** Plain-prose *scene files*
+8. **The story text exists in two representations.** Plain-prose _scene files_
    (markdown, §3.3) and twee passages are two views of the same narrative,
    linked by passage name. Scenes are where prose is written and revised;
    passages are the playable form. Missing scene files are recovered from
    passages by stripping markup; after that, changes on either side are
    propagated by an AI-assisted, review-first bridge — never silently (§3.3).
-   The author edits *real* files on both layers; there is no separate
+   The author edits _real_ files on both layers; there is no separate
    "drafts" staging area.
 9. **Story and lore are separate views over one data layer.** The passage-flow
    view and the lore view are independent UIs (own sidebar, graph, detail
@@ -60,18 +60,18 @@ Last updated: 2026-07-14.*
 
 ## 2. Components & technology
 
-| Component | Status | Technology | Notes |
-|---|---|---|---|
-| Core: twee parser + analysis | working (POC) | Node.js, plain CommonJS, zero deps | `lib/twee-parser.js` |
-| Core: lore model + graph | working (POC) | Node.js, plain CommonJS | `lib/lore.js` — entity folders, sub-entries, mention + wikilink edges |
-| Core: graph-view library | working (POC) | Cytoscape.js + dagre/cose (browser) | `public/graph-view.js` — shared by both views (ADR 6) |
-| UI: story-flow view | working (POC) | vanilla JS module | `public/story-view.js` |
-| UI: lore view | working (POC) | vanilla JS module | `public/lore-view.js` — entity graph + markdown detail |
-| Core: scene↔passage bridge | planned | AI-assisted diff + propagation | extraction (twee → scene md) first; drift sync later; always review-first |
-| Desktop app | POC | Express server + vanilla JS/HTML/CSS, SSE for live reload | later: same UI wrapped in Tauri for folder picker / tray / installer |
-| Mobile app | designed, pre-scaffold | Flutter (Android first) | writes/edits lore + scene markdown; twee read-only; no shared UI code. Design + ADRs: **[MOBILE.md](MOBILE.md)** (`apps/mobile/`) |
-| AI integration | planned | provider-agnostic; context packs assembled from repo files; possibly MCP server over the story model | kills the copy-paste loop. On mobile the shape is decided: direct API calls with a user-configured key ([MOBILE.md](MOBILE.md) ADR 7) — MCP needs an agent runtime the phone lacks |
-| Sync | out of scope by design | Syncthing / Dropbox / git — user's choice | see ADR 2 |
+| Component                    | Status                 | Technology                                                                                           | Notes                                                                                                                                                                              |
+| ---------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core: twee parser + analysis | working (POC)          | Node.js, plain CommonJS, zero deps                                                                   | `lib/twee-parser.js`                                                                                                                                                               |
+| Core: lore model + graph     | working (POC)          | Node.js, plain CommonJS                                                                              | `lib/lore.js` — entity folders, sub-entries, mention + wikilink edges                                                                                                              |
+| Core: graph-view library     | working (POC)          | Cytoscape.js + dagre/cose (browser)                                                                  | `public/graph-view.js` — shared by both views (ADR 6)                                                                                                                              |
+| UI: story-flow view          | working (POC)          | vanilla JS module                                                                                    | `public/story-view.js`                                                                                                                                                             |
+| UI: lore view                | working (POC)          | vanilla JS module                                                                                    | `public/lore-view.js` — entity graph + markdown detail                                                                                                                             |
+| Core: scene↔passage bridge   | planned                | AI-assisted diff + propagation                                                                       | extraction (twee → scene md) first; drift sync later; always review-first                                                                                                          |
+| Desktop app                  | POC                    | Express server + vanilla JS/HTML/CSS, SSE for live reload                                            | later: same UI wrapped in Tauri for folder picker / tray / installer                                                                                                               |
+| Mobile app                   | designed, pre-scaffold | Flutter (Android first)                                                                              | writes/edits lore + scene markdown; twee read-only; no shared UI code. Design + ADRs: **[MOBILE.md](MOBILE.md)** (`apps/mobile/`)                                                  |
+| AI integration               | planned                | provider-agnostic; context packs assembled from repo files; possibly MCP server over the story model | kills the copy-paste loop. On mobile the shape is decided: direct API calls with a user-configured key ([MOBILE.md](MOBILE.md) ADR 7) — MCP needs an agent runtime the phone lacks |
+| Sync                         | out of scope by design | Syncthing / Dropbox / git — user's choice                                                            | see ADR 2                                                                                                                                                                          |
 
 Environment: Node.js ≥ 20, no build step for the POC (vendor libs served from
 `node_modules`). TypeScript may be introduced when the core stabilizes; not
@@ -110,6 +110,7 @@ folder path (relative to `lore/`) up to the entity.
 
 ```markdown
 # Display Title
+
 aliases: nickname, alternate spelling, callsign
 
 Free markdown body. May reference other entries as [[Display Title]]
@@ -120,9 +121,9 @@ Free markdown body. May reference other entries as [[Display Title]]
 
 - A `.md` file in a category folder is a **simple entity**.
 - A folder containing `index.md` **or** `<folder-name>.md` is an **entity
-  folder**: that file is the entity *card*; every other `.md` inside it
+  folder**: that file is the entity _card_; every other `.md` inside it
   (recursively) is a **sub-entry** attached to the entity. The sub-entry's
-  *group* is its subfolder path (`quests/`, `events/`, …) — used to organize
+  _group_ is its subfolder path (`quests/`, `events/`, …) — used to organize
   the detail panel and, later, the editor.
 - A folder **without** such an index file is just a (sub)category; the walk
   descends into it.
@@ -148,7 +149,7 @@ consumer; growing one into the other is just `mkdir` + move.
 `GET /api/data` also returns `lore` and `loreEdges`:
 
 - `lore[]`: `id, title, aliases, category, file, relDir, text, tree,
-  children[], mentionedIn[]`, where `mentionedIn[]` are passage names and
+children[], mentionedIn[]`, where `mentionedIn[]` are passage names and
   `children[]` is the entity's sub-entries flattened (for mentions and the
   wikilink graph): `{id, title, group, text}`. The entity card is **not** among
   its own children — it is not a sub-entry of itself (§3.2).
@@ -175,7 +176,7 @@ fixtures with the contract, not after it.
 Imported character docs fuse **three** kinds of content that must be separated
 (pilot: Selena, 2026-07-14 — 132 KB file → 6.5 KB card + design + 14 scenes):
 
-1. **Card** (`selena.md`) — the character *bible*: profile block (type,
+1. **Card** (`selena.md`) — the character _bible_: profile block (type,
    faction, age, occupation, location, want/need/fear), character, past,
    memories, portrait prompt. Compact; this is what the lore node/detail shows.
 2. **Design** (`arc.md`, a root sub-entry) — relationship-level progression,
@@ -216,6 +217,7 @@ both are valid and the bridge treats them the same.
 
 ```markdown
 # <Scene Title>
+
 <!-- scene ⇄ passage: "Selena - Echoes of the Past" · lang: en -->
 
 Plain readable prose. No SugarCube macros, no HTML, no game logic —
@@ -225,8 +227,8 @@ twee exists only in the final passages.
 **Prose conventions** (enforced across lore 2026-07-14):
 
 - Dialogue: `Name (emotion): phrase.` — e.g. `Селена (спокойно): Иногда
-  техника чувствует, когда на неё злятся.` Emotion is optional.
-- Inner monologue: `Мысль: …` (RU) / `*Thought:* …` (EN).
+техника чувствует, когда на неё злятся.` Emotion is optional.
+- Inner monologue: `Мысль: …` (RU) / `Thought: …` (EN).
 - Variable placeholders: readable square brackets — `[имя героя]`,
   `[награда]`, `[станция назначения]` — never `<<=$var>>`.
 - Player choices / passage links — unified bracket form (2026-08-05,
@@ -254,7 +256,7 @@ twee exists only in the final passages.
 - English-only scenes are legitimate (original lost or authored in EN);
   a lone `.en.md` is not a defect.
 - Authoring conditionals: em-dash markers — `— если игрок знаком с доктором
-  Джулией — … — иначе — … — конец условия —`.
+Джулией — … — иначе — … — конец условия —`.
 - `[[Wikilinks]]` (no separator) are lore entity references (cards/overviews).
   A `[[...]]` pair **with** a separator (`->`, `|`, `<-`) is a scene-navigation
   link instead (2026-08-05) — see the passage/return link forms above.
@@ -270,7 +272,7 @@ twee exists only in the final passages.
   the seed of the M3 bridge. Where absent, the first heading / filename maps
   by name.
 - **Origin, either direction:** written first as prose and later transformed
-  into a passage, or *recovered* from an existing passage by stripping markup
+  into a passage, or _recovered_ from an existing passage by stripping markup
   (macros, HTML, code) — how the layer gets bootstrapped for a story that
   already has hundreds of passages.
 - Scene files are where prose revision, AI editing and translation happen;
@@ -287,17 +289,17 @@ reviewable diff, never applied silently.
 
 ### 3.4 Per-project config (`lore-story.json` in the story repo)
 
-Describes the *story project*, so it belongs in the story repo (currently the
+Describes the _story project_, so it belongs in the story repo (currently the
 POC keeps a global `config.json` in the tool repo — to be migrated).
 
 ```jsonc
 {
-  "storyDir": "src/twee",        // passage root, relative to the repo
+  "storyDir": "src/twee", // passage root, relative to the repo
   "loreDir": "lore",
   "scenesDir": "scenes",
-  "codeDirs": ["src/scripts"],   // scanned for passage-name literals
-  "linkMacros": ["backLink"],    // custom widgets: first arg = passage target
-  "dynamicTags": ["dream"]       // tags meaning "reached at runtime"
+  "codeDirs": ["src/scripts"], // scanned for passage-name literals
+  "linkMacros": ["backLink"], // custom widgets: first arg = passage target
+  "dynamicTags": ["dream"], // tags meaning "reached at runtime"
 }
 ```
 
@@ -322,7 +324,7 @@ POC keeps a global `config.json` in the tool repo — to be migrated).
     `include`, `stored` (assignment of a passage name to a variable),
     `dynamic` (unresolvable expression)
 - `issues`: `orphans, broken, dynamic, endings, dynamicTagged, composed,
-  codeReferenced`
+codeReferenced`
 - `codeRefs`: passage name → the files whose string literals reference it —
   `codeDirs` sources **and** twee source (§4 layer 3), not scripts only.
 
@@ -333,7 +335,7 @@ This shape is the contract between core and any UI; extend, don't break.
 Applied in order when deciding whether a passage is an orphan; each layer is
 independent and configurable:
 
-1. **Static links** — all `kind`s above except `dynamic`, extracted from *all*
+1. **Static links** — all `kind`s above except `dynamic`, extracted from _all_
    passages (widgets and specials navigate too).
 2. **Stored references** — `<<set $var to 'Name'>>` where the string equals an
    existing passage name (deferred `<<goto $var>>` pattern). Non-matching
@@ -343,7 +345,7 @@ independent and configurable:
 4. **Tag exemption** — passages tagged with any `dynamicTags` entry.
 5. **Composed names** — word-break segmentation: the name can be assembled
    from 2+ string literals found in the corpus (case-insensitive, separators
-   ` - `, `_`, ` `). Reported as its own category, not silently accepted.
+   `-`, `_`, ` `). Reported as its own category, not silently accepted.
 
 Validated result on the reference project (367 passages, ~45% of navigation
 data-driven): 139 false orphans → 2 true findings, 0 false broken links.

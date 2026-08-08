@@ -5,19 +5,65 @@ import 'package:lore_and_story/storage/storage.dart';
 
 import '../fakes.dart';
 
+// Review fix: the two lore-entity seed maps below are the single source both
+// `_storageWithEntities` and `_storageWithPromptOverride` build from, so they
+// can never silently drift apart (previously hand-duplicated in each).
+final Map<String, List<RepoEntry>> _kEntityDirEntries = {
+  '': [
+    RepoEntry(name: 'selena.md', path: 'selena.md', isDirectory: false),
+    RepoEntry(name: 'frank.md', path: 'frank.md', isDirectory: false),
+  ],
+};
+const Map<String, String> _kEntityFileContents = {
+  'selena.md': '# Selena\naliases: Селена\n',
+  'frank.md': '# Frank\naliases: Фрэнк\n',
+};
+
 FakeRepoStorage _storageWithEntities() => FakeRepoStorage(
       '/repo',
-      dirEntries: {
-        '': [
-          RepoEntry(name: 'selena.md', path: 'selena.md', isDirectory: false),
-          RepoEntry(name: 'frank.md', path: 'frank.md', isDirectory: false),
-        ],
-      },
-      fileContents: {
-        'selena.md': '# Selena\naliases: Селена\n',
-        'frank.md': '# Frank\naliases: Фрэнк\n',
-      },
+      dirEntries: _kEntityDirEntries,
+      fileContents: _kEntityFileContents,
     );
+
+/// Story 4.4: [_storageWithEntities]'s same entities plus an `ai-prompts.md`
+/// override file built from whichever of [instructions]/[conventions] is
+/// given (a null piece is simply omitted from the file, not written as an
+/// empty heading).
+FakeRepoStorage _storageWithPromptOverride({
+  String? instructions,
+  String? conventions,
+}) {
+  final buffer = StringBuffer();
+  if (instructions != null) {
+    buffer.writeln('# Translation Instructions');
+    buffer.writeln(instructions);
+  }
+  if (conventions != null) {
+    buffer.writeln('# Conventions');
+    buffer.writeln(conventions);
+  }
+  return FakeRepoStorage(
+    '/repo',
+    // Review fix: ai-prompts.md is listed in dirEntries too, not just
+    // fileContents — matching a real filesystem, where a readable file is
+    // always present in its parent's listing (the previous fixture omitted
+    // this, which is exactly why the lore-entity-pollution bug this review
+    // found was never exercisable by these tests in the first place).
+    dirEntries: {
+      '': [
+        ..._kEntityDirEntries['']!,
+        RepoEntry(
+            name: kAiPromptConfigFile,
+            path: kAiPromptConfigFile,
+            isDirectory: false),
+      ],
+    },
+    fileContents: {
+      ..._kEntityFileContents,
+      kAiPromptConfigFile: buffer.toString(),
+    },
+  );
+}
 
 /// Pumps a minimal host with a button that runs [runTranslate] and records
 /// the resolved value, so tests drive it via real widget interactions (tap
@@ -311,6 +357,139 @@ void main() {
     final conventions = _sectionText(tester, 3);
     expect(conventions, contains('lang: ru'));
     expect(conventions, contains('lang: en'));
+  });
+
+  testWidgets(
+      '(Story 4.4) an ai-prompts.md override replaces both pieces in the '
+      'preview and in exactly what\'s sent, byte-for-byte (AC1, AC2)',
+      (tester) async {
+    final aiClient = FakeAiClient(response: 'ok');
+    await _pumpHost(
+      tester,
+      storage: _storageWithPromptOverride(
+        instructions: 'My custom instructions.',
+        conventions: 'My custom conventions.',
+      ),
+      aiClient: aiClient,
+      ruText: 'text',
+      onResult: (_) {},
+    );
+    await tester.tap(find.text('translate'));
+    await tester.pumpAndSettle();
+
+    // (Review fix) Bound to the specific section index — proves the override
+    // landed in the SECTION it's supposed to, not just somewhere on screen
+    // (a regression that swapped instructions/conventions would previously
+    // have passed this test unnoticed via a global `find.text`).
+    expect(_sectionText(tester, 0), 'My custom instructions.');
+    expect(_sectionText(tester, 3), 'My custom conventions.');
+
+    final instructionsText = _sectionText(tester, 0);
+    final glossaryText = _sectionText(tester, 2);
+    final conventionsText = _sectionText(tester, 3);
+
+    await tester.tap(find.byKey(const Key('context-preview-confirm')));
+    await tester.pumpAndSettle();
+
+    // (Review fix — AD-11) Byte-for-byte, not `contains` — the same standard
+    // Story 4.3's own review established for this exact property.
+    expect(
+      aiClient.requests.single.system,
+      [instructionsText, glossaryText, conventionsText].join('\n\n'),
+    );
+  });
+
+  testWidgets(
+      '(Story 4.4) overriding only one piece leaves the other on its '
+      'hardcoded default, in both what\'s shown and what\'s sent '
+      '(AC4, partial override)', (tester) async {
+    final aiClient = FakeAiClient(response: 'ok');
+    await _pumpHost(
+      tester,
+      storage: _storageWithPromptOverride(conventions: 'My custom conventions.'),
+      aiClient: aiClient,
+      ruText: 'text',
+      onResult: (_) {},
+    );
+    await tester.tap(find.text('translate'));
+    await tester.pumpAndSettle();
+
+    expect(_sectionText(tester, 3), 'My custom conventions.');
+    // Instructions were never overridden — the hardcoded default still shows,
+    // bound to the instructions section specifically.
+    expect(_sectionText(tester, 0), contains('You are translating a Russian'));
+
+    // (Review fix) The previous version of this test stopped here, verifying
+    // only the "shows" half of AC4 — confirm and check what's actually sent.
+    await tester.tap(find.byKey(const Key('context-preview-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(aiClient.requests.single.system, contains('My custom conventions.'));
+    expect(aiClient.requests.single.system,
+        contains('You are translating a Russian'));
+  });
+
+  testWidgets(
+      '(Story 4.4) a missing ai-prompts.md is exactly as safe as before this '
+      'story (AC3, AC8 — no regression)', (tester) async {
+    await _pumpHost(
+      tester,
+      storage: _storageWithEntities(), // no ai-prompts.md seeded
+      aiClient: FakeAiClient(response: 'ok'),
+      ruText: 'text',
+      onResult: (_) {},
+    );
+    await tester.tap(find.text('translate'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('You are translating a Russian'), findsOneWidget);
+    expect(find.textContaining('Dialogue lines are'), findsOneWidget);
+  });
+
+  testWidgets(
+      '(Story 4.4, AC6) ai-prompts.md is re-read on every translate — an '
+      'edit between two calls is reflected on the second, not cached from '
+      'the first', (tester) async {
+    final storage = _storageWithPromptOverride(conventions: 'Version one.');
+    final aiClient = FakeAiClient(response: 'ok');
+
+    // First translate: sees "Version one.".
+    await _pumpHost(
+      tester,
+      storage: storage,
+      aiClient: aiClient,
+      ruText: 'text',
+      onResult: (_) {},
+    );
+    await tester.tap(find.text('translate'));
+    await tester.pumpAndSettle();
+    expect(_sectionText(tester, 3), 'Version one.');
+    await tester.tap(find.byKey(const Key('context-preview-confirm')));
+    await tester.pumpAndSettle();
+    expect(aiClient.requests.single.system, contains('Version one.'));
+
+    // Edit the file directly on the same storage instance, as a desktop
+    // editor would between two translate requests.
+    await storage.writeAtomic(
+        kAiPromptConfigFile, '# Conventions\nVersion two.\n');
+
+    // Second translate, same running app (fresh host so the button is usable
+    // again — the underlying storage instance, and therefore the file, is
+    // unchanged): must reflect the edit, not a value cached from the first.
+    await _pumpHost(
+      tester,
+      storage: storage,
+      aiClient: aiClient,
+      ruText: 'text',
+      onResult: (_) {},
+    );
+    await tester.tap(find.text('translate'));
+    await tester.pumpAndSettle();
+    expect(_sectionText(tester, 3), 'Version two.');
+    await tester.tap(find.byKey(const Key('context-preview-confirm')));
+    await tester.pumpAndSettle();
+    expect(aiClient.requests.last.system, contains('Version two.'));
+    expect(aiClient.requests.last.system, isNot(contains('Version one.')));
   });
 }
 

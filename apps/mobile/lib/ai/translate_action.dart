@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'ai_client.dart';
+import 'ai_prompt_config.dart';
 import 'context_preview.dart';
 
 /// The fixed system-prompt preamble — the part of what's sent that is neither
@@ -23,10 +24,10 @@ const String _kInstructions =
 /// Transcribes the operative rules from `ARCHITECTURE.md` §3.3 (this app does
 /// not ship that document, so this is the app's own AI-ready copy — Story
 /// 4.3's design decision 5, kept private/inline until a second consumer, e.g.
-/// Story 4.4's grammar review, needs the identical text).
+/// Story 4.6's grammar review, needs the identical text).
 const String _kConventions = '''
 - Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate only the name and the phrase.
-- Inner monologue is `Мысль: …` in Russian and `*Thought:* …` in English — use the English form.
+- Inner monologue is `Мысль: …` in Russian and `Thought: …` in English — use the English form.
 - Variable placeholders are readable square brackets, e.g. `[имя героя]` — translate the words inside the brackets, keep the bracket form, never emit `<<=\$var>>` or other code syntax.
 - Player-choice / passage links: `[[Choice text->Passage Name]]` or `[[Choice text|Passage Name]]` — translate the choice text (the label before the separator); never translate or alter the Passage Name (the target after the separator) — it is an identifier, not prose.
 - Return links: `[[back<-Label]]` — translate the Label only; the backlink form itself never changes.
@@ -82,22 +83,39 @@ Future<String?> runTranslate(
   }
   if (!context.mounted) return null;
 
+  // Story 4.4: an author-supplied `ai-prompts.md` (never throws — Task 1's
+  // own contract) can override either piece; a piece left `null` falls back
+  // to this file's own hardcoded default, unchanged from Story 4.3.
+  final promptConfig = await resolveAiPromptConfig(storage);
+  if (!context.mounted) return null;
+  final instructionsText = promptConfig.instructions ?? _kInstructions;
+  final conventionsText = promptConfig.conventions ?? _kConventions;
+
   // Review fix (AD-11): the sent `system` prompt is built ONLY by
   // concatenating these same section texts below (never any additional
   // label/glue text) so what's previewed is provably, byte-for-byte, what's
   // sent — not just similar to it.
-  const instructions = ContextSection(label: 'AI instructions', text: _kInstructions);
+  final instructions = ContextSection(
+    label: 'AI instructions',
+    text: instructionsText,
+  );
   final file = ContextSection(label: 'The file', text: ruText);
   final glossary = ContextSection(label: 'Glossary terms', text: glossaryText);
-  const conventions = ContextSection(label: 'Conventions', text: _kConventions);
+  final conventions = ContextSection(
+    label: 'Conventions',
+    text: conventionsText,
+  );
   final sections = [instructions, file, glossary, conventions];
 
   final confirmed = await showContextPreview(context, sections: sections);
   if (!confirmed) return null;
   if (!context.mounted) return null;
 
-  final systemPrompt =
-      [instructions.text, glossary.text, conventions.text].join('\n\n');
+  final systemPrompt = [
+    instructions.text,
+    glossary.text,
+    conventions.text,
+  ].join('\n\n');
   final request = AiRequest(
     system: systemPrompt,
     userContent: file.text,
@@ -116,7 +134,10 @@ Future<String?> runTranslate(
     // "an empty list is a real state to show" precedent).
     if (translated.trim().isEmpty) {
       if (context.mounted) {
-        _showError(context, 'The AI returned an empty translation. Please try again.');
+        _showError(
+          context,
+          'The AI returned an empty translation. Please try again.',
+        );
       }
       return null;
     }

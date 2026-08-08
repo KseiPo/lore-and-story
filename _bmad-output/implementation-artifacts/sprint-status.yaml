@@ -91,7 +91,7 @@ development_status:
   4-1-configure-an-ai-key-and-stand-up-the-api-client: done
   4-2-preview-exactly-what-will-be-sent: done
   4-3-translate-ru-en-release-checkpoint: done
-  4-4-customize-the-ai-translation-prompt: ready-for-dev
+  4-4-customize-the-ai-translation-prompt: done
   4-5-retranslate-an-already-paired-file: backlog
   4-6-grammar-style-findings: backlog
   4-7-configure-the-ai-server-and-protocol: backlog

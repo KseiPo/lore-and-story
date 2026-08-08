@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// One labeled block of text shown by [showContextPreview] — e.g. "The file",
 /// "Glossary terms", "Conventions" for a translation request (Story 4.3), or
-/// whatever a grammar-review request (Story 4.4) needs. Deliberately generic:
+/// whatever a grammar-review request (Story 4.6) needs. Deliberately generic:
 /// no field is named after any specific feature's payload, so this type never
 /// needs to change as new AI actions are added.
 @immutable

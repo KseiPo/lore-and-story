@@ -12,6 +12,7 @@
 library;
 
 export 'ai_client.dart';
+export 'ai_prompt_config.dart';
 export 'context_preview.dart';
 export 'key_store.dart';
 export 'translate_action.dart';
