@@ -54,6 +54,8 @@ and MOBILE.md serve as the technical-requirements source.)
 - **FR22** *(AI-1)*: Show a mandatory context preview of exactly what leaves the device before any AI send; gate sending behind it.
 - **FR23** *(AI-2)*: Request a grammar/style review and render a structured findings list (line/issue/suggestion/severity); never a rewritten file.
 - **FR26** *(Promotion phase)*: Promote a simple entity to an entity folder (`<slug>.md` → `<slug>/<slug>.md`, card bytes preserved) so it can hold sub-entries; the only authoring op that moves a file.
+- **FR27** *(AI phases)*: Let the author choose an AI Server (official Anthropic API, OpenRouter, or a custom/local network address) and, independently, an API Protocol (Anthropic Messages format or OpenAI chat-completions format) — not a single hardcoded provider — and verify a chosen configuration with a live "test connection" check before relying on it.
+- **FR28** *(AI phases)*: Implement an OpenAI-compatible chat-completions client (streamed, with the same typed-error/retry discipline as the Story 4.1 Anthropic client) as a second protocol adapter, so the app can talk to OpenAI-protocol servers — OpenRouter, or a self-hosted local server such as LM Studio.
 
 ### NonFunctional Requirements
 
@@ -111,6 +113,8 @@ _None — no UX design document exists for this project. The PRD's journeys (UJ-
 - **FR24**: Epic 2 — create new simple entity
 - **FR25**: Epic 2 — create new sub-entry / event
 - **FR26**: Epic 2 — promote simple → folder (Story 2.17)
+- **FR27**: Epic 4 — AI server + protocol selection, test connection
+- **FR28**: Epic 4 — OpenAI-compatible protocol adapter (OpenRouter / local servers)
 
 ## Epic List
 
@@ -155,6 +159,14 @@ first, then grammar/style findings. One epic (shared HTTP client, key store, and
 context-preview sheet). **Release checkpoint: translation (FR21) ships before
 grammar (FR23)** — the deliberate PRD phasing.
 **FRs covered:** FR20, FR21, FR22, FR23
+**Multi-provider extension (Stories 4.5–4.6, added post-4.1):** the Story 4.1
+Anthropic client was scoped single-provider on purpose (its own Non-goals said
+so explicitly). Once the core AI features (4.2–4.4) work end-to-end against it,
+Stories 4.5–4.6 generalize AI Server (Anthropic / OpenRouter / a custom local
+address) and API Protocol (Anthropic / OpenAI) into two independent choices —
+so the same features can run against OpenRouter or a local server (e.g. LM
+Studio, which speaks *both* protocols) without forking any downstream feature
+code. **FRs covered (extension):** FR27, FR28
 
 ---
 
@@ -616,3 +628,37 @@ So that I can improve prose while keeping my voice.
 **Acceptance Criteria:**
 
 **Given** a file, **When** I request a review, **Then** the app (after the FR22 preview) returns a structured findings list (`line`, `issue`, `suggestion`, `severity`) as a tappable list that jumps to the line — never a rewritten file. *(FR23)*
+
+### Story 4.5: Configure the AI server and protocol
+
+As the author,
+I want to choose which AI server my requests go to and which API protocol it speaks, and verify the connection works,
+So that I can use Anthropic directly, OpenRouter, or a server on my own local network — not just the one hardcoded option Story 4.1 shipped.
+
+**Acceptance Criteria:**
+
+**Given** Settings, **When** I open the AI configuration, **Then** I can independently choose an **AI Server** (Anthropic / OpenRouter / Custom address) and an **API Protocol** (Anthropic / OpenAI) — two separate choices, not one fixed pairing. *(FR27)*
+
+**Given** I choose Custom address as the server, **When** I configure it, **Then** I enter a base URL (e.g. a local network address and port) instead of picking a fixed provider endpoint.
+
+**Given** a chosen server + protocol + key/model, **When** I tap "Test connection," **Then** the app makes one minimal live request and reports success or a clear failure reason — without my needing to trigger a real translate/grammar action just to find out the configuration is wrong.
+
+**Given** the existing Anthropic-direct configuration Story 4.1 shipped, **When** this story ships, **Then** it keeps working unchanged — the Anthropic-protocol client gains a configurable base URL and model (defaulting to Anthropic's own), so "Anthropic direct" and "a local server that speaks the Anthropic protocol" (e.g. LM Studio's Anthropic-compatible endpoint) both work through the same client, differing only in configuration.
+
+**Non-goal:** the OpenAI protocol itself isn't implemented yet — selecting it in this story only stores the choice; Story 4.6 makes it functional.
+
+### Story 4.6: Connect via an OpenAI-compatible server
+
+As the author,
+I want the app to be able to speak the OpenAI chat-completions protocol,
+So that I can use OpenRouter, or a local OpenAI-compatible server such as LM Studio, as my AI provider.
+
+**Acceptance Criteria:**
+
+**Given** API Protocol is set to OpenAI, **When** an AI action sends a request, **Then** it is built and streamed per the OpenAI chat-completions format (`Authorization: Bearer`, `delta.content` streaming chunks, `[DONE]` sentinel) rather than the Anthropic Messages format — and every downstream feature (translate, grammar) works unchanged against either protocol. *(FR28)*
+
+**Given** OpenRouter is chosen as the AI Server, **When** I configure it, **Then** the protocol defaults to OpenAI (the only protocol OpenRouter speaks) and I provide an OpenRouter API key.
+
+**Given** a Custom local address configured with the OpenAI protocol (e.g. LM Studio's OpenAI-compatible endpoint), **When** I tap Test Connection, **Then** it succeeds against a real local server, with the API key field optional (a local server on the LAN typically doesn't require one).
+
+**Given** the same failure classes Story 4.1 defined for the Anthropic client (auth, invalid request, rate limit, server error, network failure, timeout), **When** using the OpenAI protocol, **Then** equivalent typed errors and the same retry/backoff discipline apply — one shared `AiClient` port, two protocol adapters behind it.
