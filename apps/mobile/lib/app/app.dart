@@ -18,12 +18,17 @@ class LoreStoryApp extends StatelessWidget {
   /// Story 4.1 — where the AI provider API key is stored.
   final KeyStore keyStore;
 
+  /// Story 4.3 — the AI provider client, threaded from here down to every
+  /// screen that can reach a Translate action.
+  final AiClient aiClient;
+
   const LoreStoryApp({
     super.key,
     required this.rootStore,
     required this.permission,
     required this.storageFactory,
     required this.keyStore,
+    required this.aiClient,
   });
 
   @override
@@ -36,6 +41,7 @@ class LoreStoryApp extends StatelessWidget {
         permission: permission,
         storageFactory: storageFactory,
         keyStore: keyStore,
+        aiClient: aiClient,
       ),
     );
   }

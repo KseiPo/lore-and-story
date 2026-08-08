@@ -1,6 +1,6 @@
 /// Public interface (barrel) of the `ai/` slice — port, adapter-facing key
-/// storage, and the context-preview UI. Other slices depend only on these
-/// exports, never on the slice's internal files (AD-12).
+/// storage, and the context-preview / translate UI. Other slices depend only
+/// on these exports, never on the slice's internal files (AD-12).
 ///
 /// The concrete `MessagesApiClient` adapter is deliberately NOT exported: only
 /// the composition root (`main.dart`, and this slice's own tests) may name it,
@@ -14,3 +14,4 @@ library;
 export 'ai_client.dart';
 export 'context_preview.dart';
 export 'key_store.dart';
+export 'translate_action.dart';

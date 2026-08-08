@@ -57,7 +57,11 @@ Future<void> pumpUndetermined(
   String loreDir = '',
 }) async {
   await tester.pumpWidget(MaterialApp(
-    home: UndeterminedLanguagePage(storage: storage, item: item, loreDir: loreDir),
+    home: UndeterminedLanguagePage(
+        storage: storage,
+        item: item,
+        loreDir: loreDir,
+        aiClient: FakeAiClient()),
   ));
   await tester.pumpAndSettle();
 }
@@ -397,7 +401,11 @@ void main() {
       final selena = model.entries.firstWhere((e) => e.id == 'selena/selena.md');
 
       await tester.pumpWidget(MaterialApp(
-        home: EntityDetailPage(storage: storage, entry: selena, loreDir: ''),
+        home: EntityDetailPage(
+            storage: storage,
+            entry: selena,
+            loreDir: '',
+            aiClient: FakeAiClient()),
       ));
       await tester.pumpAndSettle();
 
@@ -428,7 +436,11 @@ void main() {
       final selena = model.entries.firstWhere((e) => e.id == 'selena/selena.md');
 
       await tester.pumpWidget(MaterialApp(
-        home: EntityDetailPage(storage: storage, entry: selena, loreDir: ''),
+        home: EntityDetailPage(
+            storage: storage,
+            entry: selena,
+            loreDir: '',
+            aiClient: FakeAiClient()),
       ));
       await tester.pumpAndSettle();
 

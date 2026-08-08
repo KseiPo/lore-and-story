@@ -27,12 +27,17 @@ class HomePage extends StatefulWidget {
   /// entry point reached from this page's AppBar can manage it.
   final KeyStore keyStore;
 
+  /// Story 4.3 — threaded down to every screen that can reach a Translate
+  /// action (the same chain `storage`/`loreDir` already thread through).
+  final AiClient aiClient;
+
   const HomePage({
     super.key,
     required this.rootStore,
     required this.permission,
     required this.storageFactory,
     required this.keyStore,
+    required this.aiClient,
   });
 
   @override
@@ -201,6 +206,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           storage: storage,
           category: category,
           loreDir: _loreDir,
+          aiClient: widget.aiClient,
         ),
       ),
     );
@@ -221,6 +227,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           storage: storage,
           conflicts: _lore.conflicts,
           loreDir: _loreDir,
+          aiClient: widget.aiClient,
         ),
       ),
     );
@@ -298,6 +305,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           storage: storage,
           path: filePath,
           loreDir: _loreDir,
+          aiClient: widget.aiClient,
         ),
       ),
     );

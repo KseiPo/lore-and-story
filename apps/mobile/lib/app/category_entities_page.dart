@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart';
@@ -27,11 +28,17 @@ class CategoryEntitiesPage extends StatefulWidget {
   /// two must be joined back together before touching storage.
   final String loreDir;
 
+  /// Story 4.3 — threaded through to `navigateToEntity` and to a
+  /// brand-new-entity `EditorPage`, so a Translate action stays reachable no
+  /// matter how the author got here.
+  final AiClient aiClient;
+
   const CategoryEntitiesPage({
     super.key,
     required this.storage,
     required this.category,
     required this.loreDir,
+    required this.aiClient,
   });
 
   @override
@@ -50,7 +57,10 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
 
   Future<void> _openEntity(LoreEntry entry) async {
     await navigateToEntity(context,
-        storage: widget.storage, entry: entry, loreDir: widget.loreDir);
+        storage: widget.storage,
+        entry: entry,
+        loreDir: widget.loreDir,
+        aiClient: widget.aiClient);
     // The edit may have changed this entity's title (or the files under it) —
     // re-walk so the list reflects it without popping back to Home (AC3/FR3),
     // mirroring the Home page's rescan-on-editor-return.
@@ -108,6 +118,7 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
           storage: widget.storage,
           path: filePath,
           loreDir: widget.loreDir,
+          aiClient: widget.aiClient,
         ),
       ),
     );

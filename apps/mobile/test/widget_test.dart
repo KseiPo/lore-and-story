@@ -16,6 +16,7 @@ void main() {
       permission: FakeStoragePermission(granted: false),
       storageFactory: (root) => FakeRepoStorage(root),
       keyStore: FakeKeyStore(),
+      aiClient: FakeAiClient(),
     ));
     await tester.pumpAndSettle();
 
@@ -30,6 +31,7 @@ void main() {
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => FakeRepoStorage(root),
       keyStore: FakeKeyStore(),
+      aiClient: FakeAiClient(),
     ));
     await tester.pumpAndSettle();
 
@@ -60,6 +62,7 @@ void main() {
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
       keyStore: FakeKeyStore(),
+      aiClient: FakeAiClient(),
     ));
     await tester.pumpAndSettle();
 
@@ -89,6 +92,7 @@ void main() {
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
       keyStore: FakeKeyStore(),
+      aiClient: FakeAiClient(),
     ));
     await tester.pumpAndSettle();
 
@@ -126,6 +130,7 @@ void main() {
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
       keyStore: FakeKeyStore(),
+      aiClient: FakeAiClient(),
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('conflict-banner')), findsNothing);
@@ -157,6 +162,7 @@ void main() {
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
       keyStore: FakeKeyStore(),
+      aiClient: FakeAiClient(),
     ));
     await tester.pumpAndSettle();
 
@@ -173,6 +179,7 @@ void main() {
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => FakeRepoStorage('/storage/emulated/0/repo'),
       keyStore: FakeKeyStore(),
+      aiClient: FakeAiClient(),
     ));
     await tester.pumpAndSettle();
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart' show kDirtyIndicatorKey, confirmDiscardUnsaved;
@@ -35,11 +36,16 @@ class UndeterminedLanguagePage extends StatefulWidget {
   /// paths are repo-relative — see [_repoPath]).
   final String loreDir;
 
+  /// Story 4.3 — forwarded to `navigateToEntity` and to the [PairedEditorPage]
+  /// this screen delegates to once a language is confirmed.
+  final AiClient aiClient;
+
   const UndeterminedLanguagePage({
     super.key,
     required this.storage,
     required this.item,
     required this.loreDir,
+    required this.aiClient,
   });
 
   @override
@@ -92,7 +98,10 @@ class _UndeterminedLanguagePageState extends State<UndeterminedLanguagePage>
   /// return (Review fix — see `EditorPage._navigateToEntity`'s doc comment).
   Future<void> _navigateToEntity(LoreEntry entry) async {
     await navigateToEntity(context,
-        storage: widget.storage, entry: entry, loreDir: widget.loreDir);
+        storage: widget.storage,
+        entry: entry,
+        loreDir: widget.loreDir,
+        aiClient: widget.aiClient);
     if (mounted) _editor?.reloadEntries();
   }
 
@@ -260,6 +269,7 @@ class _UndeterminedLanguagePageState extends State<UndeterminedLanguagePage>
         storage: widget.storage,
         item: _item,
         loreDir: widget.loreDir,
+        aiClient: widget.aiClient,
       );
     }
 

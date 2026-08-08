@@ -175,6 +175,24 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
     });
   }
 
+  /// Replaces the buffer with [text] — used by the Story 4.3 translate action
+  /// to populate a freshly generated draft. Marks the buffer dirty against
+  /// [_original] exactly like a manual edit would (via the existing
+  /// [_onChanged] listener — no special-casing needed) and switches out of
+  /// preview so the draft is immediately visible and editable. This never
+  /// writes to disk itself — an explicit save (FR21) is still required.
+  ///
+  /// A no-op before the buffer is ready, matching [jumpToLine]'s own guard —
+  /// there is nothing to populate yet.
+  void setText(String text) {
+    if (_loadState != _LoadState.ready) return;
+    setState(() {
+      _previewing = false;
+      _controller.text = text;
+    });
+    _notify();
+  }
+
   /// Save the buffer to this file, if safe (see [canSave]). Returns whether it
   /// is now **safe to leave** the editor — true when the buffer is persisted
   /// (or there was nothing dirty to save), false when a write failed or a save

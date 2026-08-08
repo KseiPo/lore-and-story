@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart';
@@ -29,11 +30,16 @@ class EntityDetailPage extends StatefulWidget {
   /// [EditorPage] are **repo-relative** — joined via [_repoPath] before use.
   final String loreDir;
 
+  /// Story 4.3 — threaded through to every push site below, so a Translate
+  /// action stays reachable from every entry point into this page.
+  final AiClient aiClient;
+
   const EntityDetailPage({
     super.key,
     required this.storage,
     required this.entry,
     required this.loreDir,
+    required this.aiClient,
   });
 
   @override
@@ -62,7 +68,8 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
             EditorPage(
                 storage: widget.storage,
                 path: _repoPath(loreRelId),
-                loreDir: widget.loreDir),
+                loreDir: widget.loreDir,
+                aiClient: widget.aiClient),
       ),
     );
     // A title edit (or a new/removed file) changes the tree — re-walk so the
@@ -97,6 +104,7 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
             storage: widget.storage,
             item: item,
             loreDir: widget.loreDir,
+            aiClient: widget.aiClient,
           ),
         ),
       );
@@ -110,6 +118,7 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
             storage: widget.storage,
             item: item,
             loreDir: widget.loreDir,
+            aiClient: widget.aiClient,
           ),
         ),
       );
@@ -233,6 +242,7 @@ class _EntityDetailPageState extends State<EntityDetailPage> {
           storage: widget.storage,
           path: _repoPath(filePath),
           loreDir: widget.loreDir,
+          aiClient: widget.aiClient,
         ),
       ),
     );

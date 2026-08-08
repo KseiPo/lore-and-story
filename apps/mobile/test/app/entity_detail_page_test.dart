@@ -86,7 +86,8 @@ Future<LoreEntry> _entry(FakeRepoStorage storage, String id) async {
 
 Future<void> _pump(WidgetTester tester, FakeRepoStorage storage, LoreEntry entry) async {
   await tester.pumpWidget(MaterialApp(
-    home: EntityDetailPage(storage: storage, entry: entry, loreDir: ''),
+    home: EntityDetailPage(
+        storage: storage, entry: entry, loreDir: '', aiClient: FakeAiClient()),
   ));
   await tester.pumpAndSettle();
 }

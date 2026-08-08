@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lore_and_story/ai/ai.dart';
+import 'package:lore_and_story/app/editor_page.dart' show kDirtyIndicatorKey;
 import 'package:lore_and_story/app/paired_editor_page.dart';
 import 'package:lore_and_story/lore/lore.dart';
 
@@ -39,9 +41,15 @@ Future<void> pumpPaired(
   FakeRepoStorage storage,
   LoreItem item, {
   String loreDir = '',
+  AiClient? aiClient,
 }) async {
   await tester.pumpWidget(MaterialApp(
-    home: PairedEditorPage(storage: storage, item: item, loreDir: loreDir),
+    home: PairedEditorPage(
+      storage: storage,
+      item: item,
+      loreDir: loreDir,
+      aiClient: aiClient ?? FakeAiClient(),
+    ),
   ));
   await tester.pumpAndSettle();
 }
@@ -123,6 +131,159 @@ void main() {
     });
   });
 
+  group('AI translate action (Story 4.3)', () {
+    testWidgets(
+        'Translate is visible only on the RU→EN synthetic tab — not the RU '
+        'tab, not an already-paired item, not the mirrored EN→RU synthetic '
+        'tab (AC5)', (tester) async {
+      await pumpPaired(tester, translationStorage(), translationItem());
+      expect(find.byKey(const Key('translate-action')), findsNothing,
+          reason: 'RU is the default active tab');
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('translate-action')), findsOneWidget);
+    });
+
+    testWidgets('Translate never appears for an already-paired RU/EN item',
+        (tester) async {
+      await pumpPaired(tester, pairStorage(), pairItem());
+      expect(find.byKey(const Key('translate-action')), findsNothing);
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('translate-action')), findsNothing);
+    });
+
+    testWidgets(
+        'Translate never appears on the mirrored EN→RU synthetic tab '
+        '(Story 2.18\'s case — FR21 is RU→EN only, AC5)', (tester) async {
+      const item = LoreItem(
+        id: 'events/scene',
+        title: 'Scene',
+        group: 'events',
+        passage: null,
+        langs: {
+          'en': LoreLang(
+              file: 'events/scene.en.md',
+              relDir: 'events',
+              title: 'Scene',
+              text: '# Scene\n'),
+        },
+      );
+      final storage = FakeRepoStorage(
+        '/repo',
+        fileContents: {'events/scene.en.md': '# Scene\n'},
+      );
+      await pumpPaired(tester, storage, item);
+      // The synthetic RU tab is the default active tab here.
+      expect(find.byKey(const Key('translate-action')), findsNothing);
+    });
+
+    testWidgets('Translate is disabled when the RU buffer is blank (AC8)',
+        (tester) async {
+      const item = LoreItem(
+        id: 'events/scene',
+        title: 'Сцена',
+        group: 'events',
+        passage: null,
+        langs: {
+          'ru': LoreLang(
+              file: 'events/scene.ru.md',
+              relDir: 'events',
+              title: 'Сцена',
+              text: '   \n'),
+        },
+      );
+      final storage = FakeRepoStorage(
+        '/repo',
+        fileContents: {'events/scene.ru.md': '   \n'},
+      );
+      await pumpPaired(tester, storage, item);
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+
+      final button =
+          tester.widget<IconButton>(find.byKey(const Key('translate-action')));
+      expect(button.onPressed, isNull);
+    });
+
+    testWidgets(
+        'confirming populates the EN buffer and marks it dirty, without '
+        'writing anything to disk (AC3, AC4)', (tester) async {
+      final storage = translationStorage();
+      final aiClient =
+          FakeAiClient(response: '# Scene\n\nTranslated prose.');
+      await pumpPaired(tester, storage, translationItem(), aiClient: aiClient);
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('translate-action')));
+      // Not pumpAndSettle: the AppBar spinner (_translating) animates
+      // continuously for as long as the preview sheet is open awaiting the
+      // user, so "settled" never occurs until after Confirm/Cancel — a
+      // bounded pump lets the sheet's own open transition finish instead.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(TextField, '# Scene\n\nTranslated prose.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(kDirtyIndicatorKey), findsOneWidget);
+      expect(storage.writeCalls, isEmpty,
+          reason: 'AC3 — only the buffer changes; a save is still explicit');
+    });
+
+    testWidgets('cancelling the preview leaves the EN tab untouched (AC2)',
+        (tester) async {
+      final aiClient = FakeAiClient(response: 'should never appear');
+      await pumpPaired(tester, translationStorage(), translationItem(),
+          aiClient: aiClient);
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('translate-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-cancel')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('should never appear'), findsNothing);
+      expect(find.byKey(kDirtyIndicatorKey), findsNothing);
+    });
+
+    testWidgets(
+        'a failing AI call shows a SnackBar, leaves EN empty, and stays '
+        'retryable (AC6)', (tester) async {
+      final aiClient = FakeAiClient(error: const AiServerException('boom'));
+      await pumpPaired(tester, translationStorage(), translationItem(),
+          aiClient: aiClient);
+
+      await tester.tap(find.text('EN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('translate-action')));
+      // Not pumpAndSettle: the AppBar spinner (_translating) animates
+      // continuously for as long as the preview sheet is open awaiting the
+      // user, so "settled" never occurs until after Confirm/Cancel — a
+      // bounded pump lets the sheet's own open transition finish instead.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('boom'), findsOneWidget);
+      expect(find.byKey(kDirtyIndicatorKey), findsNothing);
+
+      final button =
+          tester.widget<IconButton>(find.byKey(const Key('translate-action')));
+      expect(button.onPressed, isNotNull,
+          reason: 'must be retryable after a failure');
+    });
+  });
+
   testWidgets('shows [RU][EN] tabs with RU selected by default (FR12)',
       (tester) async {
     await pumpPaired(tester, pairStorage(), pairItem());
@@ -191,7 +352,10 @@ void main() {
           builder: (ctx) => ElevatedButton(
             onPressed: () => Navigator.of(ctx).push(MaterialPageRoute<void>(
               builder: (_) => PairedEditorPage(
-                  storage: storage, item: pairItem(), loreDir: ''),
+                  storage: storage,
+                  item: pairItem(),
+                  loreDir: '',
+                  aiClient: FakeAiClient()),
             )),
             child: const Text('open'),
           ),

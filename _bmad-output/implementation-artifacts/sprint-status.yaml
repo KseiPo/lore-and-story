@@ -90,7 +90,7 @@ development_status:
   epic-4: in-progress
   4-1-configure-an-ai-key-and-stand-up-the-api-client: done
   4-2-preview-exactly-what-will-be-sent: done
-  4-3-translate-ru-en-release-checkpoint: backlog
+  4-3-translate-ru-en-release-checkpoint: review
   4-4-grammar-style-findings: backlog
   4-5-configure-the-ai-server-and-protocol: backlog
   4-6-connect-via-an-openai-compatible-server: backlog

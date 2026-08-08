@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'entity_navigation.dart';
@@ -27,11 +28,17 @@ class EditorPage extends StatefulWidget {
   /// needs it, unlike every other page that already carries this field.
   final String loreDir;
 
+  /// Story 4.3 — not used by this page directly, only forwarded to
+  /// `navigateToEntity` so a wikilink tap from here can still reach a
+  /// Translate action deeper in the navigation chain.
+  final AiClient aiClient;
+
   const EditorPage({
     super.key,
     required this.storage,
     required this.path,
     required this.loreDir,
+    required this.aiClient,
   });
 
   @override
@@ -55,7 +62,10 @@ class _EditorPageState extends State<EditorPage> {
   /// silently go stale for the rest of this editor's lifetime.
   Future<void> _navigateToEntity(LoreEntry entry) async {
     await navigateToEntity(context,
-        storage: widget.storage, entry: entry, loreDir: widget.loreDir);
+        storage: widget.storage,
+        entry: entry,
+        loreDir: widget.loreDir,
+        aiClient: widget.aiClient);
     if (mounted) _editor?.reloadEntries();
   }
 

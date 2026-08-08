@@ -21,7 +21,8 @@ Future<void> pumpEditor(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: EditorPage(storage: storage, path: path, loreDir: ''),
+      home: EditorPage(
+          storage: storage, path: path, loreDir: '', aiClient: FakeAiClient()),
     ),
   );
   await tester.pumpAndSettle();
@@ -246,7 +247,11 @@ void main() {
         body: Builder(
           builder: (ctx) => ElevatedButton(
             onPressed: () => Navigator.of(ctx).push(MaterialPageRoute<void>(
-              builder: (_) => EditorPage(storage: storage, path: 'a.md', loreDir: ''),
+              builder: (_) => EditorPage(
+                  storage: storage,
+                  path: 'a.md',
+                  loreDir: '',
+                  aiClient: FakeAiClient()),
             )),
             child: const Text('open'),
           ),

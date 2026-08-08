@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart';
@@ -19,11 +20,14 @@ Future<void> navigateToEntity(
   required RepoStorage storage,
   required LoreEntry entry,
   required String loreDir,
+  required AiClient aiClient,
 }) {
   final repoPath = loreDir.isEmpty ? entry.id : '$loreDir/${entry.id}';
   final Widget destination = entry.tree != null
-      ? EntityDetailPage(storage: storage, entry: entry, loreDir: loreDir)
-      : EditorPage(storage: storage, path: repoPath, loreDir: loreDir);
+      ? EntityDetailPage(
+          storage: storage, entry: entry, loreDir: loreDir, aiClient: aiClient)
+      : EditorPage(
+          storage: storage, path: repoPath, loreDir: loreDir, aiClient: aiClient);
   return Navigator.of(context).push<void>(
     MaterialPageRoute(builder: (_) => destination),
   );

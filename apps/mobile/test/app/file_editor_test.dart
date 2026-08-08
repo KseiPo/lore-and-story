@@ -125,6 +125,50 @@ void main() {
     });
   });
 
+  group('FileEditor — setText (Story 4.3)', () {
+    testWidgets('setText on a ready buffer replaces the text, marks dirty, '
+        'and switches out of preview', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': ''});
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: FileEditor(storage: storage, path: 'a.md', loreDir: '')),
+      ));
+      await tester.pumpAndSettle();
+
+      final state = tester.state<FileEditorState>(find.byType(FileEditor));
+      expect(state.isDirty, isFalse);
+
+      state.setText('# Translated title\n\nSome translated prose.');
+      await tester.pump();
+
+      expect(state.text, '# Translated title\n\nSome translated prose.');
+      expect(state.isDirty, isTrue);
+      expect(state.previewing, isFalse);
+      expect(
+        find.widgetWithText(TextField, '# Translated title\n\nSome translated prose.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('setText before the buffer is ready is a no-op', (tester) async {
+      final storage = FakeRepoStorage('/repo'); // 'a.md' not seeded — createIfMissing false → error state
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: FileEditor(storage: storage, path: 'missing.md', loreDir: ''),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final state = tester.state<FileEditorState>(find.byType(FileEditor));
+      expect(state.isReady, isFalse);
+
+      expect(() => state.setText('should not apply'), returnsNormally);
+      await tester.pump();
+
+      expect(state.isReady, isFalse);
+      expect(find.text('should not apply'), findsNothing);
+    });
+  });
+
   group('FileEditor — [[ autocomplete (Story 3.2)', () {
     testWidgets('typing [[Se shows a suggestion row containing Selena',
         (tester) async {

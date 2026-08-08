@@ -40,6 +40,7 @@ void main() {
         storage: storage ?? makeStorage(),
         conflicts: items,
         loreDir: loreDir,
+        aiClient: FakeAiClient(),
       ),
     ));
     await tester.pumpAndSettle();

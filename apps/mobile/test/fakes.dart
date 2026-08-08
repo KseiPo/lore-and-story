@@ -61,6 +61,31 @@ class FakeKeyStore extends KeyStore {
   }
 }
 
+/// In-memory [AiClient] for widget tests (no real network) — the one shared
+/// double every other port already gets here.
+///
+/// [response] is streamed back as a single chunk when set; [error] is thrown
+/// from the stream instead when set (mirrors [FakeRepoStorage]'s
+/// `failWrites`/`failMove` flags for exercising the AD-8 never-crash paths —
+/// only one of [response]/[error] should be set for a given fake). Every
+/// request passed to [sendMessage] is recorded in [requests], in call order,
+/// so tests can assert on exactly what was sent (e.g. Story 4.3's translate
+/// action, AD-11).
+class FakeAiClient implements AiClient {
+  final String? response;
+  final AiClientException? error;
+  final List<AiRequest> requests = [];
+
+  FakeAiClient({this.response, this.error});
+
+  @override
+  Stream<String> sendMessage(AiRequest request) async* {
+    requests.add(request);
+    if (error != null) throw error!;
+    if (response != null) yield response!;
+  }
+}
+
 /// [StoragePermission] whose grant state is set by the test, avoiding the real
 /// platform channel.
 class FakeStoragePermission extends StoragePermission {

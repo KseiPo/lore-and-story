@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart' show kDirtyIndicatorKey, confirmDiscardUnsaved;
@@ -38,11 +39,17 @@ class PairedEditorPage extends StatefulWidget {
   /// repo-relative).
   final String loreDir;
 
+  /// Story 4.3 — the AI client behind the Translate action on the synthetic
+  /// RU→EN tab (Story 2.9's create-translation tab), and forwarded to
+  /// `navigateToEntity` for wikilink taps.
+  final AiClient aiClient;
+
   const PairedEditorPage({
     super.key,
     required this.storage,
     required this.item,
     required this.loreDir,
+    required this.aiClient,
   });
 
   @override
@@ -154,12 +161,17 @@ class _PairedEditorPageState extends State<PairedEditorPage>
 
   FileEditorState? get _active => _variants[_tabController.index].key.currentState;
 
+  _Variant get _activeVariant => _variants[_tabController.index];
+
   /// Wikilink tap-navigation (Story 3.2, FR19) — pushes via the shared
   /// `navigateToEntity` (AD-7) and reloads the active tab's entity list on
   /// return (Review fix — see `EditorPage._navigateToEntity`'s doc comment).
   Future<void> _navigateToEntity(LoreEntry entry) async {
     await navigateToEntity(context,
-        storage: widget.storage, entry: entry, loreDir: widget.loreDir);
+        storage: widget.storage,
+        entry: entry,
+        loreDir: widget.loreDir,
+        aiClient: widget.aiClient);
     if (mounted) _active?.reloadEntries();
   }
 
@@ -211,6 +223,49 @@ class _PairedEditorPageState extends State<PairedEditorPage>
         if (mounted) setState(() => _linting = false);
       },
     );
+  }
+
+  /// Re-entrancy guard, same shape as [_linting].
+  bool _translating = false;
+
+  /// Story 4.3 — RU→EN only: true exactly on the synthetic tab Story 2.9 adds
+  /// for a lone `.ru.md` with no `.en.md` (FR21). Deliberately excludes the
+  /// mirrored synthetic RU tab (`lang == 'ru'`, an EN-original file with no
+  /// RU pair, Story 2.18's flow) — that direction is out of scope.
+  bool get _canShowTranslate =>
+      _activeVariant.lang == 'en' && _activeVariant.createIfMissing;
+
+  /// The RU tab's live buffer — the "file" this action translates. Empty when
+  /// the RU tab hasn't loaded yet or genuinely has no content (AC8 guards
+  /// Translate on this).
+  String get _ruText =>
+      _variants.firstWhere((v) => v.lang == 'ru').key.currentState?.text ?? '';
+
+  /// Runs the Story 4.3 translate flow for the active (RU→EN synthetic) tab:
+  /// assembles the context pack, shows the FR22 preview, and on confirm
+  /// populates the EN tab's buffer with the streamed result. A cancelled
+  /// preview or any failure leaves the EN tab untouched — `runTranslate`
+  /// already reported the failure (AD-8), so there is nothing more to do here
+  /// beyond clearing the spinner.
+  Future<void> _translate() async {
+    // Defensive, matching the button's own visibility guard (AC5) — a future
+    // call site must not be able to fire this off the wrong tab.
+    if (_translating || !_canShowTranslate || _ruText.trim().isEmpty) return;
+    setState(() => _translating = true);
+    try {
+      final result = await runTranslate(
+        context,
+        storage: widget.storage,
+        loreDir: widget.loreDir,
+        aiClient: widget.aiClient,
+        ruText: _ruText,
+      );
+      if (result == null || !mounted) return;
+      final enVariant = _variants.firstWhere((v) => v.lang == 'en');
+      enVariant.key.currentState?.setText(result);
+    } finally {
+      if (mounted) setState(() => _translating = false);
+    }
   }
 
   @override
@@ -290,6 +345,24 @@ class _PairedEditorPageState extends State<PairedEditorPage>
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.fact_check_outlined),
+              ),
+            // Story 4.3 — AI translate (FR21), the RU→EN synthetic tab only
+            // (AC5): disabled while running or when there's nothing to
+            // translate yet (AC8).
+            if (_canShowTranslate)
+              IconButton(
+                key: const Key('translate-action'),
+                tooltip: 'Translate with AI',
+                onPressed: (_translating || _ruText.trim().isEmpty)
+                    ? null
+                    : _translate,
+                icon: _translating
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_awesome_outlined),
               ),
             IconButton(
               tooltip: 'Save',

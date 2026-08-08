@@ -144,6 +144,7 @@ Future<void> _pumpDetail(
       storage: storage,
       entry: entry,
       loreDir: '',
+      aiClient: FakeAiClient(),
     ),
   ));
   await tester.pumpAndSettle();

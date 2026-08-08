@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart';
@@ -23,11 +24,16 @@ class ConflictsPage extends StatelessWidget {
   /// (the picked folder is the lore folder) passes the id through unchanged.
   final String loreDir;
 
+  /// Story 4.3 — forwarded to the [EditorPage] a conflict copy opens in, so a
+  /// wikilink tap from there can still reach a Translate action.
+  final AiClient aiClient;
+
   const ConflictsPage({
     super.key,
     required this.storage,
     required this.conflicts,
     required this.loreDir,
+    required this.aiClient,
   });
 
   String _repoPath(String id) => loreDir.isEmpty ? id : '$loreDir/$id';
@@ -39,6 +45,7 @@ class ConflictsPage extends StatelessWidget {
           storage: storage,
           path: _repoPath(c.id),
           loreDir: loreDir,
+          aiClient: aiClient,
         ),
       ),
     );
