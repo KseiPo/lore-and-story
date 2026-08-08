@@ -54,7 +54,7 @@ and MOBILE.md serve as the technical-requirements source.)
 - **FR22** *(AI-1)*: Show a mandatory context preview of exactly what leaves the device before any AI send; gate sending behind it.
 - **FR23** *(AI-2)*: Request a grammar/style review and render a structured findings list (line/issue/suggestion/severity); never a rewritten file.
 - **FR26** *(Promotion phase)*: Promote a simple entity to an entity folder (`<slug>.md` → `<slug>/<slug>.md`, card bytes preserved) so it can hold sub-entries; the only authoring op that moves a file.
-- **FR27** *(AI phases)*: Let the author choose an AI Server (official Anthropic API, OpenRouter, or a custom/local network address) and, independently, an API Protocol (Anthropic Messages format or OpenAI chat-completions format) — not a single hardcoded provider — and verify a chosen configuration with a live "test connection" check before relying on it.
+- **FR27** *(AI phases)*: Let the author configure which AI Server (official Anthropic API, OpenRouter, or a custom/local network address), API Protocol (Anthropic Messages format or OpenAI chat-completions format), and model an AI action uses — not a single hardcoded triple — via a plain config file in the synced repo, not an in-app settings screen (KseiPo, 2026-08-08: none of this is secret, so it belongs with the other repo-versioned project config, mirroring Story 4.4's `ai-prompts.md` precedent). The Settings screen holds only the API key (secure device storage, never written to the repo — unchanged from Story 4.1). Verify a resolved configuration with a live "test connection" check before relying on it.
 - **FR28** *(AI phases)*: Implement an OpenAI-compatible chat-completions client (streamed, with the same typed-error/retry discipline as the Story 4.1 Anthropic client) as a second protocol adapter, so the app can talk to OpenAI-protocol servers — OpenRouter, or a self-hosted local server such as LM Studio.
 - **FR29** *(AI phases)*: Let the author override the AI instructions/conventions text an AI action sends from a plain file in the synced repo (`ai-prompts.md` at the repo root) instead of the app's hardcoded defaults — per-section (an author may override only one piece), never blocking when the file is absent, unreadable, or defines neither recognized section.
 - **FR30** *(AI phases)*: Let the author (re-)translate a pair that already has content on **both** sides — not just a lone RU file missing its EN pair — in **either direction** (RU→EN or EN→RU), to refresh a translation after editing the source language. Translating into a tab that already has content (saved or unsaved) asks for confirmation before replacing it.
@@ -115,7 +115,7 @@ _None — no UX design document exists for this project. The PRD's journeys (UJ-
 - **FR24**: Epic 2 — create new simple entity
 - **FR25**: Epic 2 — create new sub-entry / event
 - **FR26**: Epic 2 — promote simple → folder (Story 2.17)
-- **FR27**: Epic 4 — AI server + protocol selection, test connection
+- **FR27**: Epic 4 — AI server + protocol + model selection via a repo file, test connection
 - **FR28**: Epic 4 — OpenAI-compatible protocol adapter (OpenRouter / local servers)
 - **FR29**: Epic 4 — customizable AI prompt (instructions/conventions) via a repo file (Story 4.4)
 - **FR30**: Epic 4 — bidirectional re-translation of an already-paired file (Story 4.5)
@@ -175,14 +175,18 @@ content on both sides, in either direction, to refresh a stale side after
 editing the other — sequenced after 4.4 so it can extend that story's
 `ai-prompts.md` section scheme (direction-aware headings) rather than
 redesigning it.
-**Multi-provider extension (Stories 4.7–4.8, added post-4.1):** the Story 4.1
-Anthropic client was scoped single-provider on purpose (its own Non-goals said
-so explicitly). Once the core AI features (4.2–4.6) work end-to-end against it,
-Stories 4.7–4.8 generalize AI Server (Anthropic / OpenRouter / a custom local
-address) and API Protocol (Anthropic / OpenAI) into two independent choices —
-so the same features can run against OpenRouter or a local server (e.g. LM
-Studio, which speaks *both* protocols) without forking any downstream feature
-code. **FRs covered (extension):** FR27, FR28
+**Multi-provider extension (Stories 4.7–4.8, added post-4.1, revised 2026-08-08):**
+the Story 4.1 Anthropic client was scoped single-provider on purpose (its own
+Non-goals said so explicitly). Once the core AI features (4.2–4.6) work
+end-to-end against it, Stories 4.7–4.8 generalize AI Server (Anthropic /
+OpenRouter / a custom local address), API Protocol (Anthropic / OpenAI), and
+model into three independent choices, configured via a repo file (mirroring
+Story 4.4's `ai-prompts.md` precedent) rather than an in-app settings screen —
+the Settings screen keeps only the API key, the one piece of this that must
+never be written to the synced repo. So the same features can run against
+OpenRouter or a local server (e.g. LM Studio, which speaks *both* protocols)
+without forking any downstream feature code. **FRs covered (extension):**
+FR27, FR28
 
 ### Epic 5: Improvements backlog (post-AI)
 
@@ -697,23 +701,29 @@ So that I can improve prose while keeping my voice.
 
 **Given** a file, **When** I request a review, **Then** the app (after the FR22 preview) returns a structured findings list (`line`, `issue`, `suggestion`, `severity`) as a tappable list that jumps to the line — never a rewritten file. *(FR23)*
 
-### Story 4.7: Configure the AI server and protocol
+### Story 4.7: Configure the AI server, protocol, and model via a repo file
 
 As the author,
-I want to choose which AI server my requests go to and which API protocol it speaks, and verify the connection works,
-So that I can use Anthropic directly, OpenRouter, or a server on my own local network — not just the one hardcoded option Story 4.1 shipped.
+I want to choose my AI server, API protocol, and model from a config file in my synced repo — with only my API key staying in the app's secure Settings,
+So that I can use Anthropic directly (with a model of my own choosing), OpenRouter, or a server on my own local network, without ever putting anything secret in a folder that syncs across my devices.
+
+**Context (KseiPo, 2026-08-08 — revises this story's original Settings-page-based design):** the API key must stay exactly where Story 4.1 put it — secure on-device storage, never written to the repo, because the repo is a Syncthing folder that may live on multiple devices. But the AI **server**, **protocol**, and **model** choice are not secret at all, and belong with the rest of this project's repo-versioned config rather than behind an in-app picker screen — the same reasoning Story 4.4 already established for `ai-prompts.md`. Unlike that story's prose content, server/protocol/model/base-URL is short scalar config, which fits `lore-story.json`'s existing JSON shape (alongside `loreDir`) better than a new markdown file — a new optional `ai` object in the same well-known file, ignored gracefully by every version of the app that predates this story (matching `ProjectConfig`'s own "unrelated keys ignored" forward-compatibility).
 
 **Acceptance Criteria:**
 
-**Given** Settings, **When** I open the AI configuration, **Then** I can independently choose an **AI Server** (Anthropic / OpenRouter / Custom address) and an **API Protocol** (Anthropic / OpenAI) — two separate choices, not one fixed pairing. *(FR27)*
+**Given** `lore-story.json`'s new optional `ai` object, **When** the app resolves AI configuration for a send, **Then** it reads `server` (`anthropic` / `openrouter` / `custom`), `protocol` (`anthropic` / `openai`), `model`, and — for `custom` — `baseUrl` from it; the API key is never read from this file, only from Settings' secure storage. *(FR27)*
 
-**Given** I choose Custom address as the server, **When** I configure it, **Then** I enter a base URL (e.g. a local network address and port) instead of picking a fixed provider endpoint.
+**Given** the `ai` object is absent, invalid, or only partially specified, **When** the app resolves AI configuration, **Then** it falls back to today's Story 4.1 defaults (Anthropic direct, Anthropic protocol, the current hardcoded model) per missing/unset field — never blocks, mirroring `ProjectConfig`'s own missing/invalid handling.
 
-**Given** a chosen server + protocol + key/model, **When** I tap "Test connection," **Then** the app makes one minimal live request and reports success or a clear failure reason — without my needing to trigger a real translate/grammar action just to find out the configuration is wrong.
+**Given** `server: "custom"` with a `baseUrl` set, **When** an AI action sends a request, **Then** it goes to that address instead of a fixed provider endpoint.
 
-**Given** the existing Anthropic-direct configuration Story 4.1 shipped, **When** this story ships, **Then** it keeps working unchanged — the Anthropic-protocol client gains a configurable base URL and model (defaulting to Anthropic's own), so "Anthropic direct" and "a local server that speaks the Anthropic protocol" (e.g. LM Studio's Anthropic-compatible endpoint) both work through the same client, differing only in configuration.
+**Given** a resolved server + protocol + model, plus the key from Settings, **When** I tap "Test connection" (still reachable from the Settings screen, next to the key field), **Then** the app makes one minimal live request and reports success or a clear failure reason — without my needing to trigger a real translate/grammar action just to find out the configuration is wrong.
 
-**Non-goal:** the OpenAI protocol itself isn't implemented yet — selecting it in this story only stores the choice; Story 4.8 makes it functional.
+**Given** the Settings screen, **When** I open it, **Then** it shows only the API key field (Story 4.1, unchanged) — no server/protocol/model picker lives there; those are configured entirely by editing the repo file.
+
+**Given** the existing Anthropic-direct configuration Story 4.1 shipped (hardcoded model, no repo config at all), **When** this story ships, **Then** it keeps working completely unchanged for an author who never adds an `ai` object to `lore-story.json` — the Anthropic-protocol client gains a configurable base URL and model, each independently defaulting to today's hardcoded values.
+
+**Non-goal:** the OpenAI protocol itself isn't implemented yet — `protocol: "openai"` in this story is only read and stored in the resolved config; Story 4.8 makes it functional. An in-app editor for the `ai` object is also out of scope, same reasoning as Story 4.4's own non-goal — it's edited with any text editor on the synced repo.
 
 ### Story 4.8: Connect via an OpenAI-compatible server
 
@@ -725,7 +735,7 @@ So that I can use OpenRouter, or a local OpenAI-compatible server such as LM Stu
 
 **Given** API Protocol is set to OpenAI, **When** an AI action sends a request, **Then** it is built and streamed per the OpenAI chat-completions format (`Authorization: Bearer`, `delta.content` streaming chunks, `[DONE]` sentinel) rather than the Anthropic Messages format — and every downstream feature (translate, grammar) works unchanged against either protocol. *(FR28)*
 
-**Given** OpenRouter is chosen as the AI Server, **When** I configure it, **Then** the protocol defaults to OpenAI (the only protocol OpenRouter speaks) and I provide an OpenRouter API key.
+**Given** `server: "openrouter"` in `lore-story.json`'s `ai` object (Story 4.7), **When** `protocol` is left unset, **Then** it defaults to OpenAI (the only protocol OpenRouter speaks); the OpenRouter API key itself still comes only from Settings' secure storage, never from the repo file.
 
 **Given** a Custom local address configured with the OpenAI protocol (e.g. LM Studio's OpenAI-compatible endpoint), **When** I tap Test Connection, **Then** it succeeds against a real local server, with the API key field optional (a local server on the LAN typically doesn't require one).
 

@@ -94,7 +94,7 @@ development_status:
   4-4-customize-the-ai-translation-prompt: done
   4-5-retranslate-an-already-paired-file: backlog
   4-6-grammar-style-findings: backlog
-  4-7-configure-the-ai-server-and-protocol: backlog
+  4-7-configure-the-ai-server-protocol-and-model: backlog
   4-8-connect-via-an-openai-compatible-server: backlog
   epic-4-retrospective: optional
 
