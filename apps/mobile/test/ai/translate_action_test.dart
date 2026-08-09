@@ -25,18 +25,26 @@ FakeRepoStorage _storageWithEntities() => FakeRepoStorage(
       fileContents: _kEntityFileContents,
     );
 
-/// Story 4.4: [_storageWithEntities]'s same entities plus an `ai-prompts.md`
-/// override file built from whichever of [instructions]/[conventions] is
-/// given (a null piece is simply omitted from the file, not written as an
-/// empty heading).
+/// Story 4.4/4.5: [_storageWithEntities]'s same entities plus an
+/// `ai-prompts.md` override file built from whichever of
+/// [instructions]/[instructionsEnToRu]/[conventions] is given (a null piece
+/// is simply omitted from the file, not written as an empty heading). Passing
+/// [enToRuHeadingSpelling] switches the EN→RU heading between the canonical
+/// arrow form (default) and the ASCII `(en->ru)` alias.
 FakeRepoStorage _storageWithPromptOverride({
   String? instructions,
+  String? instructionsEnToRu,
   String? conventions,
+  String enToRuHeadingSpelling = 'Translation Instructions (EN→RU)',
 }) {
   final buffer = StringBuffer();
   if (instructions != null) {
     buffer.writeln('# Translation Instructions');
     buffer.writeln(instructions);
+  }
+  if (instructionsEnToRu != null) {
+    buffer.writeln('# $enToRuHeadingSpelling');
+    buffer.writeln(instructionsEnToRu);
   }
   if (conventions != null) {
     buffer.writeln('# Conventions');
@@ -69,6 +77,14 @@ FakeRepoStorage _storageWithPromptOverride({
 /// the resolved value, so tests drive it via real widget interactions (tap
 /// Confirm/Cancel on the resulting preview) rather than calling it directly
 /// and never rendering anything.
+///
+/// [direction] defaults to RU→EN (Story 4.3's original, still the only
+/// direction most of this file's tests care about) — every pre-Story-4.5 call
+/// site keeps exercising that exact path unchanged (AC5, no regression).
+/// [ruText] is kept as the parameter name (rather than renaming to match
+/// production's `sourceText`) purely to avoid touching every existing call
+/// site in this file for a cosmetic rename; it is passed through as
+/// `runTranslate`'s `sourceText`.
 Future<void> _pumpHost(
   WidgetTester tester, {
   required RepoStorage storage,
@@ -76,6 +92,7 @@ Future<void> _pumpHost(
   required String ruText,
   required ValueChanged<String?> onResult,
   String loreDir = '',
+  TranslationDirection direction = TranslationDirection.ruToEn,
 }) async {
   await tester.pumpWidget(MaterialApp(
     home: Scaffold(
@@ -88,7 +105,8 @@ Future<void> _pumpHost(
               storage: storage,
               loreDir: loreDir,
               aiClient: aiClient,
-              ruText: ruText,
+              sourceText: ruText,
+              direction: direction,
             );
             onResult(result);
           },
@@ -490,6 +508,175 @@ void main() {
     await tester.pumpAndSettle();
     expect(aiClient.requests.last.system, contains('Version two.'));
     expect(aiClient.requests.last.system, isNot(contains('Version one.')));
+  });
+
+  group('Story 4.5: EN→RU direction', () {
+    testWidgets(
+        'the context preview shows the EN→RU-worded instructions, not the '
+        'RU→EN text — and the sent request reflects it byte-for-byte',
+        (tester) async {
+      final aiClient = FakeAiClient(response: 'ok');
+      await _pumpHost(
+        tester,
+        storage: _storageWithEntities(),
+        aiClient: aiClient,
+        ruText: '# Scene\n\nHello.',
+        direction: TranslationDirection.enToRu,
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+
+      final instructionsText = _sectionText(tester, 0);
+      expect(instructionsText, contains('translating an English'));
+      expect(instructionsText, contains('into natural, readable Russian'));
+      expect(instructionsText, isNot(contains('translating a Russian')));
+      // "The file" section carries the EN source text — this direction
+      // translates FROM English.
+      expect(_sectionText(tester, 1), '# Scene\n\nHello.');
+
+      final glossaryText = _sectionText(tester, 2);
+      final conventionsText = _sectionText(tester, 3);
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(
+        aiClient.requests.single.system,
+        [instructionsText, glossaryText, conventionsText].join('\n\n'),
+      );
+    });
+
+    testWidgets(
+        'an ai-prompts.md override via # Translation Instructions (EN→RU) '
+        'replaces the EN→RU instructions only — the RU→EN default is '
+        'untouched', (tester) async {
+      final aiClient = FakeAiClient(response: 'ok');
+      await _pumpHost(
+        tester,
+        storage: _storageWithPromptOverride(
+            instructionsEnToRu: 'My custom EN→RU instructions.'),
+        aiClient: aiClient,
+        ruText: 'text',
+        direction: TranslationDirection.enToRu,
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+
+      expect(_sectionText(tester, 0), 'My custom EN→RU instructions.');
+
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+      expect(aiClient.requests.single.system,
+          contains('My custom EN→RU instructions.'));
+    });
+
+    testWidgets(
+        'the ASCII (en->ru) heading spelling overrides identically to the '
+        'arrow form', (tester) async {
+      final aiClient = FakeAiClient(response: 'ok');
+      await _pumpHost(
+        tester,
+        storage: _storageWithPromptOverride(
+          instructionsEnToRu: 'Via ASCII heading.',
+          enToRuHeadingSpelling: 'Translation Instructions (en->ru)',
+        ),
+        aiClient: aiClient,
+        ruText: 'text',
+        direction: TranslationDirection.enToRu,
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+
+      expect(_sectionText(tester, 0), 'Via ASCII heading.');
+    });
+
+    testWidgets(
+        'an ai-prompts.md with only the RU→EN heading leaves an EN→RU '
+        'request on the hardcoded EN→RU default (independent partial '
+        'override)', (tester) async {
+      final aiClient = FakeAiClient(response: 'ok');
+      await _pumpHost(
+        tester,
+        storage: _storageWithPromptOverride(
+            instructions: 'My custom RU→EN instructions.'),
+        aiClient: aiClient,
+        ruText: 'text',
+        direction: TranslationDirection.enToRu,
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+
+      expect(_sectionText(tester, 0), contains('translating an English'));
+      expect(_sectionText(tester, 0),
+          isNot(contains('My custom RU→EN instructions.')));
+    });
+
+    testWidgets(
+        '(Review decision, 2026-08-08) hardcoded Conventions default is '
+        'forked per direction, not shared — RU→EN keeps its original '
+        'English-form/lang:-ru→en wording; EN→RU gets its own mirror',
+        (tester) async {
+      String? ruToEnConventions;
+      String? enToRuConventions;
+
+      await _pumpHost(
+        tester,
+        storage: _storageWithEntities(),
+        aiClient: FakeAiClient(response: 'x'),
+        ruText: 'text',
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+      ruToEnConventions = _sectionText(tester, 3);
+      await tester.tap(find.byKey(const Key('context-preview-cancel')));
+      await tester.pumpAndSettle();
+
+      await _pumpHost(
+        tester,
+        storage: _storageWithEntities(),
+        aiClient: FakeAiClient(response: 'x'),
+        ruText: 'text',
+        direction: TranslationDirection.enToRu,
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+      enToRuConventions = _sectionText(tester, 3);
+
+      expect(ruToEnConventions, isNot(enToRuConventions));
+      expect(ruToEnConventions, contains('use the English form'));
+      expect(ruToEnConventions, contains('lang: ru` to `lang: en`'));
+      expect(enToRuConventions, contains('use the Russian form'));
+      expect(enToRuConventions, contains('lang: en` to `lang: ru`'));
+    });
+
+    testWidgets(
+        '(Review decision, 2026-08-08, AC5) the RU→EN conventions default is '
+        'byte-for-byte the same text Story 4.3/4.4 shipped', (tester) async {
+      await _pumpHost(
+        tester,
+        storage: _storageWithEntities(),
+        aiClient: FakeAiClient(response: 'x'),
+        ruText: 'text',
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+
+      expect(_sectionText(tester, 3), '''
+- Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate only the name and the phrase.
+- Inner monologue is `Мысль: …` in Russian and `Thought: …` in English — use the English form.
+- Variable placeholders are readable square brackets, e.g. `[имя героя]` — translate the words inside the brackets, keep the bracket form, never emit `<<=\$var>>` or other code syntax.
+- Player-choice / passage links: `[[Choice text->Passage Name]]` or `[[Choice text|Passage Name]]` — translate the choice text (the label before the separator); never translate or alter the Passage Name (the target after the separator) — it is an identifier, not prose.
+- Return links: `[[back<-Label]]` — translate the Label only; the backlink form itself never changes.
+- Em-dash conditional markers: `— если … — иначе … — конец условия —` — these delimit authoring conditionals, not prose to render; preserve the em-dash markers and translate only the human-readable text between them.
+- `[[Title]]` with no separator is a lore-entity wikilink (not a passage jump) — translate Title to that entity's English form from the glossary when the glossary lists one; otherwise leave it unchanged rather than guessing.
+- A file may open with a `<!-- scene ⇄ passage: "Passage Name" · lang: ru -->` comment — keep the passage name unchanged, but update `lang: ru` to `lang: en` in the translated output; if no such comment exists, do not add one.''');
+    });
   });
 }
 

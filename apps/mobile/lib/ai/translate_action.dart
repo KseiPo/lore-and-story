@@ -6,14 +6,33 @@ import 'ai_client.dart';
 import 'ai_prompt_config.dart';
 import 'context_preview.dart';
 
-/// The fixed system-prompt preamble — the part of what's sent that is neither
-/// "the file," "the glossary," nor "the conventions" (FR22's three literal
-/// sections). Shown as its own `AI instructions` preview section so every byte
-/// of [AiRequest.system] is represented by exactly one section (AD-11 — Story
-/// 4.2's own deferred-work.md flagged this gap in advance; this closes it).
-const String _kInstructions =
+/// Which way a translate request runs (Story 4.5/FR30) — determines which of
+/// [_kInstructionsRuToEn]/[_kInstructionsEnToRu] (or their `ai-prompts.md`
+/// overrides) is sent, and which tab is the source vs. the target in
+/// `PairedEditorPage`.
+enum TranslationDirection { ruToEn, enToRu }
+
+/// The fixed system-prompt preamble for the RU→EN direction — the part of
+/// what's sent that is neither "the file," "the glossary," nor "the
+/// conventions" (FR22's three literal sections). Shown as its own `AI
+/// instructions` preview section so every byte of [AiRequest.system] is
+/// represented by exactly one section (AD-11 — Story 4.2's own
+/// deferred-work.md flagged this gap in advance; this closes it).
+const String _kInstructionsRuToEn =
     'You are translating a Russian scene or lore file for a visual-novel '
     'project into natural, readable English prose for the same project. '
+    'Preserve markdown structure (headings, lists, emphasis) and every '
+    'non-prose marker exactly as written — translate only the human-readable '
+    'prose text, never the markup syntax itself. Use the glossary below so '
+    'every mention of a character or place is translated identically '
+    'wherever it appears. Output only the translated file — no commentary, '
+    'no preamble.';
+
+/// The mirror of [_kInstructionsRuToEn] for the EN→RU direction (Story 4.5),
+/// worded for translating INTO Russian.
+const String _kInstructionsEnToRu =
+    'You are translating an English scene or lore file for a visual-novel '
+    'project into natural, readable Russian prose for the same project. '
     'Preserve markdown structure (headings, lists, emphasis) and every '
     'non-prose marker exactly as written — translate only the human-readable '
     'prose text, never the markup syntax itself. Use the glossary below so '
@@ -25,7 +44,19 @@ const String _kInstructions =
 /// not ship that document, so this is the app's own AI-ready copy — Story
 /// 4.3's design decision 5, kept private/inline until a second consumer, e.g.
 /// Story 4.6's grammar review, needs the identical text).
-const String _kConventions = '''
+///
+/// Forked per direction (Story 4.5 review decision, 2026-08-08 — KseiPo:
+/// "we might want to extract this constant to a configuration file and make
+/// it language dependent, so better have one const for each language
+/// direction for now"), reverting an earlier single-shared-constant attempt
+/// that traded away RU→EN's byte-for-byte history (AC5) for a generic
+/// wording. This constant is byte-for-byte identical to what Story 4.3/4.4
+/// shipped. [_kConventionsEnToRu] is its EN→RU mirror. The `ai-prompts.md`
+/// `# Conventions` override (`AiPromptConfig.conventions`) stays a single
+/// shared field applied to whichever of these two is the direction's
+/// default — only the hardcoded defaults are forked, not the override
+/// scheme (see this story's Non-goals).
+const String _kConventionsRuToEn = '''
 - Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate only the name and the phrase.
 - Inner monologue is `Мысль: …` in Russian and `Thought: …` in English — use the English form.
 - Variable placeholders are readable square brackets, e.g. `[имя героя]` — translate the words inside the brackets, keep the bracket form, never emit `<<=\$var>>` or other code syntax.
@@ -34,6 +65,17 @@ const String _kConventions = '''
 - Em-dash conditional markers: `— если … — иначе … — конец условия —` — these delimit authoring conditionals, not prose to render; preserve the em-dash markers and translate only the human-readable text between them.
 - `[[Title]]` with no separator is a lore-entity wikilink (not a passage jump) — translate Title to that entity's English form from the glossary when the glossary lists one; otherwise leave it unchanged rather than guessing.
 - A file may open with a `<!-- scene ⇄ passage: "Passage Name" · lang: ru -->` comment — keep the passage name unchanged, but update `lang: ru` to `lang: en` in the translated output; if no such comment exists, do not add one.''';
+
+/// The EN→RU mirror of [_kConventionsRuToEn] (Story 4.5).
+const String _kConventionsEnToRu = '''
+- Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate only the name and the phrase.
+- Inner monologue is `Мысль: …` in Russian and `Thought: …` in English — use the Russian form.
+- Variable placeholders are readable square brackets, e.g. `[имя героя]` — translate the words inside the brackets, keep the bracket form, never emit `<<=\$var>>` or other code syntax.
+- Player-choice / passage links: `[[Choice text->Passage Name]]` or `[[Choice text|Passage Name]]` — translate the choice text (the label before the separator); never translate or alter the Passage Name (the target after the separator) — it is an identifier, not prose.
+- Return links: `[[back<-Label]]` — translate the Label only; the backlink form itself never changes.
+- Em-dash conditional markers: `— если … — иначе … — конец условия —` — these delimit authoring conditionals, not prose to render; preserve the em-dash markers and translate only the human-readable text between them.
+- `[[Title]]` with no separator is a lore-entity wikilink (not a passage jump) — translate Title to that entity's Russian form from the glossary when the glossary lists one; otherwise leave it unchanged rather than guessing.
+- A file may open with a `<!-- scene ⇄ passage: "Passage Name" · lang: en -->` comment — keep the passage name unchanged, but update `lang: en` to `lang: ru` in the translated output; if no such comment exists, do not add one.''';
 
 /// Review fix: a full scene plus glossary and conventions is a few thousand
 /// input tokens (MOBILE.md §6.4), but the translated *output* of a full
@@ -53,10 +95,18 @@ const int _kMaxTokens = 16384;
 const String _kNoGlossaryPlaceholder =
     '(no other lore entries found in this project)';
 
-/// Runs the Story 4.3 RU→EN translate flow: assembles the FR22 context pack
-/// (this file, the alias glossary, the prose conventions, and the fixed
-/// instructions — four sections, see [_kInstructions]'s doc comment), shows
-/// [showContextPreview], and on confirm streams a translation via [aiClient].
+/// Runs the Story 4.3/4.5 translate flow, in either [direction]: assembles
+/// the FR22 context pack (this file, the alias glossary, the prose
+/// conventions, and the direction-appropriate fixed instructions — four
+/// sections, see [_kInstructionsRuToEn]/[_kInstructionsEnToRu]'s doc
+/// comments), shows [showContextPreview], and on confirm streams a
+/// translation via [aiClient].
+///
+/// [sourceText] is the buffer being translated FROM (the RU buffer for
+/// [TranslationDirection.ruToEn], the EN buffer for
+/// [TranslationDirection.enToRu]) — the caller (`PairedEditorPage`) decides
+/// direction and resolves the correct source; this function is symmetric in
+/// direction and does not itself know which tab is which.
 ///
 /// Returns the translated text on success. Returns `null` if the author
 /// cancelled the preview (nothing was sent) or if anything failed along the
@@ -67,7 +117,8 @@ Future<String?> runTranslate(
   required RepoStorage storage,
   required String loreDir,
   required AiClient aiClient,
-  required String ruText,
+  required String sourceText,
+  required TranslationDirection direction,
 }) async {
   final String glossaryText;
   try {
@@ -83,13 +134,29 @@ Future<String?> runTranslate(
   }
   if (!context.mounted) return null;
 
-  // Story 4.4: an author-supplied `ai-prompts.md` (never throws — Task 1's
-  // own contract) can override either piece; a piece left `null` falls back
-  // to this file's own hardcoded default, unchanged from Story 4.3.
+  // Story 4.4/4.5: an author-supplied `ai-prompts.md` (never throws — Task 1's
+  // own contract) can override any piece; a piece left `null` falls back to
+  // this file's own hardcoded default. Which instructions/conventions
+  // default is consulted depends on [direction] — the one place the
+  // direction decision is made; everything downstream just reads
+  // `instructionsText`/`conventionsText` (AD-11). The `# Conventions`
+  // override itself stays a single shared field (`promptConfig.conventions`)
+  // applied to whichever direction's default it's overriding — only the
+  // hardcoded defaults are forked per direction, not the override scheme.
   final promptConfig = await resolveAiPromptConfig(storage);
   if (!context.mounted) return null;
-  final instructionsText = promptConfig.instructions ?? _kInstructions;
-  final conventionsText = promptConfig.conventions ?? _kConventions;
+  final instructionsText = switch (direction) {
+    TranslationDirection.ruToEn =>
+      promptConfig.instructionsRuToEn ?? _kInstructionsRuToEn,
+    TranslationDirection.enToRu =>
+      promptConfig.instructionsEnToRu ?? _kInstructionsEnToRu,
+  };
+  final conventionsText = switch (direction) {
+    TranslationDirection.ruToEn =>
+      promptConfig.conventions ?? _kConventionsRuToEn,
+    TranslationDirection.enToRu =>
+      promptConfig.conventions ?? _kConventionsEnToRu,
+  };
 
   // Review fix (AD-11): the sent `system` prompt is built ONLY by
   // concatenating these same section texts below (never any additional
@@ -99,7 +166,7 @@ Future<String?> runTranslate(
     label: 'AI instructions',
     text: instructionsText,
   );
-  final file = ContextSection(label: 'The file', text: ruText);
+  final file = ContextSection(label: 'The file', text: sourceText);
   final glossary = ContextSection(label: 'Glossary terms', text: glossaryText);
   final conventions = ContextSection(
     label: 'Conventions',

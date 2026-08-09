@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lore_and_story/ai/ai.dart';
 import 'package:lore_and_story/app/editor_page.dart';
 import 'package:lore_and_story/app/entity_detail_page.dart';
 import 'package:lore_and_story/app/paired_editor_page.dart';
@@ -55,13 +56,14 @@ Future<void> pumpUndetermined(
   FakeRepoStorage storage,
   LoreItem item, {
   String loreDir = '',
+  AiClient? aiClient,
 }) async {
   await tester.pumpWidget(MaterialApp(
     home: UndeterminedLanguagePage(
         storage: storage,
         item: item,
         loreDir: loreDir,
-        aiClient: FakeAiClient()),
+        aiClient: aiClient ?? FakeAiClient()),
   ));
   await tester.pumpAndSettle();
 }
@@ -368,6 +370,52 @@ void main() {
       // Not stranded: the tabs (and the editable content) are still there.
       expect(find.byKey(const Key('lang-tab-ru')), findsOneWidget);
       expect(find.byKey(const Key('lang-tab-en')), findsOneWidget);
+    });
+  });
+
+  group('Review action (Story 4.6, Review Decision 2)', () {
+    testWidgets(
+        'is available on the undetermined-phase editor, shows findings, and '
+        'tapping one exits preview and jumps the editor', (tester) async {
+      final storage = undeterminedStorage();
+      final aiClient = FakeAiClient(
+        response: '[{"line": 1, "issue": "Awkward phrasing", '
+            '"suggestion": "Rephrase it", "severity": "minor"}]',
+      );
+      await pumpUndetermined(tester, storage, undeterminedItem(),
+          aiClient: aiClient);
+
+      // Not pumpAndSettle: the Review button shows an indeterminate spinner
+      // (`_reviewing`) for the whole request, including while the context
+      // preview sheet is up (same reasoning as `EditorPage`'s own Review
+      // tests, `editor_page_test.dart`).
+      await tester.tap(find.byKey(const Key('review-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('grammar-finding-0')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('grammar-finding-0')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('grammar-finding-0')), findsNothing);
+    });
+
+    testWidgets('a clean review shows "No issues found"', (tester) async {
+      final storage = undeterminedStorage();
+      final aiClient = FakeAiClient(response: '[]');
+      await pumpUndetermined(tester, storage, undeterminedItem(),
+          aiClient: aiClient);
+
+      await tester.tap(find.byKey(const Key('review-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('grammar-no-issues')), findsOneWidget);
     });
   });
 

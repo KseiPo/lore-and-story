@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lore_and_story/ai/ai.dart';
 import 'package:lore_and_story/app/editor_page.dart';
 import 'package:lore_and_story/app/editor_toolbar.dart';
 import 'package:lore_and_story/app/markdown_preview.dart';
@@ -13,16 +16,24 @@ import 'test_image_fixtures.dart';
 /// Pumps the editor and settles. The editor now opens in read-only preview
 /// (Story 2.7); since most editor tests exercise editing, this flips into edit
 /// mode by default. Pass `edit: false` to observe the default preview surface.
+///
+/// [aiClient] defaults to a plain `FakeAiClient()` (every pre-Story-4.6 call
+/// site is unaffected) — Story 4.6's Review-action tests pass their own to
+/// control what the AI "returns."
 Future<void> pumpEditor(
   WidgetTester tester,
   FakeRepoStorage storage,
   String path, {
   bool edit = true,
+  AiClient? aiClient,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       home: EditorPage(
-          storage: storage, path: path, loreDir: '', aiClient: FakeAiClient()),
+          storage: storage,
+          path: path,
+          loreDir: '',
+          aiClient: aiClient ?? FakeAiClient()),
     ),
   );
   await tester.pumpAndSettle();
@@ -784,4 +795,184 @@ void main() {
       expect(find.textContaining('could not be loaded'), findsOneWidget);
     });
   });
+
+  group('Review action (Story 4.6)', () {
+    testWidgets(
+        'shows findings for a review with issues, and tapping one exits '
+        'preview and jumps the editor', (tester) async {
+      final storage = FakeRepoStorage(
+        '/repo',
+        fileContents: {'a.md': 'Line one.\nLine two.\n'},
+      );
+      final aiClient = FakeAiClient(
+        response: '[{"line": 2, "issue": "Awkward phrasing", '
+            '"suggestion": "Rephrase it", "severity": "minor"}]',
+      );
+      // Start in preview (Story 2.7 default) so a jump demonstrably exits it.
+      await pumpEditor(tester, storage, 'a.md', edit: false, aiClient: aiClient);
+
+      // Not pumpAndSettle: the Review button shows an indeterminate spinner
+      // (`_reviewing`) for the whole request, including while the context
+      // preview sheet is up — pumpAndSettle would wait forever on that
+      // animation (same reasoning as the Translate action's own tests,
+      // `paired_editor_page_test.dart`).
+      await tester.tap(find.byKey(const Key('review-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('grammar-finding-0')), findsOneWidget);
+      expect(find.byType(TextField), findsNothing,
+          reason: 'still in preview until a finding is tapped');
+
+      await tester.tap(find.byKey(const Key('grammar-finding-0')));
+      await tester.pumpAndSettle();
+
+      // Panel dismissed and the editor jumped out of preview.
+      expect(find.byKey(const Key('grammar-finding-0')), findsNothing);
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('a clean review shows "No issues found"', (tester) async {
+      final storage =
+          FakeRepoStorage('/repo', fileContents: {'a.md': 'Just prose.'});
+      final aiClient = FakeAiClient(response: '[]');
+      await pumpEditor(tester, storage, 'a.md', edit: false, aiClient: aiClient);
+
+      // Not pumpAndSettle: the Review button shows an indeterminate spinner
+      // (`_reviewing`) for the whole request, including while the context
+      // preview sheet is up — pumpAndSettle would wait forever on that
+      // animation (same reasoning as the Translate action's own tests,
+      // `paired_editor_page_test.dart`).
+      await tester.tap(find.byKey(const Key('review-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('grammar-no-issues')), findsOneWidget);
+    });
+
+    testWidgets(
+        'a request failure shows a SnackBar, never crashes, and never opens '
+        'the panel (AD-8)', (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': 'text'});
+      final aiClient = FakeAiClient(error: const AiAuthException('bad key'));
+      await pumpEditor(tester, storage, 'a.md', edit: false, aiClient: aiClient);
+
+      // Not pumpAndSettle: the Review button shows an indeterminate spinner
+      // (`_reviewing`) for the whole request, including while the context
+      // preview sheet is up — pumpAndSettle would wait forever on that
+      // animation (same reasoning as the Translate action's own tests,
+      // `paired_editor_page_test.dart`).
+      await tester.tap(find.byKey(const Key('review-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('bad key'), findsOneWidget);
+      expect(find.byKey(const Key('grammar-no-issues')), findsNothing);
+      expect(find.byKey(const Key('grammar-finding-0')), findsNothing);
+    });
+
+    testWidgets('cancelling the preview sends nothing and shows no panel',
+        (tester) async {
+      final storage = FakeRepoStorage('/repo', fileContents: {'a.md': 'text'});
+      final aiClient = FakeAiClient(response: 'unused');
+      await pumpEditor(tester, storage, 'a.md', edit: false, aiClient: aiClient);
+
+      // Not pumpAndSettle: the Review button shows an indeterminate spinner
+      // (`_reviewing`) for the whole request, including while the context
+      // preview sheet is up — pumpAndSettle would wait forever on that
+      // animation (same reasoning as the Translate action's own tests,
+      // `paired_editor_page_test.dart`).
+      await tester.tap(find.byKey(const Key('review-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-cancel')));
+      await tester.pumpAndSettle();
+
+      expect(aiClient.requests, isEmpty);
+      expect(find.byKey(const Key('grammar-no-issues')), findsNothing);
+    });
+
+    testWidgets(
+        '(Review fix) the Review action is disabled when the buffer is '
+        'blank, mirroring Translate\'s AC8 precedent', (tester) async {
+      final storage =
+          FakeRepoStorage('/repo', fileContents: {'a.md': '   \n'});
+      await pumpEditor(tester, storage, 'a.md', edit: false);
+
+      final button =
+          tester.widget<IconButton>(find.byKey(const Key('review-action')));
+      expect(button.onPressed, isNull);
+    });
+
+    testWidgets(
+        '(Review fix) backing out while a review is in flight is blocked, '
+        'not silently discarded — mirrors the Translate PopScope guard',
+        (tester) async {
+      final storage =
+          FakeRepoStorage('/repo', fileContents: {'a.md': 'text'});
+      final aiClient = _ControllableAiClient();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () => Navigator.of(ctx).push(MaterialPageRoute<void>(
+                builder: (_) => EditorPage(
+                    storage: storage,
+                    path: 'a.md',
+                    loreDir: '',
+                    aiClient: aiClient),
+              )),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('review-action')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      // The review is now in flight — the controllable stream never
+      // completes until we tell it to.
+
+      await tester.pageBack();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Still on the editor — the pop was blocked.
+      expect(find.byKey(const Key('review-action')), findsOneWidget);
+      expect(find.text('A review is still in progress.'), findsOneWidget);
+
+      aiClient.complete('[]');
+      await tester.pumpAndSettle();
+    });
+  });
+}
+
+/// An [AiClient] whose `sendMessage` stream stays open until [complete] is
+/// called — lets a test hold a review "in flight" deliberately, unlike
+/// [FakeAiClient] which always resolves immediately. Mirrors
+/// `paired_editor_page_test.dart`'s own `_ControllableAiClient`.
+class _ControllableAiClient implements AiClient {
+  final _controller = StreamController<String>();
+
+  @override
+  Stream<String> sendMessage(AiRequest request) => _controller.stream;
+
+  void complete(String text) {
+    _controller
+      ..add(text)
+      ..close();
+  }
 }

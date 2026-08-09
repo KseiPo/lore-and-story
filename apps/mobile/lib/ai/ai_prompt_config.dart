@@ -8,35 +8,74 @@ const String kAiPromptConfigFile = 'ai-prompts.md';
 /// The pieces [AiPromptConfig] can hold — one per recognized `# ` heading.
 /// An enum (not a `Map<String, String>` keyed by field name) so a typo in a
 /// heading-to-field mapping is a compile error, not a silent "never
-/// overridden" degradation (Review fix).
-enum _Heading { instructions, conventions }
+/// overridden" degradation (Review fix, Story 4.4).
+enum _Heading {
+  instructionsRuToEn,
+  instructionsEnToRu,
+  conventions,
+  grammarInstructions,
+}
 
 /// Heading text (trimmed, lowercased) → the piece it fills. An unrecognized
 /// heading's body is parsed (consumed) but discarded — forward-compatible
-/// with a future heading (e.g. Story 4.6's grammar instructions) without this
+/// with a heading this parser doesn't yet recognize (the scheme Story 4.6's
+/// `# Grammar Instructions` heading itself was added under) without this
 /// parser needing to change.
+///
+/// `'translation instructions'` (no direction suffix) is Story 4.4's original
+/// heading and keeps meaning RU→EN unchanged, for backward compatibility
+/// (Story 4.5 AC5) — `'translation instructions (ru→en)'`/`(ru->en)` are
+/// accepted as explicit synonyms of it (Review fix: an author who notices the
+/// new `(EN→RU)` heading naturally writes the symmetric form for the other
+/// direction; without this, that heading was silently discarded). The EN→RU
+/// heading is recognized in two spellings — the canonical arrow form and an
+/// ASCII-typable alias — so an author whose keyboard/locale can't easily
+/// produce `→` isn't silently locked out (Story 4.5 Task 1.3).
+///
+/// `'grammar instructions'` (Story 4.6) is a fourth, independent heading for
+/// the grammar/style review feature (`grammar_action.dart`) — no
+/// arrow/direction variants needed, since grammar review isn't directional
+/// the way translation is.
 const Map<String, _Heading> _kKnownHeadings = {
-  'translation instructions': _Heading.instructions,
+  'translation instructions': _Heading.instructionsRuToEn,
+  'translation instructions (ru→en)': _Heading.instructionsRuToEn,
+  'translation instructions (ru->en)': _Heading.instructionsRuToEn,
+  'translation instructions (en→ru)': _Heading.instructionsEnToRu,
+  'translation instructions (en->ru)': _Heading.instructionsEnToRu,
   'conventions': _Heading.conventions,
+  'grammar instructions': _Heading.grammarInstructions,
 };
 
-/// Resolved override for the AI translation prompt's `AI instructions` and
-/// `Conventions` pieces (`translate_action.dart`), read from [kAiPromptConfigFile].
+/// Resolved override for the AI translation prompt's `AI instructions`
+/// (RU→EN and EN→RU independently, Story 4.5/FR30) and `Conventions` pieces
+/// (`translate_action.dart`), plus the grammar/style review's own
+/// instructions (Story 4.6, `grammar_action.dart`), read from
+/// [kAiPromptConfigFile]. Conventions are not direction-specific — the same
+/// text applies either direction. Grammar instructions are independent of
+/// both translation directions and of Conventions.
 ///
-/// Each field is `null` when not overridden — the caller (`runTranslate`)
-/// applies its own hardcoded default in that case (`promptConfig.instructions
-/// ?? _kInstructions`), the same "field absent → caller's own default" shape
-/// `ProjectConfig` already uses for `lore-story.json`. Pure value type — no I/O.
+/// Each field is `null` when not overridden — the caller (`runTranslate` /
+/// `runGrammarReview`) applies its own hardcoded default in that case (e.g.
+/// `promptConfig.instructionsRuToEn ?? _kInstructionsRuToEn`), the same
+/// "field absent → caller's own default" shape `ProjectConfig` already uses
+/// for `lore-story.json`. Pure value type — no I/O.
 @immutable
 class AiPromptConfig {
-  final String? instructions;
+  final String? instructionsRuToEn;
+  final String? instructionsEnToRu;
   final String? conventions;
+  final String? grammarInstructions;
 
-  const AiPromptConfig({this.instructions, this.conventions});
+  const AiPromptConfig({
+    this.instructionsRuToEn,
+    this.instructionsEnToRu,
+    this.conventions,
+    this.grammarInstructions,
+  });
 
   /// Config used when `ai-prompts.md` is missing, unreadable, or defines
-  /// neither recognized section — both pieces fall back to their hardcoded
-  /// defaults (FR29 / AD-8).
+  /// none of the recognized sections — every piece falls back to its
+  /// hardcoded default (FR29 / AD-8).
   static const AiPromptConfig empty = AiPromptConfig();
 
   /// Parses raw `ai-prompts.md` text, best-effort. **Never throws**: any
@@ -51,13 +90,18 @@ class AiPromptConfig {
   /// section's body is everything up to the next top-level heading or EOF,
   /// trimmed of leading/trailing whitespace — otherwise verbatim (not further
   /// parsed). Heading text is matched trimmed and case-insensitively against
-  /// [_kKnownHeadings]. A body that is empty after trimming is treated as
-  /// *not overridden* (left `null`), not as "override with empty text" — an
-  /// empty heading most plausibly signals an incomplete edit, and translating
-  /// with genuinely empty instructions would silently degrade quality with no
-  /// clear signal. A repeated heading: the last occurrence wins outright —
-  /// including when that last occurrence is empty, which correctly clears an
-  /// earlier non-empty override rather than leaving it in place (Review fix).
+  /// [_kKnownHeadings] — four recognized headings: `# Translation
+  /// Instructions` (RU→EN, backward-compatible with Story 4.4), `# Translation
+  /// Instructions (EN→RU)` (or the ASCII `(en->ru)` spelling), `# Conventions`
+  /// (shared by both directions), and `# Grammar Instructions` (Story 4.6,
+  /// independent of the other three). A body that is empty after
+  /// trimming is treated as *not overridden* (left `null`), not as "override
+  /// with empty text" — an empty heading most plausibly signals an incomplete
+  /// edit, and translating with genuinely empty instructions would silently
+  /// degrade quality with no clear signal. A repeated heading: the last
+  /// occurrence wins outright — including when that last occurrence is empty,
+  /// which correctly clears an earlier non-empty override rather than leaving
+  /// it in place (Review fix, Story 4.4).
   factory AiPromptConfig.parse(String raw) {
     // The entire body is guarded by a catch-all (not just specific exception
     // types), mirroring `ProjectConfig.parse`'s own reasoning: an `Error`
@@ -70,8 +114,10 @@ class AiPromptConfig {
 
       _Heading? currentHeading;
       final buffer = StringBuffer();
-      String? instructions;
+      String? instructionsRuToEn;
+      String? instructionsEnToRu;
       String? conventions;
+      String? grammarInstructions;
 
       // Review fix: an unconditional assignment (not "write only if
       // non-empty") — this is what makes a later, empty occurrence of a
@@ -83,10 +129,14 @@ class AiPromptConfig {
           final body = buffer.toString().trim();
           final value = body.isEmpty ? null : body;
           switch (currentHeading) {
-            case _Heading.instructions:
-              instructions = value;
+            case _Heading.instructionsRuToEn:
+              instructionsRuToEn = value;
+            case _Heading.instructionsEnToRu:
+              instructionsEnToRu = value;
             case _Heading.conventions:
               conventions = value;
+            case _Heading.grammarInstructions:
+              grammarInstructions = value;
           }
         }
         buffer.clear();
@@ -107,7 +157,12 @@ class AiPromptConfig {
       }
       flush();
 
-      return AiPromptConfig(instructions: instructions, conventions: conventions);
+      return AiPromptConfig(
+        instructionsRuToEn: instructionsRuToEn,
+        instructionsEnToRu: instructionsEnToRu,
+        conventions: conventions,
+        grammarInstructions: grammarInstructions,
+      );
     } catch (_) {
       return empty;
     }
@@ -116,16 +171,27 @@ class AiPromptConfig {
   @override
   bool operator ==(Object other) =>
       other is AiPromptConfig &&
-      other.instructions == instructions &&
-      other.conventions == conventions;
+      other.instructionsRuToEn == instructionsRuToEn &&
+      other.instructionsEnToRu == instructionsEnToRu &&
+      other.conventions == conventions &&
+      other.grammarInstructions == grammarInstructions;
 
   @override
-  int get hashCode => Object.hash(instructions, conventions);
+  int get hashCode => Object.hash(
+        instructionsRuToEn,
+        instructionsEnToRu,
+        conventions,
+        grammarInstructions,
+      );
 
   @override
-  String toString() => 'AiPromptConfig(instructions: '
-      '${instructions == null ? 'default' : 'overridden'}, conventions: '
-      '${conventions == null ? 'default' : 'overridden'})';
+  String toString() => 'AiPromptConfig(instructionsRuToEn: '
+      '${instructionsRuToEn == null ? 'default' : 'overridden'}, '
+      'instructionsEnToRu: '
+      '${instructionsEnToRu == null ? 'default' : 'overridden'}, '
+      'conventions: ${conventions == null ? 'default' : 'overridden'}, '
+      'grammarInstructions: '
+      '${grammarInstructions == null ? 'default' : 'overridden'})';
 }
 
 /// Reads and resolves [kAiPromptConfigFile] from the repo root via [storage].

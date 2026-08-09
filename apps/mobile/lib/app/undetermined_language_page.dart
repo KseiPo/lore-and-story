@@ -6,6 +6,7 @@ import '../storage/storage.dart';
 import 'editor_page.dart' show kDirtyIndicatorKey, confirmDiscardUnsaved;
 import 'entity_navigation.dart';
 import 'file_editor.dart';
+import 'grammar_panel.dart';
 import 'lint_panel.dart';
 import 'paired_editor_page.dart';
 
@@ -259,6 +260,36 @@ class _UndeterminedLanguagePageState extends State<UndeterminedLanguagePage>
     );
   }
 
+  /// Re-entrancy guard, same shape as [_linting].
+  bool _reviewing = false;
+
+  /// Story 4.6 (Review Decision 2, code review) — reviews the one always-
+  /// visible `FileEditor`'s live buffer for grammar/style. Wired here
+  /// identically to `EditorPage._runReview` — this "undetermined" phase
+  /// already has an `AiClient` and a real `FileEditorState` (used by
+  /// `_runLint` above), so an orig-only bare `.md` file's prose can be
+  /// reviewed exactly like any other, closing the gap the story's own
+  /// original two-host scoping left open by mistake (Lint already lives on
+  /// this page, not just `EditorPage`/`PairedEditorPage`).
+  Future<void> _runReview() async {
+    if (_reviewing) return;
+    if ((_editor?.text.trim().isEmpty) ?? true) return;
+    setState(() => _reviewing = true);
+    try {
+      await runGrammarReviewAndShowPanel(
+        context,
+        storage: widget.storage,
+        aiClient: widget.aiClient,
+        getEditor: () => _editor,
+        onLoaded: () {
+          if (mounted) setState(() => _reviewing = false);
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _reviewing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_isUndetermined) {
@@ -279,9 +310,18 @@ class _UndeterminedLanguagePageState extends State<UndeterminedLanguagePage>
     final scheme = Theme.of(context).colorScheme;
 
     return PopScope(
-      canPop: !dirty,
+      // Review fix, mirroring `EditorPage`'s own `!_reviewing` guard — a
+      // completed (and billed) review must never vanish silently on back.
+      canPop: !dirty && !_reviewing,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _handlePop();
+        if (didPop) return;
+        if (_reviewing) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('A review is still in progress.')),
+          );
+          return;
+        }
+        _handlePop();
       },
       child: Scaffold(
         appBar: AppBar(
@@ -339,6 +379,22 @@ class _UndeterminedLanguagePageState extends State<UndeterminedLanguagePage>
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.fact_check_outlined),
+              ),
+            // Story 4.6 (Review Decision 2) — AI grammar/style review (FR23).
+            if (editor?.isReady ?? false)
+              IconButton(
+                key: const Key('review-action'),
+                tooltip: 'Review',
+                onPressed: (_reviewing || (editor!.text.trim().isEmpty))
+                    ? null
+                    : _runReview,
+                icon: _reviewing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.spellcheck),
               ),
             IconButton(
               tooltip: 'Save',

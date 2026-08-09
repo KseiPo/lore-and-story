@@ -5,6 +5,7 @@ import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'entity_navigation.dart';
 import 'file_editor.dart';
+import 'grammar_panel.dart';
 import 'lint_panel.dart';
 
 /// Key for the dirty indicator, so tests bind to identity rather than to a
@@ -53,6 +54,10 @@ class _EditorPageState extends State<EditorPage> {
   /// Re-entrancy guard — a double-tap on Lint must not start two concurrent
   /// `loadLore` walks or stack two panels.
   bool _linting = false;
+
+  /// Re-entrancy guard, same shape as [_linting] — a double-tap on Review
+  /// must not fire two concurrent AI requests or stack two panels.
+  bool _reviewing = false;
 
   /// Wikilink tap-navigation (Story 3.2, FR19) — pushes the tapped entity via
   /// the shared `navigateToEntity` (the one place the folder-vs-card branch
@@ -115,14 +120,57 @@ class _EditorPageState extends State<EditorPage> {
     );
   }
 
+  /// Story 4.6 — runs an AI grammar/style review on the live buffer and
+  /// shows the findings panel. See `runGrammarReviewAndShowPanel`'s own doc
+  /// comment for the shared implementation. Guarded against a blank buffer
+  /// (Review fix, mirroring Translate's AC8 precedent — an author should
+  /// never be able to pay for a review of nothing), matching the Review
+  /// button's own `onPressed` guard defensively.
+  ///
+  /// Review fix: wrapped in try/finally — without it, an exception between
+  /// `setState(_reviewing = true)` and `onLoaded` would permanently strand
+  /// the Review button, the same failure mode `_translate()`
+  /// (`paired_editor_page.dart`) already guards against. `onLoaded` still
+  /// does the normal, earlier clear (before the modal bottom sheet opens);
+  /// `finally` is only the backstop for a failure before `onLoaded` fires.
+  Future<void> _runReview() async {
+    if (_reviewing) return;
+    if ((_editor?.text.trim().isEmpty) ?? true) return;
+    setState(() => _reviewing = true);
+    try {
+      await runGrammarReviewAndShowPanel(
+        context,
+        storage: widget.storage,
+        aiClient: widget.aiClient,
+        getEditor: () => _editor,
+        onLoaded: () {
+          if (mounted) setState(() => _reviewing = false);
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _reviewing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final editor = _editor;
     final dirty = editor?.isDirty ?? false;
     return PopScope(
-      canPop: !dirty,
+      // Review fix: mirrors `PairedEditorPage`'s own `!_translating` guard —
+      // nothing is "dirty" while a review is in flight, so without
+      // `!_reviewing` the back gesture would silently discard a completed
+      // (and billed) result the moment it lands against an unmounted page.
+      canPop: !dirty && !_reviewing,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _handlePop();
+        if (didPop) return;
+        if (_reviewing) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('A review is still in progress.')),
+          );
+          return;
+        }
+        _handlePop();
       },
       child: Scaffold(
         appBar: AppBar(
@@ -167,6 +215,24 @@ class _EditorPageState extends State<EditorPage> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.fact_check_outlined),
+              ),
+            // Story 4.6 — AI grammar/style review (FR23). Not pair-aware and
+            // not direction-specific (unlike Translate) — available on every
+            // ready buffer.
+            if (editor?.isReady ?? false)
+              IconButton(
+                key: const Key('review-action'),
+                tooltip: 'Review',
+                onPressed: (_reviewing || (editor!.text.trim().isEmpty))
+                    ? null
+                    : _runReview,
+                icon: _reviewing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.spellcheck),
               ),
             IconButton(
               tooltip: 'Save',

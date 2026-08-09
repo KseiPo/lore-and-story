@@ -11,29 +11,31 @@ void main() {
           '# Conventions\n'
           'Keep dialogue format.\n';
       final config = AiPromptConfig.parse(raw);
-      expect(config.instructions, 'Translate carefully.');
+      expect(config.instructionsRuToEn, 'Translate carefully.');
       expect(config.conventions, 'Keep dialogue format.');
     });
 
     test('only Translation Instructions present leaves conventions null', () {
       const raw = '# Translation Instructions\nTranslate carefully.\n';
       final config = AiPromptConfig.parse(raw);
-      expect(config.instructions, 'Translate carefully.');
+      expect(config.instructionsRuToEn, 'Translate carefully.');
       expect(config.conventions, isNull);
     });
 
     test('only Conventions present leaves instructions null', () {
       const raw = '# Conventions\nKeep dialogue format.\n';
       final config = AiPromptConfig.parse(raw);
-      expect(config.instructions, isNull);
+      expect(config.instructionsRuToEn, isNull);
       expect(config.conventions, 'Keep dialogue format.');
     });
 
-    test('neither recognized heading present → both null', () {
+    test('no recognized heading present → all four fields null', () {
       const raw = '# Something Else\nirrelevant content\n';
       final config = AiPromptConfig.parse(raw);
-      expect(config.instructions, isNull);
+      expect(config.instructionsRuToEn, isNull);
+      expect(config.instructionsEnToRu, isNull);
       expect(config.conventions, isNull);
+      expect(config.grammarInstructions, isNull);
     });
 
     test('an unrelated ## heading is part of the enclosing section\'s body, '
@@ -53,7 +55,7 @@ void main() {
           'Real instructions.\n';
       final config = AiPromptConfig.parse(raw);
       expect(config.conventions, isNull);
-      expect(config.instructions, 'Real instructions.');
+      expect(config.instructionsRuToEn, 'Real instructions.');
     });
 
     test('a heading immediately followed by EOF (no body at all) leaves that '
@@ -90,7 +92,7 @@ void main() {
         'to null, not just Conventions', () {
       const raw = '# Translation Instructions\n   \n';
       final config = AiPromptConfig.parse(raw);
-      expect(config.instructions, isNull);
+      expect(config.instructionsRuToEn, isNull);
     });
 
     test('(AC7) lossy-decoded input (U+FFFD replacement characters, as '
@@ -116,10 +118,12 @@ void main() {
       expect(config.conventions, isNot(contains('\r')));
     });
 
-    test('empty input → both null', () {
+    test('empty input → all four fields null', () {
       final config = AiPromptConfig.parse('');
-      expect(config.instructions, isNull);
+      expect(config.instructionsRuToEn, isNull);
+      expect(config.instructionsEnToRu, isNull);
       expect(config.conventions, isNull);
+      expect(config.grammarInstructions, isNull);
     });
 
     test('never throws on pathologically large input', () {
@@ -133,8 +137,183 @@ void main() {
       const raw = '## Not top-level\ntext\n### Also not top-level\nmore\n';
       expect(() => AiPromptConfig.parse(raw), returnsNormally);
       final config = AiPromptConfig.parse(raw);
-      expect(config.instructions, isNull);
+      expect(config.instructionsRuToEn, isNull);
       expect(config.conventions, isNull);
+    });
+
+    group('Story 4.5: EN→RU direction-aware heading', () {
+      test(
+          '# Translation Instructions (EN→RU) populates instructionsEnToRu '
+          'only — the RU→EN field stays null', () {
+        const raw = '# Translation Instructions (EN→RU)\n'
+            'Translate into Russian carefully.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.instructionsEnToRu, 'Translate into Russian carefully.');
+        expect(config.instructionsRuToEn, isNull);
+      });
+
+      test('the ASCII (en->ru) spelling parses identically to the arrow '
+          'form', () {
+        const raw = '# Translation Instructions (en->ru)\n'
+            'Translate into Russian carefully.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.instructionsEnToRu, 'Translate into Russian carefully.');
+      });
+
+      test(
+          '(Review fix) # Translation Instructions (RU→EN) — the symmetric '
+          'heading an author naturally writes after seeing (EN→RU) — is '
+          'recognized as an explicit synonym of the unprefixed heading, not '
+          'silently discarded', () {
+        const raw = '# Translation Instructions (RU→EN)\n'
+            'Translate into English carefully.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.instructionsRuToEn, 'Translate into English carefully.');
+      });
+
+      test('(Review fix) the ASCII (ru->en) spelling of the symmetric '
+          'heading parses identically to its arrow form', () {
+        const raw = '# Translation Instructions (ru->en)\n'
+            'Translate into English carefully.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.instructionsRuToEn, 'Translate into English carefully.');
+      });
+
+      test('matched case-insensitively and trimmed, same as the other '
+          'headings', () {
+        const raw = '#   TRANSLATION INSTRUCTIONS (EN→RU)   \n'
+            'Upper-case heading.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.instructionsEnToRu, 'Upper-case heading.');
+      });
+
+      test('both the RU→EN and EN→RU headings present independently '
+          'populate their own fields, plus Conventions', () {
+        const raw = '# Translation Instructions\n'
+            'RU to EN text.\n'
+            '# Translation Instructions (EN→RU)\n'
+            'EN to RU text.\n'
+            '# Conventions\n'
+            'Shared conventions.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.instructionsRuToEn, 'RU to EN text.');
+        expect(config.instructionsEnToRu, 'EN to RU text.');
+        expect(config.conventions, 'Shared conventions.');
+      });
+
+      test('an empty-body EN→RU heading falls back to null (Design '
+          'decision 3, now for the third field)', () {
+        const raw = '# Translation Instructions (EN→RU)\n   \n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.instructionsEnToRu, isNull);
+      });
+
+      test('a repeated EN→RU heading whose last occurrence is empty clears '
+          'an earlier non-empty one', () {
+        const raw = '# Translation Instructions (EN→RU)\n'
+            'First.\n'
+            '# Translation Instructions (EN→RU)\n'
+            '\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.instructionsEnToRu, isNull);
+      });
+    });
+
+    group('Story 4.6: Grammar Instructions heading', () {
+      test('# Grammar Instructions populates grammarInstructions only — the '
+          'other three fields stay null', () {
+        const raw = '# Grammar Instructions\nReview for grammar carefully.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.grammarInstructions, 'Review for grammar carefully.');
+        expect(config.instructionsRuToEn, isNull);
+        expect(config.instructionsEnToRu, isNull);
+        expect(config.conventions, isNull);
+      });
+
+      test('matched case-insensitively and trimmed, same as the other '
+          'headings', () {
+        const raw = '#   GRAMMAR INSTRUCTIONS   \nUpper-case heading.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.grammarInstructions, 'Upper-case heading.');
+      });
+
+      test('an empty-body Grammar Instructions heading falls back to null '
+          '(Design decision 3, now for the fourth field)', () {
+        const raw = '# Grammar Instructions\n   \n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.grammarInstructions, isNull);
+      });
+
+      test('a repeated Grammar Instructions heading whose last occurrence is '
+          'empty clears an earlier non-empty one', () {
+        const raw = '# Grammar Instructions\nFirst.\n'
+            '# Grammar Instructions\n\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.grammarInstructions, isNull);
+      });
+
+      test('a repeated Grammar Instructions heading — the last non-empty '
+          'occurrence wins', () {
+        const raw = '# Grammar Instructions\nFirst.\n'
+            '# Grammar Instructions\nSecond.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.grammarInstructions, 'Second.');
+      });
+
+      test('all four headings present populate all four fields '
+          'independently', () {
+        const raw = '# Translation Instructions\n'
+            'RU to EN text.\n'
+            '# Translation Instructions (EN→RU)\n'
+            'EN to RU text.\n'
+            '# Conventions\n'
+            'Shared conventions.\n'
+            '# Grammar Instructions\n'
+            'Grammar review text.\n';
+        final config = AiPromptConfig.parse(raw);
+        expect(config.instructionsRuToEn, 'RU to EN text.');
+        expect(config.instructionsEnToRu, 'EN to RU text.');
+        expect(config.conventions, 'Shared conventions.');
+        expect(config.grammarInstructions, 'Grammar review text.');
+      });
+    });
+
+    test('toString/== /hashCode cover all four fields', () {
+      const a = AiPromptConfig(
+        instructionsRuToEn: 'a',
+        instructionsEnToRu: 'b',
+        conventions: 'c',
+        grammarInstructions: 'd',
+      );
+      const b = AiPromptConfig(
+        instructionsRuToEn: 'a',
+        instructionsEnToRu: 'b',
+        conventions: 'c',
+        grammarInstructions: 'd',
+      );
+      const different =
+          AiPromptConfig(instructionsRuToEn: 'a', instructionsEnToRu: 'x');
+      const missingGrammar = AiPromptConfig(
+        instructionsRuToEn: 'a',
+        instructionsEnToRu: 'b',
+        conventions: 'c',
+      );
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+      expect(a, isNot(different));
+      expect(a, isNot(missingGrammar));
+      expect(
+        a.toString(),
+        'AiPromptConfig(instructionsRuToEn: overridden, '
+        'instructionsEnToRu: overridden, conventions: overridden, '
+        'grammarInstructions: overridden)',
+      );
+      expect(
+        AiPromptConfig.empty.toString(),
+        'AiPromptConfig(instructionsRuToEn: default, '
+        'instructionsEnToRu: default, conventions: default, '
+        'grammarInstructions: default)',
+      );
     });
   });
 
@@ -142,8 +321,10 @@ void main() {
     test('a missing ai-prompts.md resolves to AiPromptConfig.empty', () async {
       final config = await resolveAiPromptConfig(FakeRepoStorage('/repo'));
       expect(config, AiPromptConfig.empty);
-      expect(config.instructions, isNull);
+      expect(config.instructionsRuToEn, isNull);
+      expect(config.instructionsEnToRu, isNull);
       expect(config.conventions, isNull);
+      expect(config.grammarInstructions, isNull);
     });
 
     test('an existing ai-prompts.md is read and parsed', () async {
@@ -152,7 +333,20 @@ void main() {
       });
       final config = await resolveAiPromptConfig(storage);
       expect(config.conventions, 'Custom conventions.');
-      expect(config.instructions, isNull);
+      expect(config.instructionsRuToEn, isNull);
+      expect(config.instructionsEnToRu, isNull);
+      expect(config.grammarInstructions, isNull);
+    });
+
+    test('an ai-prompts.md with # Grammar Instructions is read and parsed '
+        '(Story 4.6)', () async {
+      final storage = FakeRepoStorage('/repo', fileContents: {
+        kAiPromptConfigFile: '# Grammar Instructions\nCustom review text.\n',
+      });
+      final config = await resolveAiPromptConfig(storage);
+      expect(config.grammarInstructions, 'Custom review text.');
+      expect(config.instructionsRuToEn, isNull);
+      expect(config.conventions, isNull);
     });
   });
 }
