@@ -189,4 +189,27 @@ void main() {
     expect(find.text('Settings'), findsOneWidget);
     expect(find.byKey(const Key('settings-key-field')), findsOneWidget);
   });
+
+  testWidgets(
+      '(Story 4.7) Settings still opens when no repo root has been picked '
+      'yet — storage: null, never blocks or throws', (tester) async {
+    await tester.pumpWidget(LoreStoryApp(
+      rootStore: FakeRepoRootStore(), // no root stored yet → needsRoot stage
+      permission: FakeStoragePermission(granted: true),
+      storageFactory: (root) => FakeRepoStorage(root),
+      keyStore: FakeKeyStore(),
+      aiClient: FakeAiClient(),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose repo folder'), findsOneWidget,
+        reason: 'confirms we are genuinely in the no-root-yet state');
+
+    await tester.tap(find.byKey(const Key('settings-action')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.byKey(const Key('settings-key-field')), findsOneWidget);
+  });
 }

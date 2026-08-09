@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'ai_client.dart';
+import 'ai_server_config.dart' show kDefaultAnthropicEndpoint;
 import 'key_store.dart';
 
 /// [AiClient] adapter for Anthropic's Messages API (no official Dart SDK, so
@@ -23,7 +24,7 @@ import 'key_store.dart';
 /// never cached in this object's own state (one less place it could leak
 /// from, AC8).
 class MessagesApiClient implements AiClient {
-  static final Uri _endpoint = Uri.parse('https://api.anthropic.com/v1/messages');
+  static final Uri _endpoint = Uri.parse(kDefaultAnthropicEndpoint);
 
   /// Anthropic API version header — pinned per the addendum's model choice.
   static const String _anthropicVersion = '2023-06-01';
@@ -168,13 +169,35 @@ class MessagesApiClient implements AiClient {
     return duration > _maxRetryAfter ? _maxRetryAfter : duration;
   }
 
+  /// Resolves [origin] (a base/origin like `http://localhost:1234/v1`, or
+  /// `null` for "use the default") to the complete Messages API endpoint —
+  /// this adapter's own `/messages` path suffix, appended here rather than
+  /// baked into `AiServerConfig.baseUrl` itself, so the *same* configured
+  /// origin also works for a future OpenAI-protocol adapter (Story 4.8),
+  /// which would append its own `/chat/completions` suffix instead (Review
+  /// fix, Story 4.7 code review Decision 2). Strips any trailing slash from
+  /// [origin]'s path first so `.../v1` and `.../v1/` both produce
+  /// `.../v1/messages`, never `.../v1//messages`.
+  Uri _resolveEndpoint(Uri? origin) {
+    if (origin == null) return _endpoint;
+    final path = origin.path.endsWith('/')
+        ? origin.path.substring(0, origin.path.length - 1)
+        : origin.path;
+    return origin.replace(path: '$path/messages');
+  }
+
   http.Request _buildRequest(AiRequest request, String apiKey) {
-    final req = http.Request('POST', _endpoint)
+    // Story 4.7: `request.baseUrl`/`request.model` (resolved fresh per call
+    // from `lore-story.json`'s `ai` object) override this instance's own
+    // configured defaults when present — `??`/`_resolveEndpoint` fall back
+    // to today's hardcoded Anthropic endpoint/model unchanged when they're
+    // null.
+    final req = http.Request('POST', _resolveEndpoint(request.baseUrl))
       ..headers['x-api-key'] = apiKey
       ..headers['anthropic-version'] = _anthropicVersion
       ..headers['content-type'] = 'application/json'
       ..body = jsonEncode({
-        'model': _model,
+        'model': request.model ?? _model,
         'max_tokens': request.maxTokens,
         'thinking': {'type': 'adaptive'},
         'stream': true,

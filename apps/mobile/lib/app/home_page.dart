@@ -325,8 +325,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _openSettings() async {
+    // Story 4.7 — resolves `lore-story.json`'s `ai` object for Test
+    // Connection. `null` when no root has been granted/picked yet
+    // (`_rootPath` is only set once `_scanOnce` reaches `_Stage.ready`) —
+    // `SettingsPage` falls back to hardcoded defaults in that case, never
+    // blocking Settings from opening.
+    final root = _rootPath;
+    final storage = root != null ? widget.storageFactory(root) : null;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => SettingsPage(keyStore: widget.keyStore)),
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(
+          keyStore: widget.keyStore,
+          aiClient: widget.aiClient,
+          storage: storage,
+        ),
+      ),
     );
   }
 

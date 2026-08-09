@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/ai/ai.dart';
+import 'package:lore_and_story/lore/lore.dart' show kProjectConfigFile;
 import 'package:lore_and_story/storage/storage.dart';
 
 import '../fakes.dart';
@@ -73,6 +74,29 @@ FakeRepoStorage _storageWithPromptOverride({
   );
 }
 
+/// Story 4.7: [_storageWithEntities]'s same entities plus a `lore-story.json`
+/// containing the given `ai` object JSON fragment (e.g. `'"model":"m"'`) —
+/// a distinct mechanism from [_storageWithPromptOverride]'s `ai-prompts.md`
+/// (a different file entirely).
+FakeRepoStorage _storageWithServerConfig(String aiObjectJson) {
+  return FakeRepoStorage(
+    '/repo',
+    dirEntries: {
+      '': [
+        ..._kEntityDirEntries['']!,
+        RepoEntry(
+            name: kProjectConfigFile,
+            path: kProjectConfigFile,
+            isDirectory: false),
+      ],
+    },
+    fileContents: {
+      ..._kEntityFileContents,
+      kProjectConfigFile: '{"ai":{$aiObjectJson}}',
+    },
+  );
+}
+
 /// Pumps a minimal host with a button that runs [runTranslate] and records
 /// the resolved value, so tests drive it via real widget interactions (tap
 /// Confirm/Cancel on the resulting preview) rather than calling it directly
@@ -131,7 +155,7 @@ String _sectionText(WidgetTester tester, int index) {
 
 void main() {
   testWidgets(
-      'shows the context preview with exactly the 4 expected sections, '
+      'shows the context preview with exactly the 5 expected sections, '
       'nothing sent yet (AC1)', (tester) async {
     final aiClient = FakeAiClient(response: 'Translated.');
     await _pumpHost(
@@ -149,6 +173,17 @@ void main() {
     expect(find.text('# Селена\n\nПривет.'), findsOneWidget);
     expect(find.text('Glossary terms'), findsOneWidget);
     expect(find.text('Conventions'), findsOneWidget);
+    // (Story 4.7, Review fix) The destination is part of "exactly what
+    // leaves the device" (AD-11) — scroll to it (a fixed-offset drag isn't
+    // reliable here since 5 sections' combined content varies in length;
+    // dragUntilVisible repeats the drag until the target is on screen).
+    await tester.dragUntilVisible(
+        find.text('Server'), find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(find.text('Server'), findsOneWidget);
+    expect(find.text('https://api.anthropic.com/v1/messages'), findsOneWidget,
+        reason: 'the default Anthropic endpoint, since no ai object override '
+            'is configured in this test\'s storage');
     expect(aiClient.requests, isEmpty,
         reason: 'the preview must show before anything is sent (AD-11)');
   });
@@ -676,6 +711,97 @@ void main() {
 - Em-dash conditional markers: `— если … — иначе … — конец условия —` — these delimit authoring conditionals, not prose to render; preserve the em-dash markers and translate only the human-readable text between them.
 - `[[Title]]` with no separator is a lore-entity wikilink (not a passage jump) — translate Title to that entity's English form from the glossary when the glossary lists one; otherwise leave it unchanged rather than guessing.
 - A file may open with a `<!-- scene ⇄ passage: "Passage Name" · lang: ru -->` comment — keep the passage name unchanged, but update `lang: ru` to `lang: en` in the translated output; if no such comment exists, do not add one.''');
+    });
+  });
+
+  group('AI server config (Story 4.7)', () {
+    testWidgets(
+        'a resolved lore-story.json ai object flows into the sent request\'s '
+        'model/baseUrl', (tester) async {
+      final aiClient = FakeAiClient(response: 'Translated.');
+      await _pumpHost(
+        tester,
+        storage: _storageWithServerConfig(
+            '"server":"custom","model":"local-model",'
+            '"baseUrl":"http://localhost:1234/v1"'),
+        aiClient: aiClient,
+        ruText: 'text',
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(aiClient.requests.single.model, 'local-model');
+      expect(aiClient.requests.single.baseUrl,
+          Uri.parse('http://localhost:1234/v1'));
+    });
+
+    testWidgets(
+        '(AC6) an absent lore-story.json leaves model/baseUrl null on the '
+        'sent request — today\'s behavior unchanged', (tester) async {
+      final aiClient = FakeAiClient(response: 'Translated.');
+      await _pumpHost(
+        tester,
+        storage: _storageWithEntities(),
+        aiClient: aiClient,
+        ruText: 'text',
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(aiClient.requests.single.model, isNull);
+      expect(aiClient.requests.single.baseUrl, isNull);
+    });
+
+    testWidgets(
+        'the preview\'s Server section shows the resolved custom origin '
+        'when one is configured', (tester) async {
+      final aiClient = FakeAiClient(response: 'Translated.');
+      await _pumpHost(
+        tester,
+        storage: _storageWithServerConfig(
+            '"server":"custom","baseUrl":"http://localhost:1234/v1"'),
+        aiClient: aiClient,
+        ruText: 'text',
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+      await tester.dragUntilVisible(find.text('http://localhost:1234/v1'),
+          find.byType(ListView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('http://localhost:1234/v1'), findsOneWidget);
+    });
+
+    testWidgets(
+        '(Review fix) an unusable server config (custom with no baseUrl) '
+        'shows an error and never opens the preview or sends anything',
+        (tester) async {
+      final aiClient = FakeAiClient(response: 'should never be sent');
+      String? result = 'unset';
+      await _pumpHost(
+        tester,
+        storage: _storageWithServerConfig('"server":"custom"'),
+        aiClient: aiClient,
+        ruText: 'text',
+        onResult: (r) => result = r,
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(result, isNull);
+      expect(aiClient.requests, isEmpty);
+      expect(find.byKey(const Key('context-preview-confirm')), findsNothing,
+          reason: 'nothing valid to preview — the error is surfaced before '
+              'the preview would open');
+      expect(find.textContaining('server'), findsOneWidget);
     });
   });
 }

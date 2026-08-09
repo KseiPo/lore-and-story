@@ -100,6 +100,96 @@ void main() {
       expect(captured!.body.contains('sk-ant-test-key'), isFalse);
     });
 
+    test('(Story 4.7, Review fix) an AiRequest.baseUrl override is treated '
+        'as an origin — this adapter appends its own /messages suffix, '
+        'never the hardcoded Anthropic endpoint', () async {
+      http.Request? captured;
+      final client = _clientWith(MockClient.streaming((request, bodyStream) async {
+        captured = request as http.Request;
+        return http.StreamedResponse(Stream.value(utf8.encode(_sseBody(['ok']))), 200);
+      }));
+
+      final request = AiRequest(
+        system: 'You are a translator.',
+        userContent: 'Привет',
+        baseUrl: Uri.parse('http://192.168.1.50:1234/v1'),
+      );
+      await client.sendMessage(request).toList();
+
+      expect(captured!.url.toString(), 'http://192.168.1.50:1234/v1/messages');
+    });
+
+    test('(Review fix) an origin with a trailing slash still produces '
+        'exactly one slash before "messages"', () async {
+      http.Request? captured;
+      final client = _clientWith(MockClient.streaming((request, bodyStream) async {
+        captured = request as http.Request;
+        return http.StreamedResponse(Stream.value(utf8.encode(_sseBody(['ok']))), 200);
+      }));
+
+      final request = AiRequest(
+        system: 'You are a translator.',
+        userContent: 'Привет',
+        baseUrl: Uri.parse('http://192.168.1.50:1234/v1/'),
+      );
+      await client.sendMessage(request).toList();
+
+      expect(captured!.url.toString(), 'http://192.168.1.50:1234/v1/messages');
+    });
+
+    test('(Review fix) a bare-host origin with no path produces "/messages"',
+        () async {
+      http.Request? captured;
+      final client = _clientWith(MockClient.streaming((request, bodyStream) async {
+        captured = request as http.Request;
+        return http.StreamedResponse(Stream.value(utf8.encode(_sseBody(['ok']))), 200);
+      }));
+
+      final request = AiRequest(
+        system: 'You are a translator.',
+        userContent: 'Привет',
+        baseUrl: Uri.parse('http://192.168.1.50:1234'),
+      );
+      await client.sendMessage(request).toList();
+
+      expect(captured!.url.toString(), 'http://192.168.1.50:1234/messages');
+    });
+
+    test('(Story 4.7) an AiRequest.model override sends that model string '
+        'instead of the constructor default', () async {
+      http.Request? captured;
+      final client = _clientWith(MockClient.streaming((request, bodyStream) async {
+        captured = request as http.Request;
+        return http.StreamedResponse(Stream.value(utf8.encode(_sseBody(['ok']))), 200);
+      }));
+
+      final request = AiRequest(
+        system: 'You are a translator.',
+        userContent: 'Привет',
+        model: 'llama-3.1-70b',
+      );
+      await client.sendMessage(request).toList();
+
+      final body = jsonDecode(captured!.body) as Map<String, dynamic>;
+      expect(body['model'], 'llama-3.1-70b');
+    });
+
+    test('(Story 4.7) an AiRequest with model/baseUrl left null behaves '
+        'completely unchanged — regression guard for the override addition',
+        () async {
+      http.Request? captured;
+      final client = _clientWith(MockClient.streaming((request, bodyStream) async {
+        captured = request as http.Request;
+        return http.StreamedResponse(Stream.value(utf8.encode(_sseBody(['ok']))), 200);
+      }));
+
+      await client.sendMessage(_request).toList();
+
+      expect(captured!.url.toString(), 'https://api.anthropic.com/v1/messages');
+      final body = jsonDecode(captured!.body) as Map<String, dynamic>;
+      expect(body['model'], 'claude-opus-4-8');
+    });
+
     test('throws AiNotConfiguredException without sending a request when no '
         'key is configured — distinct from AiAuthException (a saved key '
         'the provider rejected)', () async {

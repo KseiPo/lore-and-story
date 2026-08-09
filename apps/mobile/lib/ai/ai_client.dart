@@ -20,10 +20,27 @@ class AiRequest {
   /// Upper bound on the model's response length.
   final int maxTokens;
 
+  /// Overrides the adapter's own configured model, when set (Story 4.7 —
+  /// `AiServerConfig.model`, resolved fresh per call from `lore-story.json`).
+  /// `null` means "use the client's own configured default."
+  final String? model;
+
+  /// Overrides the adapter's own configured endpoint **origin** (Story 4.7 —
+  /// `resolveCustomOrigin(AiServerConfig)`, only non-null for
+  /// `server: "custom"` with a valid `baseUrl`). This is a base/origin
+  /// (e.g. `http://localhost:1234/v1`), not a complete endpoint — each
+  /// protocol-specific adapter appends its own known path suffix (the
+  /// Anthropic adapter appends `/messages`), so one configured origin can
+  /// serve whichever protocol adapter it's paired with. `null` means "use
+  /// the client's own configured default."
+  final Uri? baseUrl;
+
   const AiRequest({
     required this.system,
     required this.userContent,
     this.maxTokens = 8192,
+    this.model,
+    this.baseUrl,
   });
 }
 
@@ -76,6 +93,17 @@ class AiServerException extends AiClientException {
 /// Retryable; thrown once retries are exhausted.
 class AiNetworkException extends AiClientException {
   const AiNetworkException(super.message);
+}
+
+/// The resolved `lore-story.json` `ai` object (Story 4.7) specifies a server
+/// this app cannot currently reach — e.g. `server: "custom"` with no usable
+/// `baseUrl`, `server: "openrouter"` (not yet functional, Story 4.8), or a
+/// `baseUrl` set without `server: "custom"` (an inconsistent config, never
+/// silently ignored). Diagnosed locally from config alone, before any
+/// request is built or sent — distinct from every other exception here,
+/// which reports a transport/provider outcome.
+class AiConfigException extends AiClientException {
+  const AiConfigException(super.message);
 }
 
 /// Adapter contract for an AI provider's chat/messages endpoint.

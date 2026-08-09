@@ -13,6 +13,7 @@ library;
 
 export 'ai_client.dart';
 export 'ai_prompt_config.dart';
+export 'ai_server_config.dart';
 export 'context_preview.dart';
 export 'grammar_action.dart';
 export 'key_store.dart';

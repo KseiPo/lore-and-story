@@ -17,12 +17,29 @@
         android:label="Lore &amp; Story"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:allowBackup="false">
+        android:allowBackup="false"
+        android:usesCleartextTraffic="true">
         <!-- Story 4.1 review: allowBackup=false so the AI API key (secure
              storage, Android Keystore-encrypted) is never included in Android
              Auto Backup — matches this app's local-only security stance
              (NFR5). The only other affected app data is the small repo-root
              preference, easily re-chosen after a restore. -->
+        <!-- Story 4.7 code review Decision 3: cleartext (http://) is needed
+             for a `server: "custom"` AI endpoint on the author's own local
+             network (e.g. LM Studio at http://192.168.x.x:1234) — Android
+             denies cleartext by platform default from API 28 up. A
+             range-restricted Network Security Config was the original plan,
+             but Android's `<domain>` matcher only accepts exact hostnames or
+             exact IP literals, never a CIDR range — there is no declarative
+             way to say "any 192.168.0.0/16 address" for an author's
+             not-yet-known LAN IP. The equivalent restriction is enforced
+             instead in `ai/ai_server_config.dart`'s `resolveCustomOrigin`:
+             `http://` is only ever accepted for a private/loopback host
+             (RFC 1918 + 127.0.0.0/8 + 169.254.0.0/16); a public host is
+             rejected there and must use `https://`. This blanket manifest
+             flag only grants the OS-level *permission* to attempt cleartext
+             at all — the app itself is what actually restricts where it's
+             used. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

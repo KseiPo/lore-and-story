@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../storage/storage.dart';
 import 'ai_client.dart';
 import 'ai_prompt_config.dart';
+import 'ai_server_config.dart';
 import 'context_preview.dart';
 
 /// How serious a [GrammarFinding] is — a closed set so the panel (Story 4.6,
@@ -131,6 +132,24 @@ Future<List<GrammarFinding>?> runGrammarReview(
   // file's own hardcoded default.
   final promptConfig = await resolveAiPromptConfig(storage);
   if (!context.mounted) return null;
+  // Story 4.7: an author-configured `lore-story.json` `ai` object (never
+  // throws — its own contract) can override the model/base URL a request
+  // actually goes to; a piece left `null` falls back to `MessagesApiClient`'s
+  // own hardcoded default (`AiRequest.model`/`.baseUrl`, both nullable).
+  final serverConfig = await resolveAiServerConfig(storage);
+  if (!context.mounted) return null;
+  // Review fix (Story 4.7 code review): a config that signals intent to use
+  // something other than plain Anthropic-direct but that this app can't
+  // actually honor must refuse to send rather than silently falling back
+  // to Anthropic with whatever key is saved — surfaced BEFORE the preview
+  // even opens, since there is nothing valid to preview.
+  final Uri? customOrigin;
+  try {
+    customOrigin = resolveCustomOrigin(serverConfig);
+  } on AiConfigException catch (e) {
+    if (context.mounted) _showError(context, e.message);
+    return null;
+  }
   final instructionsText = promptConfig.grammarInstructions ?? _kGrammarInstructions;
 
   // AD-11: the sent `system` prompt is built ONLY by concatenating these
@@ -142,7 +161,15 @@ Future<List<GrammarFinding>?> runGrammarReview(
   final responseFormat =
       ContextSection(label: 'Response format', text: _kResponseFormatContract);
   final file = ContextSection(label: 'The file', text: text);
-  final sections = [instructions, responseFormat, file];
+  // Review fix (Story 4.7 code review Decision 1): the preview must show
+  // the destination too, now that `lore-story.json` can redirect it — see
+  // `translate_action.dart`'s identical fix for the full rationale.
+  // Appended last so every pre-Story-4.7 section keeps its existing index.
+  final destination = ContextSection(
+    label: 'Server',
+    text: customOrigin?.toString() ?? kDefaultAnthropicEndpoint,
+  );
+  final sections = [instructions, responseFormat, file, destination];
 
   final confirmed = await showContextPreview(context, sections: sections);
   if (!confirmed) return null;
@@ -152,6 +179,8 @@ Future<List<GrammarFinding>?> runGrammarReview(
     system: [instructions.text, responseFormat.text].join('\n\n'),
     userContent: file.text,
     maxTokens: _kMaxTokens,
+    model: serverConfig.model,
+    baseUrl: customOrigin,
   );
 
   final String raw;

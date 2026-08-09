@@ -4,6 +4,7 @@ import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'ai_client.dart';
 import 'ai_prompt_config.dart';
+import 'ai_server_config.dart';
 import 'context_preview.dart';
 
 /// Which way a translate request runs (Story 4.5/FR30) — determines which of
@@ -145,6 +146,25 @@ Future<String?> runTranslate(
   // hardcoded defaults are forked per direction, not the override scheme.
   final promptConfig = await resolveAiPromptConfig(storage);
   if (!context.mounted) return null;
+  // Story 4.7: an author-configured `lore-story.json` `ai` object (never
+  // throws — its own contract) can override the model/base URL a request
+  // actually goes to; a piece left `null` falls back to `MessagesApiClient`'s
+  // own hardcoded default (`AiRequest.model`/`.baseUrl`, both nullable).
+  final serverConfig = await resolveAiServerConfig(storage);
+  if (!context.mounted) return null;
+  // Review fix (Story 4.7 code review): a config that signals intent to use
+  // something other than plain Anthropic-direct but that this app can't
+  // actually honor (an unusable `server`/`baseUrl` combination) must refuse
+  // to send rather than silently falling back to Anthropic with whatever
+  // key is saved — surfaced BEFORE the preview even opens, since there is
+  // nothing valid to preview.
+  final Uri? customOrigin;
+  try {
+    customOrigin = resolveCustomOrigin(serverConfig);
+  } on AiConfigException catch (e) {
+    if (context.mounted) _showError(context, e.message);
+    return null;
+  }
   final instructionsText = switch (direction) {
     TranslationDirection.ruToEn =>
       promptConfig.instructionsRuToEn ?? _kInstructionsRuToEn,
@@ -172,7 +192,16 @@ Future<String?> runTranslate(
     label: 'Conventions',
     text: conventionsText,
   );
-  final sections = [instructions, file, glossary, conventions];
+  // Review fix (Story 4.7 code review Decision 1): AD-11 promises the
+  // preview shows exactly what leaves the device — before this story the
+  // destination was a hardcoded constant, but `lore-story.json` can now
+  // redirect it, so the destination itself must be part of what's shown.
+  // Appended last so every pre-Story-4.7 section keeps its existing index.
+  final destination = ContextSection(
+    label: 'Server',
+    text: customOrigin?.toString() ?? kDefaultAnthropicEndpoint,
+  );
+  final sections = [instructions, file, glossary, conventions, destination];
 
   final confirmed = await showContextPreview(context, sections: sections);
   if (!confirmed) return null;
@@ -187,6 +216,8 @@ Future<String?> runTranslate(
     system: systemPrompt,
     userContent: file.text,
     maxTokens: _kMaxTokens,
+    model: serverConfig.model,
+    baseUrl: customOrigin,
   );
 
   try {

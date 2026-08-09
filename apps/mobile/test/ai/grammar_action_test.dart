@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/ai/ai.dart';
+import 'package:lore_and_story/lore/lore.dart' show kProjectConfigFile;
 import 'package:lore_and_story/storage/storage.dart';
 
 import '../fakes.dart';
@@ -32,6 +33,25 @@ FakeRepoStorage _storageWithPromptOverride({String? instructions}) {
 /// A repo with no `ai-prompts.md` at all — every request uses the hardcoded
 /// default instructions.
 FakeRepoStorage _storageNoOverride() => FakeRepoStorage('/repo');
+
+/// Story 4.7: a repo whose `lore-story.json` contains the given `ai` object
+/// JSON fragment (e.g. `'"model":"m"'`) — a distinct mechanism from
+/// [_storageWithPromptOverride]'s `ai-prompts.md` (a different file
+/// entirely).
+FakeRepoStorage _storageWithServerConfig(String aiObjectJson) {
+  return FakeRepoStorage(
+    '/repo',
+    dirEntries: {
+      '': [
+        RepoEntry(
+            name: kProjectConfigFile,
+            path: kProjectConfigFile,
+            isDirectory: false),
+      ],
+    },
+    fileContents: {kProjectConfigFile: '{"ai":{$aiObjectJson}}'},
+  );
+}
 
 /// Pumps a minimal host with a button that runs [runGrammarReview] and
 /// records the resolved value, mirroring `translate_action_test.dart`'s own
@@ -75,7 +95,7 @@ String _sectionText(WidgetTester tester, int index) {
 
 void main() {
   testWidgets(
-      'shows the context preview with exactly the 3 expected sections, '
+      'shows the context preview with exactly the 4 expected sections, '
       'nothing sent yet (AC1/AC4)', (tester) async {
     final aiClient = FakeAiClient(response: '[]');
     await _pumpHost(
@@ -91,12 +111,19 @@ void main() {
     expect(find.text('AI instructions'), findsOneWidget);
     // The instructions text is long enough that the later sections sit
     // below the fold in the bottom sheet's lazily-built ListView — scroll it
-    // into view rather than assuming they're already built.
-    await tester.drag(find.byType(ListView), const Offset(0, -600));
+    // into view rather than assuming they're already built. dragUntilVisible
+    // repeats the drag rather than a fixed offset, since total content
+    // length varies across sections.
+    await tester.dragUntilVisible(
+        find.text('Server'), find.byType(ListView), const Offset(0, -300));
     await tester.pumpAndSettle();
     expect(find.text('Response format'), findsOneWidget);
     expect(find.text('The file'), findsOneWidget);
     expect(find.text('Some prose.'), findsOneWidget);
+    // (Story 4.7, Review fix) The destination is part of "exactly what
+    // leaves the device" (AD-11), now that lore-story.json can redirect it.
+    expect(find.text('Server'), findsOneWidget);
+    expect(find.text('https://api.anthropic.com/v1/messages'), findsOneWidget);
     expect(aiClient.requests, isEmpty,
         reason: 'the preview must show before anything is sent (AD-11)');
   });
@@ -474,5 +501,75 @@ void main() {
 
     expect(result, isNull);
     expect(aiClient.requests, isEmpty);
+  });
+
+  group('AI server config (Story 4.7)', () {
+    testWidgets(
+        'a resolved lore-story.json ai object flows into the sent request\'s '
+        'model/baseUrl', (tester) async {
+      final aiClient = FakeAiClient(response: '[]');
+      await _pumpHost(
+        tester,
+        storage: _storageWithServerConfig(
+            '"server":"custom","model":"local-model",'
+            '"baseUrl":"http://localhost:1234/v1"'),
+        aiClient: aiClient,
+        text: 'text',
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('review'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(aiClient.requests.single.model, 'local-model');
+      expect(aiClient.requests.single.baseUrl,
+          Uri.parse('http://localhost:1234/v1'));
+    });
+
+    testWidgets(
+        '(AC6) an absent lore-story.json leaves model/baseUrl null on the '
+        'sent request — today\'s behavior unchanged', (tester) async {
+      final aiClient = FakeAiClient(response: '[]');
+      await _pumpHost(
+        tester,
+        storage: _storageNoOverride(),
+        aiClient: aiClient,
+        text: 'text',
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('review'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(aiClient.requests.single.model, isNull);
+      expect(aiClient.requests.single.baseUrl, isNull);
+    });
+
+    testWidgets(
+        '(Review fix) an unusable server config (custom with no baseUrl) '
+        'shows an error and never opens the preview or sends anything',
+        (tester) async {
+      final aiClient = FakeAiClient(response: 'should never be sent');
+      List<GrammarFinding>? result = const [];
+      await _pumpHost(
+        tester,
+        storage: _storageWithServerConfig('"server":"custom"'),
+        aiClient: aiClient,
+        text: 'text',
+        onResult: (r) => result = r,
+      );
+      await tester.tap(find.text('review'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(result, isNull);
+      expect(aiClient.requests, isEmpty);
+      expect(find.byKey(const Key('context-preview-confirm')), findsNothing,
+          reason: 'nothing valid to preview — the error is surfaced before '
+              'the preview would open');
+      expect(find.textContaining('server'), findsOneWidget);
+    });
   });
 }
