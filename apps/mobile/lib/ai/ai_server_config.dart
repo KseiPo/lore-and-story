@@ -4,23 +4,23 @@ import 'package:flutter/foundation.dart' show immutable;
 
 import '../lore/lore.dart' show kProjectConfigFile;
 import '../storage/storage.dart';
-import 'ai_client.dart' show AiConfigException;
+import 'ai_client.dart' show AiConfigException, AiProtocol;
 
 /// Which AI provider a request goes to (Story 4.7/FR27). `custom` requires
-/// [AiServerConfig.baseUrl]; `anthropic` and (once Story 4.8 ships an
-/// OpenAI-protocol adapter) `openrouter` use a fixed, app-known endpoint —
-/// an author never needs to supply one for either.
+/// [AiServerConfig.baseUrl]; `anthropic` and `openrouter` (Story 4.8) use a
+/// fixed, app-known endpoint — an author never needs to supply one for
+/// either.
 enum AiServer { anthropic, openrouter, custom }
 
-/// Which wire format a request uses (Story 4.7/FR27). Read and stored here,
-/// but not yet acted on — only the Anthropic-Messages-format
-/// [MessagesApiClient] exists; an `openai`-protocol adapter is Story 4.8.
-enum AiProtocol { anthropic, openai }
-
 /// The default Anthropic Messages API endpoint — the single source of truth
-/// for both [MessagesApiClient]'s own hardcoded default and this story's
+/// for both [MessagesApiClient]'s own hardcoded default and the
 /// context-preview "Server" section, so the two can never drift apart.
 const String kDefaultAnthropicEndpoint = 'https://api.anthropic.com/v1/messages';
+
+/// The default OpenRouter endpoint (Story 4.8) — a fixed, app-known origin;
+/// an author never supplies a `baseUrl` for `server: "openrouter"` (see
+/// [resolveOrigin]'s `AiServer.openrouter` case).
+const String kDefaultOpenRouterEndpoint = 'https://openrouter.ai/api/v1';
 
 /// A `model`/`baseUrl` value longer than this is treated as not overridden
 /// — guards against a pathological config value being read, sent in every
@@ -166,24 +166,41 @@ class AiServerConfig {
       'parseFailed: $parseFailed)';
 }
 
-/// Resolves [config] to the custom endpoint **origin** a request should use
-/// (e.g. `http://localhost:1234/v1` — a base, not a complete endpoint; see
+/// Resolves the effective [AiProtocol] for [config] (Story 4.8) — **total,
+/// never throws**: an explicit `protocol` always wins; otherwise
+/// `server: "openrouter"` defaults to [AiProtocol.openai] (the only protocol
+/// OpenRouter speaks); every other case (including `server: "custom"` with
+/// no `protocol` set — a custom Anthropic-compatible endpoint) defaults to
+/// [AiProtocol.anthropic], unchanged from Story 4.7.
+AiProtocol resolveEffectiveProtocol(AiServerConfig config) {
+  if (config.protocol != null) return config.protocol!;
+  if (config.server == AiServer.openrouter) return AiProtocol.openai;
+  return AiProtocol.anthropic;
+}
+
+/// Resolves [config] to the endpoint **origin** a request should use (e.g.
+/// `http://localhost:1234/v1` — a base, not a complete endpoint; see
 /// `AiRequest.baseUrl`'s own doc comment for why), or `null` meaning "no
-/// override — the caller's own hardcoded default applies," the ordinary,
-/// unconfigured case.
+/// override — the caller's own hardcoded (Anthropic) default applies," the
+/// ordinary, unconfigured case. Companion to [resolveEffectiveProtocol],
+/// which this function also validates [config] against.
 ///
 /// **Throws [AiConfigException]** — never silently falls back to the
 /// default endpoint — whenever [config] signals intent to use something
-/// other than plain Anthropic-direct that this app cannot actually honor
-/// (Review fix, Story 4.7 code review): `server: "custom"` with a missing
-/// or invalid `baseUrl`; `server: "openrouter"` (not yet functional, Story
-/// 4.8); or a `baseUrl` set without `server: "custom"` (an inconsistent
-/// config an author almost certainly didn't intend). Silently sending to
-/// Anthropic with a key saved for a different vendor, or ignoring a
-/// configured `baseUrl` outright, is exactly the failure mode this guards
-/// against — an honest, typed error is safer than a wrong destination.
-Uri? resolveCustomOrigin(AiServerConfig config) {
+/// this app cannot actually honor (Review fix, Story 4.7 code review;
+/// extended, Story 4.8): `server: "custom"` with a missing or invalid
+/// `baseUrl`; a `baseUrl` set without `server: "custom"`; `server:
+/// "openrouter"` with a `baseUrl` also set (it has a fixed endpoint); the
+/// effective protocol resolving to [AiProtocol.openai] while `server` is
+/// unset or `"anthropic"` (no known OpenAI-format endpoint there); or the
+/// effective protocol resolving to [AiProtocol.openai] with no `model` set
+/// (unlike Anthropic, there is no app-hardcoded fallback model for an
+/// arbitrary OpenAI-compatible server). Silently sending to the wrong
+/// destination or in the wrong wire format is exactly the failure mode
+/// these guard against — an honest, typed error is safer.
+Uri? resolveOrigin(AiServerConfig config) {
   final hasBaseUrl = config.baseUrl != null;
+  final Uri? origin;
   switch (config.server) {
     case null:
       if (hasBaseUrl) {
@@ -191,21 +208,29 @@ Uri? resolveCustomOrigin(AiServerConfig config) {
             'lore-story.json sets ai.baseUrl but not ai.server: "custom" — '
             'add "server": "custom" to use it.');
       }
-      return null;
+      origin = null;
     case AiServer.anthropic:
       if (hasBaseUrl) {
         throw const AiConfigException(
             'lore-story.json sets ai.baseUrl but ai.server is "anthropic" — '
             'set "server": "custom" to use a custom endpoint.');
       }
-      return null;
+      origin = null;
     case AiServer.openrouter:
-      throw const AiConfigException(
-          'server: "openrouter" is not yet supported by this version of the '
-          'app — requests would go to the wrong place.');
+      // Story 4.8: OpenRouter has a fixed, app-known endpoint — an author
+      // never supplies one, so a baseUrl set alongside it is an
+      // inconsistent config, not silently ignored (mirrors the
+      // anthropic-with-baseUrl guard above).
+      if (hasBaseUrl) {
+        throw const AiConfigException(
+            'ai.baseUrl is not used for server: "openrouter" — it has a '
+            'fixed endpoint. Remove ai.baseUrl, or set "server": "custom" '
+            'to use one.');
+      }
+      origin = Uri.parse(kDefaultOpenRouterEndpoint);
     case AiServer.custom:
-      final origin = _validOrigin(config.baseUrl);
-      if (origin == null) {
+      final parsed = _validOrigin(config.baseUrl);
+      if (parsed == null) {
         throw const AiConfigException(
             'ai.server is "custom" but ai.baseUrl is missing or not a '
             'valid http(s) address.');
@@ -218,14 +243,39 @@ Uri? resolveCustomOrigin(AiServerConfig config) {
       // permission, and this app-level check is what actually restricts
       // where it's used: `http://` is only ever accepted for a
       // private/loopback host, matching the manifest's own doc comment.
-      if (origin.scheme == 'http' && !_isPrivateOrLoopbackHost(origin.host)) {
+      if (parsed.scheme == 'http' && !_isPrivateOrLoopbackHost(parsed.host)) {
         throw const AiConfigException(
             'ai.baseUrl uses http:// for a non-local address — only a '
             'private/LAN or loopback address (e.g. 192.168.x.x, 10.x.x.x, '
             'localhost) may use plain http; use https:// for anything else.');
       }
-      return origin;
+      origin = parsed;
   }
+
+  final protocol = resolveEffectiveProtocol(config);
+  if (protocol == AiProtocol.openai) {
+    // Story 4.8: the OpenAI protocol needs a real OpenAI-format endpoint —
+    // there is none at the default Anthropic address or with no server
+    // configured at all. (The reverse combo, server: "openrouter" with an
+    // *explicit* protocol: "anthropic", is deliberately left unvalidated —
+    // it still reaches a real endpoint and fails there loudly, rather than
+    // being silently misrouted.)
+    if (config.server == null || config.server == AiServer.anthropic) {
+      throw AiConfigException(
+          'ai.protocol is "openai" but ai.server is '
+          '${config.server == null ? "not set" : '"anthropic"'} — the '
+          'OpenAI protocol needs "server": "openrouter", or "server": '
+          '"custom" with a baseUrl.');
+    }
+    if (config.model == null) {
+      throw const AiConfigException(
+          'ai.protocol is "openai" (or ai.server is "openrouter") but '
+          'ai.model is not set — an OpenAI-compatible request needs an '
+          'explicit model id.');
+    }
+  }
+
+  return origin;
 }
 
 /// A [raw] string is a valid custom origin only when it parses as an

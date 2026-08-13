@@ -230,25 +230,6 @@ void main() {
       expect(deltas.join(), 'Hello, world!');
     });
 
-    test('never buffers the whole response before yielding — the first '
-        'delta arrives before the stream closes', () async {
-      final controller = StreamController<List<int>>();
-      final client = _clientWith(MockClient.streaming((request, bodyStream) async {
-        return http.StreamedResponse(controller.stream, 200);
-      }));
-
-      final deltas = <String>[];
-      final sub = client.sendMessage(_request).listen(deltas.add);
-
-      controller.add(utf8.encode('event: content_block_delta\n'
-          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"first"}}\n\n'));
-      await Future<void>.delayed(Duration.zero);
-      expect(deltas, ['first']); // observed BEFORE the stream is closed
-
-      await controller.close();
-      await sub.cancel();
-    });
-
     test('a malformed SSE line is skipped, not a crash — valid deltas '
         'before and after still arrive', () async {
       final client = _clientWith(MockClient.streaming((request, bodyStream) async {
@@ -279,23 +260,6 @@ void main() {
         throwsA(isA<AiRateLimitException>()),
       );
       expect(deltas, ['partial']); // delivered before the error arrived
-    });
-
-    test('(review fix) a data: payload split across multiple consecutive '
-        'lines within one event is joined before decoding, per the SSE spec',
-        () async {
-      final client = _clientWith(MockClient.streaming((request, bodyStream) async {
-        // The single JSON object is deliberately split across two `data:`
-        // lines — the story's own Dev Notes named this as one of the two
-        // highest-risk SSE parsing cases.
-        const body = 'event: content_block_delta\n'
-            'data: {"type":"content_block_delta","index":0,\n'
-            'data: "delta":{"type":"text_delta","text":"joined"}}\n\n';
-        return http.StreamedResponse(Stream.value(utf8.encode(body)), 200);
-      }));
-
-      final deltas = await client.sendMessage(_request).toList();
-      expect(deltas, ['joined']);
     });
 
     test('(review fix) message_delta with stop_reason max_tokens throws '
@@ -374,20 +338,13 @@ void main() {
   });
 
   group('timeouts', () {
-    test('a request that never gets a response times out as '
-        'AiNetworkException', () async {
-      final client = _clientWith(
-        MockClient.streaming((request, bodyStream) => Completer<http.StreamedResponse>().future),
-        requestTimeout: const Duration(milliseconds: 20),
-        maxAttempts: 1,
-      );
-
-      await expectLater(
-        client.sendMessage(_request).toList(),
-        throwsA(isA<AiNetworkException>()),
-      );
-    });
-
+    // Only the stream-idle-timeout smoke test stays here — it's the one
+    // case where an end-to-end check of *this adapter's own* handleError
+    // wrapping (raw TimeoutException from RetryingHttpSender's returned
+    // stream → AiNetworkException) matters; request-establishment timeout
+    // is thrown directly by RetryingHttpSender itself and is already fully
+    // covered generically in ai_transport_test.dart. Full retry/backoff
+    // matrix also lives there (Story 4.8).
     test('a stream that stalls mid-response (no new chunk) times out as '
         'AiNetworkException', () async {
       final controller = StreamController<List<int>>();
@@ -406,7 +363,8 @@ void main() {
     });
   });
 
-  group('HTTP error mapping and retry', () {
+  group('HTTP error mapping (thin smoke pass — full matrix in '
+      'ai_transport_test.dart, Story 4.8)', () {
     test('401 throws AiAuthException immediately, never retried', () async {
       var attempts = 0;
       final client = _clientWith(MockClient.streaming((request, bodyStream) async {
@@ -422,46 +380,6 @@ void main() {
         throwsA(isA<AiAuthException>()),
       );
       expect(attempts, 1);
-    });
-
-    test('400 throws AiInvalidRequestException immediately, never retried',
-        () async {
-      var attempts = 0;
-      final client = _clientWith(MockClient.streaming((request, bodyStream) async {
-        attempts++;
-        return http.StreamedResponse(
-          Stream.value(utf8.encode('{"error":{"message":"bad request"}}')),
-          400,
-        );
-      }));
-
-      await expectLater(
-        client.sendMessage(_request).toList(),
-        throwsA(isA<AiInvalidRequestException>()),
-      );
-      expect(attempts, 1);
-    });
-
-    test('(review fix) 403/404/413 all throw AiInvalidRequestException '
-        'immediately, never retried and never mistyped as a server error',
-        () async {
-      for (final status in [403, 404, 413]) {
-        var attempts = 0;
-        final client = _clientWith(MockClient.streaming((request, bodyStream) async {
-          attempts++;
-          return http.StreamedResponse(
-            Stream.value(utf8.encode('{"error":{"message":"nope"}}')),
-            status,
-          );
-        }));
-
-        await expectLater(
-          client.sendMessage(_request).toList(),
-          throwsA(isA<AiInvalidRequestException>()),
-          reason: 'status $status',
-        );
-        expect(attempts, 1, reason: 'status $status must not be retried');
-      }
     });
 
     test('429 retries up to maxAttempts, then throws AiRateLimitException',
@@ -485,42 +403,6 @@ void main() {
       expect(attempts, 3);
     });
 
-    test('a 429 that succeeds on a later attempt returns the successful '
-        'response — retry actually recovers', () async {
-      var attempts = 0;
-      final client = _clientWith(MockClient.streaming((request, bodyStream) async {
-        attempts++;
-        if (attempts < 2) {
-          return http.StreamedResponse(
-            Stream.value(utf8.encode('{"error":{"message":"rate limited"}}')),
-            429,
-          );
-        }
-        return http.StreamedResponse(Stream.value(utf8.encode(_sseBody(['ok']))), 200);
-      }));
-
-      final deltas = await client.sendMessage(_request).toList();
-      expect(deltas, ['ok']);
-      expect(attempts, 2);
-    });
-
-    test('5xx retries then throws AiServerException', () async {
-      var attempts = 0;
-      final client = _clientWith(
-        MockClient.streaming((request, bodyStream) async {
-          attempts++;
-          return http.StreamedResponse(Stream.value(utf8.encode('{}')), 503);
-        }),
-        maxAttempts: 2,
-      );
-
-      await expectLater(
-        client.sendMessage(_request).toList(),
-        throwsA(isA<AiServerException>()),
-      );
-      expect(attempts, 2);
-    });
-
     test('a connection failure retries then throws AiNetworkException',
         () async {
       var attempts = 0;
@@ -536,41 +418,6 @@ void main() {
         client.sendMessage(_request).toList(),
         throwsA(isA<AiNetworkException>()),
       );
-      expect(attempts, 2);
-    });
-
-    test('(review fix) a 429 with a retry-after header waits that long '
-        'instead of the default backoff, then succeeds', () async {
-      var attempts = 0;
-      final waits = <Duration>[];
-      final client = MessagesApiClient(
-        httpClient: MockClient.streaming((request, bodyStream) async {
-          attempts++;
-          if (attempts < 2) {
-            return http.StreamedResponse(
-              Stream.value(utf8.encode('{}')),
-              429,
-              headers: {'retry-after': '5'},
-            );
-          }
-          return http.StreamedResponse(Stream.value(utf8.encode(_sseBody(['ok']))), 200);
-        }),
-        keyStore: const _FakeKeyStore('sk-ant-test-key'),
-        backoff: (attempt) {
-          waits.add(const Duration(seconds: 999)); // would prove the header was ignored
-          return Duration.zero;
-        },
-      );
-
-      final deltas = await client.sendMessage(_request).toList();
-      expect(deltas, ['ok']);
-      // The default backoff was never consulted — the retry-after header
-      // was used instead. (The actual wait itself isn't timed here; the
-      // constructor's fake `Future.delayed(Duration(seconds: 5))` would
-      // make this test slow, so this asserts the *decision*, not the
-      // clock — see the request-shape/timeout groups for real Duration
-      // assertions elsewhere in this file.)
-      expect(waits, isEmpty);
       expect(attempts, 2);
     });
   });

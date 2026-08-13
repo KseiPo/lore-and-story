@@ -154,13 +154,14 @@ Future<String?> runTranslate(
   if (!context.mounted) return null;
   // Review fix (Story 4.7 code review): a config that signals intent to use
   // something other than plain Anthropic-direct but that this app can't
-  // actually honor (an unusable `server`/`baseUrl` combination) must refuse
-  // to send rather than silently falling back to Anthropic with whatever
-  // key is saved — surfaced BEFORE the preview even opens, since there is
-  // nothing valid to preview.
-  final Uri? customOrigin;
+  // actually honor (an unusable `server`/`baseUrl` combination, or — Story
+  // 4.8 — an inconsistent `protocol`/`server`/`model` combination) must
+  // refuse to send rather than silently falling back to Anthropic with
+  // whatever key is saved — surfaced BEFORE the preview even opens, since
+  // there is nothing valid to preview.
+  final Uri? resolvedOrigin;
   try {
-    customOrigin = resolveCustomOrigin(serverConfig);
+    resolvedOrigin = resolveOrigin(serverConfig);
   } on AiConfigException catch (e) {
     if (context.mounted) _showError(context, e.message);
     return null;
@@ -199,7 +200,7 @@ Future<String?> runTranslate(
   // Appended last so every pre-Story-4.7 section keeps its existing index.
   final destination = ContextSection(
     label: 'Server',
-    text: customOrigin?.toString() ?? kDefaultAnthropicEndpoint,
+    text: resolvedOrigin?.toString() ?? kDefaultAnthropicEndpoint,
   );
   final sections = [instructions, file, glossary, conventions, destination];
 
@@ -217,7 +218,8 @@ Future<String?> runTranslate(
     userContent: file.text,
     maxTokens: _kMaxTokens,
     model: serverConfig.model,
-    baseUrl: customOrigin,
+    baseUrl: resolvedOrigin,
+    protocol: resolveEffectiveProtocol(serverConfig),
   );
 
   try {

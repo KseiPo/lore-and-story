@@ -804,6 +804,73 @@ void main() {
       expect(find.textContaining('server'), findsOneWidget);
     });
   });
+
+  group('AI protocol (Story 4.8)', () {
+    testWidgets(
+        'an explicit protocol: "openai" config reaches the sent request\'s '
+        'protocol field', (tester) async {
+      final aiClient = FakeAiClient(response: 'Translated.');
+      await _pumpHost(
+        tester,
+        storage: _storageWithServerConfig(
+            '"server":"custom","protocol":"openai","model":"local-model",'
+            '"baseUrl":"http://localhost:1234/v1"'),
+        aiClient: aiClient,
+        ruText: 'text',
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(aiClient.requests.single.protocol, AiProtocol.openai);
+    });
+
+    testWidgets(
+        '(AC2) server: "openrouter" with no protocol set also produces '
+        'AiProtocol.openai on the sent request — the default', (tester) async {
+      final aiClient = FakeAiClient(response: 'Translated.');
+      await _pumpHost(
+        tester,
+        storage:
+            _storageWithServerConfig('"server":"openrouter","model":"gpt-x"'),
+        aiClient: aiClient,
+        ruText: 'text',
+        onResult: (_) {},
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('context-preview-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(aiClient.requests.single.protocol, AiProtocol.openai);
+    });
+
+    testWidgets(
+        'an inconsistent protocol/server combo (openai + anthropic) shows '
+        'an error and never opens the preview or sends anything',
+        (tester) async {
+      final aiClient = FakeAiClient(response: 'should never be sent');
+      String? result = 'unset';
+      await _pumpHost(
+        tester,
+        storage: _storageWithServerConfig(
+            '"server":"anthropic","protocol":"openai"'),
+        aiClient: aiClient,
+        ruText: 'text',
+        onResult: (r) => result = r,
+      );
+      await tester.tap(find.text('translate'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(result, isNull);
+      expect(aiClient.requests, isEmpty);
+      expect(find.byKey(const Key('context-preview-confirm')), findsNothing);
+      expect(find.textContaining('protocol'), findsOneWidget);
+    });
+  });
 }
 
 /// Emits one good chunk, then a stream error — the shape Story 4.1's own

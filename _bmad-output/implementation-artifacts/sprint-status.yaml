@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-20
-last_updated: 2026-08-09
+last_updated: 2026-08-13
 project: Lore & Story
 project_key: NOKEY
 tracking_system: file-system
@@ -95,7 +95,7 @@ development_status:
   4-5-retranslate-an-already-paired-file: done
   4-6-grammar-style-findings: done
   4-7-configure-the-ai-server-protocol-and-model: done
-  4-8-connect-via-an-openai-compatible-server: backlog
+  4-8-connect-via-an-openai-compatible-server: done
   epic-4-retrospective: optional
 
   # Epic 5: Improvements backlog (post-AI)

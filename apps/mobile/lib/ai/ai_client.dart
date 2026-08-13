@@ -6,6 +6,22 @@
 /// seam `storage/repo_storage.dart` draws around the filesystem.
 library;
 
+// `ProtocolRoutingAiClient`'s constructor params (`anthropicClient`,
+// `openAiClient`) are the public API while its fields are private
+// (`_anthropicClient`, `_openAiClient`) — an initializing formal would make
+// the parameter's *name* private too, which Dart forbids passing by name
+// from outside this file (same reasoning as `messages_api_client.dart`'s
+// own file-level ignore).
+// ignore_for_file: prefer_initializing_formals
+
+/// Which wire format a request uses (Story 4.7/FR27, made functional by
+/// Story 4.8/FR28). A **port-level** concept — [AiRequest.protocol] routes a
+/// request to the right adapter via [ProtocolRoutingAiClient] — so it lives
+/// here rather than in `ai_server_config.dart` (which imports it from this
+/// file instead, never the reverse; the port must never depend on the
+/// config-parsing file).
+enum AiProtocol { anthropic, openai }
+
 /// One request to the AI provider: a system prompt plus the user content to
 /// act on. Deliberately generic — this story only stands up the transport;
 /// assembling a real translation/grammar prompt is Stories 4.3/4.4's job.
@@ -26,14 +42,23 @@ class AiRequest {
   final String? model;
 
   /// Overrides the adapter's own configured endpoint **origin** (Story 4.7 —
-  /// `resolveCustomOrigin(AiServerConfig)`, only non-null for
-  /// `server: "custom"` with a valid `baseUrl`). This is a base/origin
-  /// (e.g. `http://localhost:1234/v1`), not a complete endpoint — each
-  /// protocol-specific adapter appends its own known path suffix (the
-  /// Anthropic adapter appends `/messages`), so one configured origin can
-  /// serve whichever protocol adapter it's paired with. `null` means "use
-  /// the client's own configured default."
+  /// `resolveOrigin(AiServerConfig)`, non-null for `server: "custom"` with a
+  /// valid `baseUrl` or `server: "openrouter"`'s fixed endpoint, Story 4.8).
+  /// This is a base/origin (e.g. `http://localhost:1234/v1`), not a complete
+  /// endpoint — each protocol-specific adapter appends its own known path
+  /// suffix (the Anthropic adapter appends `/messages`, the OpenAI-compatible
+  /// adapter appends `/chat/completions`), so one configured origin can serve
+  /// whichever protocol adapter it's paired with. `null` means "use the
+  /// client's own configured default."
   final Uri? baseUrl;
+
+  /// Which protocol adapter should handle this request (Story 4.8), resolved
+  /// fresh per call from `lore-story.json` via `resolveEffectiveProtocol`.
+  /// `null` and [AiProtocol.anthropic] both route to the Anthropic adapter
+  /// (today's existing default); only [AiProtocol.openai] routes elsewhere.
+  /// Only meaningful when [AiClient] is a [ProtocolRoutingAiClient] — a
+  /// single-protocol adapter used directly (as every test does) ignores it.
+  final AiProtocol? protocol;
 
   const AiRequest({
     required this.system,
@@ -41,6 +66,7 @@ class AiRequest {
     this.maxTokens = 8192,
     this.model,
     this.baseUrl,
+    this.protocol,
   });
 }
 
@@ -97,11 +123,12 @@ class AiNetworkException extends AiClientException {
 
 /// The resolved `lore-story.json` `ai` object (Story 4.7) specifies a server
 /// this app cannot currently reach — e.g. `server: "custom"` with no usable
-/// `baseUrl`, `server: "openrouter"` (not yet functional, Story 4.8), or a
-/// `baseUrl` set without `server: "custom"` (an inconsistent config, never
-/// silently ignored). Diagnosed locally from config alone, before any
-/// request is built or sent — distinct from every other exception here,
-/// which reports a transport/provider outcome.
+/// `baseUrl`, an inconsistent `protocol`/`server` combination (Story 4.8 —
+/// e.g. `protocol: "openai"` with `server: "anthropic"`, or `protocol:
+/// "openai"` with no `model` set), or a `baseUrl` set without `server:
+/// "custom"` (never silently ignored). Diagnosed locally from config alone,
+/// before any request is built or sent — distinct from every other
+/// exception here, which reports a transport/provider outcome.
 class AiConfigException extends AiClientException {
   const AiConfigException(super.message);
 }
@@ -115,4 +142,36 @@ class AiConfigException extends AiClientException {
 /// immediately, never retried.
 abstract interface class AiClient {
   Stream<String> sendMessage(AiRequest request);
+}
+
+/// Composes two protocol-specific [AiClient]s behind the single port the
+/// rest of the app is threaded with (Story 4.8) — a **pure**, zero-I/O
+/// implementation of [AiClient] itself (it does no I/O of its own, only
+/// delegates to whichever underlying client actually does), so it belongs
+/// beside the interface it implements rather than in an adapter file
+/// (AD-9).
+///
+/// `main.dart` (the composition root) builds the one long-lived instance of
+/// this class and threads it through the whole app exactly as it threaded a
+/// single [MessagesApiClient] before this story — which underlying adapter
+/// actually handles a given call is decided per-request by
+/// [AiRequest.protocol], mirroring exactly how `model`/`baseUrl` already
+/// flow in per-request (Story 4.7) rather than by rebuilding the client.
+class ProtocolRoutingAiClient implements AiClient {
+  final AiClient _anthropicClient;
+  final AiClient _openAiClient;
+
+  const ProtocolRoutingAiClient({
+    required AiClient anthropicClient,
+    required AiClient openAiClient,
+  })  : _anthropicClient = anthropicClient,
+        _openAiClient = openAiClient;
+
+  @override
+  Stream<String> sendMessage(AiRequest request) {
+    return switch (request.protocol) {
+      AiProtocol.openai => _openAiClient.sendMessage(request),
+      AiProtocol.anthropic || null => _anthropicClient.sendMessage(request),
+    };
+  }
 }

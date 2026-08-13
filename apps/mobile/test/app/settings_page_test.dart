@@ -171,12 +171,48 @@ void main() {
     expect(find.byKey(const Key('settings-key-field')), findsOneWidget);
   });
 
-  group('Test connection (Story 4.7)', () {
-    testWidgets('the button does not appear in the notConfigured stage',
+  group('Test connection (Story 4.7, gating widened Story 4.8/AC3)', () {
+    testWidgets(
+        '(Story 4.8) the button also appears in the notConfigured stage — '
+        'a local OpenAI-compatible server typically needs no key at all',
         (tester) async {
       await _pump(tester, FakeKeyStore());
       expect(find.byKey(const Key('settings-test-connection-button')),
-          findsNothing);
+          findsOneWidget);
+      // Still alongside the key field/Save button, not replacing them.
+      expect(find.byKey(const Key('settings-key-field')), findsOneWidget);
+      expect(find.byKey(const Key('settings-save-button')), findsOneWidget);
+    });
+
+    testWidgets(
+        '(Story 4.8) tapping it in the notConfigured stage with no key ever '
+        'saved shows the success SnackBar (the key-less local-server case)',
+        (tester) async {
+      final aiClient = FakeAiClient(response: 'OK');
+      await _pump(tester, FakeKeyStore(), aiClient: aiClient);
+
+      await tester.tap(find.byKey(const Key('settings-test-connection-button')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('Connection successful'), findsOneWidget);
+    });
+
+    testWidgets(
+        '(Story 4.8) Save is disabled while a test is in flight in the '
+        'notConfigured stage', (tester) async {
+      final aiClient = _ControllableAiClient();
+      await _pump(tester, FakeKeyStore(), aiClient: aiClient);
+
+      await tester.tap(find.byKey(const Key('settings-test-connection-button')));
+      await tester.pump();
+
+      final saveButton =
+          tester.widget<FilledButton>(find.byKey(const Key('settings-save-button')));
+      expect(saveButton.onPressed, isNull);
+
+      aiClient.complete('OK');
+      await tester.pumpAndSettle();
     });
 
     testWidgets('the button does not appear in the error stage', (tester) async {

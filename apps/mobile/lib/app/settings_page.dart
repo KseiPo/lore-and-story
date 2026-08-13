@@ -177,10 +177,11 @@ class _SettingsPageState extends State<SettingsPage> {
         userContent: 'Connection test.',
         maxTokens: 16384,
         model: serverConfig.model,
-        // May throw AiConfigException (an unusable server/baseUrl
+        // May throw AiConfigException (an unusable server/baseUrl/protocol
         // combination) — caught below exactly like any other
         // AiClientException, never silently falling back to Anthropic.
-        baseUrl: resolveCustomOrigin(serverConfig),
+        baseUrl: resolveOrigin(serverConfig),
+        protocol: resolveEffectiveProtocol(serverConfig),
       );
 
       var receivedText = false;
@@ -303,6 +304,25 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  /// The Test Connection button (Story 4.7, gating widened Story 4.8/AC3) —
+  /// shared between the `configured` and `notConfigured` stages so tapping
+  /// it always resolves against whatever `KeyStore` currently holds
+  /// (possibly no key, the local-server case) rather than an unsaved,
+  /// just-typed value.
+  Widget _testConnectionButton() {
+    return OutlinedButton(
+      key: const Key('settings-test-connection-button'),
+      onPressed: (_testing || _saving) ? null : _testConnection,
+      child: _testing
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Text('Test connection'),
+    );
+  }
+
   Widget _buildBody() {
     switch (_stage) {
       case _Stage.loading:
@@ -347,17 +367,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: const Text('Clear'),
                 ),
                 const SizedBox(width: 12),
-                OutlinedButton(
-                  key: const Key('settings-test-connection-button'),
-                  onPressed: (_testing || _saving) ? null : _testConnection,
-                  child: _testing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Test connection'),
-                ),
+                _testConnectionButton(),
               ],
             ),
           ],
@@ -382,10 +392,20 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              key: const Key('settings-save-button'),
-              onPressed: (_saving || _testing) ? null : _save,
-              child: const Text('Save'),
+            Row(
+              children: [
+                FilledButton(
+                  key: const Key('settings-save-button'),
+                  onPressed: (_saving || _testing) ? null : _save,
+                  child: const Text('Save'),
+                ),
+                const SizedBox(width: 12),
+                // Story 4.8/AC3: reachable here too, not only once a key is
+                // saved — a local OpenAI-compatible server (e.g. LM Studio)
+                // typically needs no key at all, so there must be a way to
+                // test one before ever saving anything.
+                _testConnectionButton(),
+              ],
             ),
           ],
         );

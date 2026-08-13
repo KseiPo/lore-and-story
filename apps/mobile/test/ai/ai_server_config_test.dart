@@ -230,22 +230,54 @@ void main() {
     });
   });
 
-  group('resolveCustomOrigin', () {
+  group('resolveEffectiveProtocol', () {
+    test('an explicit protocol always wins, regardless of server', () {
+      const config = AiServerConfig(
+          server: AiServer.anthropic, protocol: AiProtocol.openai);
+      expect(resolveEffectiveProtocol(config), AiProtocol.openai);
+    });
+
+    test('server: openrouter + no protocol set → defaults to openai '
+        '(the only protocol OpenRouter speaks)', () {
+      const config = AiServerConfig(server: AiServer.openrouter);
+      expect(resolveEffectiveProtocol(config), AiProtocol.openai);
+    });
+
+    test('server: anthropic + no protocol set → defaults to anthropic '
+        '(unchanged from Story 4.7)', () {
+      const config = AiServerConfig(server: AiServer.anthropic);
+      expect(resolveEffectiveProtocol(config), AiProtocol.anthropic);
+    });
+
+    test('server: custom + no protocol set → defaults to anthropic '
+        '(a custom Anthropic-compatible endpoint, unaffected by Story 4.8)',
+        () {
+      const config = AiServerConfig(server: AiServer.custom);
+      expect(resolveEffectiveProtocol(config), AiProtocol.anthropic);
+    });
+
+    test('no server, no protocol set → defaults to anthropic (today\'s '
+        'unconfigured default)', () {
+      expect(resolveEffectiveProtocol(AiServerConfig.empty), AiProtocol.anthropic);
+    });
+  });
+
+  group('resolveOrigin', () {
     test('server: custom + a valid baseUrl → the parsed Uri', () {
       const config = AiServerConfig(
           server: AiServer.custom, baseUrl: 'http://192.168.1.50:1234/v1');
-      expect(resolveCustomOrigin(config),
+      expect(resolveOrigin(config),
           Uri.parse('http://192.168.1.50:1234/v1'));
     });
 
     test('server unset + no baseUrl → null (the ordinary, unconfigured '
         'case)', () {
-      expect(resolveCustomOrigin(AiServerConfig.empty), isNull);
+      expect(resolveOrigin(AiServerConfig.empty), isNull);
     });
 
     test('server: anthropic + no baseUrl → null', () {
       const config = AiServerConfig(server: AiServer.anthropic);
-      expect(resolveCustomOrigin(config), isNull);
+      expect(resolveOrigin(config), isNull);
     });
 
     test(
@@ -253,24 +285,71 @@ void main() {
         'AiConfigException rather than silently ignoring it', () {
       const config = AiServerConfig(
           server: AiServer.anthropic, baseUrl: 'http://192.168.1.50:1234/v1');
-      expect(() => resolveCustomOrigin(config),
+      expect(() => resolveOrigin(config),
           throwsA(isA<AiConfigException>()));
     });
 
     test(
-        '(Review fix) server: openrouter → throws AiConfigException (not '
-        'yet functional, Story 4.8) rather than silently using Anthropic',
-        () {
+        '(Story 4.8) server: openrouter + a model set → the fixed OpenRouter '
+        'origin', () {
+      const config =
+          AiServerConfig(server: AiServer.openrouter, model: 'some-model');
+      expect(resolveOrigin(config), Uri.parse(kDefaultOpenRouterEndpoint));
+    });
+
+    test('(Story 4.8) server: openrouter + a baseUrl also set → throws '
+        '(OpenRouter has a fixed endpoint, a baseUrl is inconsistent)', () {
+      const config = AiServerConfig(
+          server: AiServer.openrouter,
+          model: 'some-model',
+          baseUrl: 'http://example.com/v1');
+      expect(() => resolveOrigin(config), throwsA(isA<AiConfigException>()));
+    });
+
+    test('(Story 4.8) protocol: openai + server: anthropic → throws — no '
+        'known OpenAI-format endpoint at the Anthropic address', () {
+      const config = AiServerConfig(
+          server: AiServer.anthropic, protocol: AiProtocol.openai, model: 'm');
+      expect(() => resolveOrigin(config), throwsA(isA<AiConfigException>()));
+    });
+
+    test('(Story 4.8) protocol: openai + no server set → throws', () {
+      const config = AiServerConfig(protocol: AiProtocol.openai, model: 'm');
+      expect(() => resolveOrigin(config), throwsA(isA<AiConfigException>()));
+    });
+
+    test('(Story 4.8) protocol: openai + server: custom + a valid baseUrl + '
+        'no model → throws (no default model for an arbitrary OpenAI-'
+        'compatible server)', () {
+      const config = AiServerConfig(
+          server: AiServer.custom,
+          protocol: AiProtocol.openai,
+          baseUrl: 'http://192.168.1.50:1234/v1');
+      expect(() => resolveOrigin(config), throwsA(isA<AiConfigException>()));
+    });
+
+    test('(Story 4.8) server: openrouter (protocol defaults to openai) + no '
+        'model → throws', () {
       const config = AiServerConfig(server: AiServer.openrouter);
-      expect(() => resolveCustomOrigin(config),
-          throwsA(isA<AiConfigException>()));
+      expect(() => resolveOrigin(config), throwsA(isA<AiConfigException>()));
+    });
+
+    test('(Story 4.8) protocol: openai + server: custom + a valid baseUrl + '
+        'a model → the parsed Uri (the full LM Studio-shaped success case)',
+        () {
+      const config = AiServerConfig(
+          server: AiServer.custom,
+          protocol: AiProtocol.openai,
+          model: 'local-model',
+          baseUrl: 'http://192.168.1.50:1234/v1');
+      expect(resolveOrigin(config), Uri.parse('http://192.168.1.50:1234/v1'));
     });
 
     test(
         '(Review fix) no server set + baseUrl present → throws '
         'AiConfigException rather than silently ignoring the baseUrl', () {
       const config = AiServerConfig(baseUrl: 'http://192.168.1.50:1234/v1');
-      expect(() => resolveCustomOrigin(config),
+      expect(() => resolveOrigin(config),
           throwsA(isA<AiConfigException>()));
     });
 
@@ -279,7 +358,7 @@ void main() {
         'rather than silently falling back to Anthropic with a key saved '
         'for a different vendor', () {
       const config = AiServerConfig(server: AiServer.custom);
-      expect(() => resolveCustomOrigin(config),
+      expect(() => resolveOrigin(config),
           throwsA(isA<AiConfigException>()));
     });
 
@@ -287,7 +366,7 @@ void main() {
         'AiConfigException, never a silent fallback', () {
       const config =
           AiServerConfig(server: AiServer.custom, baseUrl: '::not a uri::');
-      expect(() => resolveCustomOrigin(config),
+      expect(() => resolveOrigin(config),
           throwsA(isA<AiConfigException>()));
     });
 
@@ -297,21 +376,21 @@ void main() {
         'network failure', () {
       const config =
           AiServerConfig(server: AiServer.custom, baseUrl: 'localhost:1234/v1');
-      expect(() => resolveCustomOrigin(config),
+      expect(() => resolveOrigin(config),
           throwsA(isA<AiConfigException>()));
     });
 
     test('(Review fix) server: custom + a file: baseUrl → throws', () {
       const config = AiServerConfig(
           server: AiServer.custom, baseUrl: 'file:///etc/passwd');
-      expect(() => resolveCustomOrigin(config),
+      expect(() => resolveOrigin(config),
           throwsA(isA<AiConfigException>()));
     });
 
     test('(Review fix) server: custom + an ftp: baseUrl → throws', () {
       const config = AiServerConfig(
           server: AiServer.custom, baseUrl: 'ftp://evil.example.com/x');
-      expect(() => resolveCustomOrigin(config),
+      expect(() => resolveOrigin(config),
           throwsA(isA<AiConfigException>()));
     });
 
@@ -319,7 +398,7 @@ void main() {
         '(no scheme) → throws', () {
       const config = AiServerConfig(
           server: AiServer.custom, baseUrl: '//evil.example.com/v1');
-      expect(() => resolveCustomOrigin(config),
+      expect(() => resolveOrigin(config),
           throwsA(isA<AiConfigException>()));
     });
 
@@ -327,25 +406,25 @@ void main() {
         'accepted', () {
       const config = AiServerConfig(
           server: AiServer.custom, baseUrl: 'http://192.168.1.50:1234/v1');
-      expect(resolveCustomOrigin(config),
+      expect(resolveOrigin(config),
           Uri.parse('http://192.168.1.50:1234/v1'));
     });
 
     test('server: custom + http:// to 10.x.x.x → accepted', () {
       const config =
           AiServerConfig(server: AiServer.custom, baseUrl: 'http://10.0.0.5:1234');
-      expect(resolveCustomOrigin(config), Uri.parse('http://10.0.0.5:1234'));
+      expect(resolveOrigin(config), Uri.parse('http://10.0.0.5:1234'));
     });
 
     test('server: custom + http:// to 172.16-31.x.x → accepted, but '
         '172.32.x.x (outside the RFC 1918 range) → rejected', () {
       const inRange =
           AiServerConfig(server: AiServer.custom, baseUrl: 'http://172.20.0.5:1234');
-      expect(resolveCustomOrigin(inRange), Uri.parse('http://172.20.0.5:1234'));
+      expect(resolveOrigin(inRange), Uri.parse('http://172.20.0.5:1234'));
 
       const outOfRange =
           AiServerConfig(server: AiServer.custom, baseUrl: 'http://172.32.0.5:1234');
-      expect(() => resolveCustomOrigin(outOfRange),
+      expect(() => resolveOrigin(outOfRange),
           throwsA(isA<AiConfigException>()));
     });
 
@@ -353,11 +432,11 @@ void main() {
       const localhost = AiServerConfig(
           server: AiServer.custom, baseUrl: 'http://localhost:1234');
       expect(
-          resolveCustomOrigin(localhost), Uri.parse('http://localhost:1234'));
+          resolveOrigin(localhost), Uri.parse('http://localhost:1234'));
 
       const loopbackIp = AiServerConfig(
           server: AiServer.custom, baseUrl: 'http://127.0.0.1:1234');
-      expect(resolveCustomOrigin(loopbackIp), Uri.parse('http://127.0.0.1:1234'));
+      expect(resolveOrigin(loopbackIp), Uri.parse('http://127.0.0.1:1234'));
     });
 
     test(
@@ -367,7 +446,7 @@ void main() {
         'express declaratively', () {
       const config = AiServerConfig(
           server: AiServer.custom, baseUrl: 'http://api.example.com/v1');
-      expect(() => resolveCustomOrigin(config),
+      expect(() => resolveOrigin(config),
           throwsA(isA<AiConfigException>()));
     });
 
@@ -375,7 +454,7 @@ void main() {
         'always fine, regardless of host)', () {
       const config = AiServerConfig(
           server: AiServer.custom, baseUrl: 'https://api.example.com/v1');
-      expect(resolveCustomOrigin(config), Uri.parse('https://api.example.com/v1'));
+      expect(resolveOrigin(config), Uri.parse('https://api.example.com/v1'));
     });
   });
 }
