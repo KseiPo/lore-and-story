@@ -198,7 +198,9 @@ a folder (Story 2.17 × Story 2.16 interaction; extends FR26). 5.2 — switch
 between light and dark theme, with theme/typography/decoration definitions
 consolidated into one dedicated file. 5.3 — show the resolved connection
 target (endpoint/protocol/model) in Test Connection's own outcome message,
-narrowly amending Story 4.7's AC5 "no display" rule.
+narrowly amending Story 4.7's AC5 "no display" rule. 5.4 — keep the screen
+awake for the duration of an in-flight AI request, so a slow local model
+isn't cut off by the screen turning off first.
 
 ---
 
@@ -758,7 +760,9 @@ a folder (Story 2.17 × Story 2.16 interaction; extends FR26). 5.2 — switch
 between light and dark theme, with theme/typography/decoration definitions
 consolidated into one dedicated file. 5.3 — show the resolved connection
 target (endpoint/protocol/model) in Test Connection's own outcome message,
-narrowly amending Story 4.7's AC5 "no display" rule.
+narrowly amending Story 4.7's AC5 "no display" rule. 5.4 — keep the screen
+awake for the duration of an in-flight AI request, so a slow local model
+isn't cut off by the screen turning off first.
 
 ### Story 5.1: Preserve image paths when promoting an entity to a folder
 
@@ -918,3 +922,27 @@ sheet.
   Connection (AC2), preserving the spirit of Story 4.7's AC5 restriction on a permanent picker/display.
 - No change to the request itself, retry/timeout/cancellation behavior, or the generic-`catch (_)` fallback message
   (`settings_page.dart:234-241`, an unclassified failure) — only the specific outcome messages named in AC1 gain the new suffix.
+
+### Story 5.4: Keep the screen awake during an in-flight AI request
+
+As the author,
+I want the app to keep my screen on while an AI request is streaming,
+So that a slow local model (e.g. LM Studio on my LAN, tested in Story 4.8) has time to finish before Android puts the app to sleep and kills the connection out from under it.
+
+**Context:** A real local-server test surfaced this: a slow local model can legitimately take longer to respond than it takes for the screen to lock, and once the screen turns off, Android moves the app out of the foreground-active state — the in-flight streaming request to `AiClient.sendMessage` gets killed before any text arrives, with no way for the client's own retry/backoff (`RetryingHttpSender`, Story 4.8) to help, since the *connection itself* is what's being severed, not a transient server-side failure. This is a client-side, OS-lifecycle problem, not a server-speed or retry-policy problem.
+
+**Where the fix belongs — the `AiClient` port itself, not each caller.** Three places currently consume `AiClient.sendMessage`'s stream directly: `runTranslate` (`translate_action.dart`), `runGrammarReview` (`grammar_action.dart`), and `SettingsPage._testConnection`. `AiClient` already reaches all three through 13 files' worth of existing constructor-injection threading from `main.dart` — wrapping the fix as a **decorator implementing `AiClient`** (mirroring `ProtocolRoutingAiClient`'s own exact shape and placement in `ai_client.dart`) means `main.dart` is the **only** file that changes to wire it in; every one of those 13 files, and every existing test built against the `AiClient` interface (`FakeAiClient`), stays completely untouched. This also means any *future* AI action automatically gets the same protection, with nothing to remember to wrap individually.
+
+**Acceptance Criteria:**
+
+1. **(Screen stays on for the duration of any AI request)** Given any call to `AiClient.sendMessage` — translate, grammar review, or Test Connection — when the returned stream is active (from the moment it's listened to until it completes, errors, or is cancelled), then the device screen is prevented from turning off due to inactivity for that whole span, and the wake-hold is released the instant the stream ends, however it ends.
+2. **(No new dependency threading)** Given the 13 files that already thread `AiClient` from `main.dart` down to `runTranslate`/`runGrammarReview`/`SettingsPage`, when this story ships, then **none of them change** — the fix is composed once, at the composition root, as a decorator around the existing `AiClient` instance.
+3. **(Never breaks a request, even if the wake mechanism itself fails)** Given the underlying screen-wake plugin call fails for any reason (unsupported platform state, plugin error), when that happens, then the AI request proceeds and reports its own real outcome exactly as it would have otherwise — a failure to hold the wake state is never surfaced as, or allowed to cause, an AI request failure. *(AD-8)*
+4. **(Correct under cancellation, not just success/failure)** Given Story 4.7's own `SettingsPage._testConnection`/`_testSubscription` cancellation path (the screen is popped mid-test), when the stream is cancelled rather than completing or erroring, then the wake-hold is still released — never left stuck on indefinitely after the screen that triggered it is gone.
+5. **(No behavior change beyond wake-state timing)** Given the request content, retry/backoff/timeout discipline, and every typed exception `AiClient.sendMessage` can already produce, when this story ships, then none of it changes — this story only wraps the *span* of an existing call, it does not alter what that call does or how it fails.
+
+**Non-goals** (explicitly out of scope):
+- No foreground service, background execution, or any fix for the app being fully backgrounded to a different app mid-request — this story only prevents the *screen* from turning off while the app stays the active foreground app; switching away to another app is a materially bigger problem (needs a persistent notification and Android foreground-service plumbing this app has none of today) and is not what was reported.
+- No increase to retry/backoff/timeout budgets, and no change to how many attempts a transient failure gets — this story prevents the OS from severing the connection in the first place; it does not change what happens once a request has genuinely failed.
+- No user-visible indicator that the screen is being held awake (no icon, no toast) — invisible, correct-by-default behavior, consistent with how retry/backoff itself is already invisible to the author.
+- No wake-hold outside the span of an actual `AiClient.sendMessage` call — general app browsing/editing is unaffected; the device's normal screen-timeout behavior is untouched everywhere else.
