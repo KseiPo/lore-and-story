@@ -194,7 +194,11 @@ A holding area for scoped correctness fixes and refinements identified along
 the way — not a new PRD phase or a fixed release unit, just where such stories
 accumulate until picked up, sequenced after Epic 4 (AI writing assist) ships.
 **Stories so far:** 5.1 — fix image-path breakage when promoting an entity to
-a folder (Story 2.17 × Story 2.16 interaction; extends FR26).
+a folder (Story 2.17 × Story 2.16 interaction; extends FR26). 5.2 — switch
+between light and dark theme, with theme/typography/decoration definitions
+consolidated into one dedicated file. 5.3 — show the resolved connection
+target (endpoint/protocol/model) in Test Connection's own outcome message,
+narrowly amending Story 4.7's AC5 "no display" rule.
 
 ---
 
@@ -749,6 +753,12 @@ until picked up. Sequenced after Epic 4 (AI writing assist) ships.
 
 **Epic Definition of Done (every story):** works fully offline (NFR4) unless the
 story is itself AI-related; no regression in the stories it touches.
+**Stories so far:** 5.1 — fix image-path breakage when promoting an entity to
+a folder (Story 2.17 × Story 2.16 interaction; extends FR26). 5.2 — switch
+between light and dark theme, with theme/typography/decoration definitions
+consolidated into one dedicated file. 5.3 — show the resolved connection
+target (endpoint/protocol/model) in Test Connection's own outcome message,
+narrowly amending Story 4.7's AC5 "no display" rule.
 
 ### Story 5.1: Preserve image paths when promoting an entity to a folder
 
@@ -804,3 +814,107 @@ stories, not tied to a new FR — extends FR26. Also worth checking during
 implementation, not assuming: whether Story 2.18's bare-`.md` rename (same
 directory, not a cross-directory move) is genuinely unaffected by this same class of
 bug, or only appears unaffected.
+
+### Story 5.2: Switch between light and dark theme
+
+As the author,
+I want to switch the app between a light and a dark theme,
+So that I can read and write comfortably in low-light conditions without the app forcing a bright screen on me.
+
+**Context:** The app has run light-only since Epic 1 — `ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true)` is hardcoded inline
+in `MaterialApp` (`app/app.dart`), with no `darkTheme`, `themeMode`, or `brightness` set at all. Every widget already reads colors through
+`Theme.of(context).colorScheme`/`textTheme` rather than hardcoded `Color(0x...)` literals (confirmed: zero raw color literals anywhere in
+`lib/`), so a dark palette renders correctly almost everywhere for free — the real work is (1) actually defining both palettes and wiring
+`themeMode`, (2) consolidating the handful of styling choices that currently diverge from Material defaults and are duplicated inline —
+the repeated `'monospace'` `TextStyle` in four separate files (`editor_toolbar.dart`, `file_editor.dart`, `markdown_preview.dart` ×2) and
+the recurring `BorderRadius.circular(4/6)` decoration on badges/banners (`conflicts_page.dart`, `home_page.dart`, `markdown_preview.dart`,
+`settings_page.dart`) — into one dedicated file so they don't silently look wrong (or stay inconsistent) once a second theme exists, and
+(3) persisting the choice and exposing a toggle. No state-management package exists in this app (`StatefulWidget`/`setState` and
+constructor injection throughout, confirmed via grep — zero `ChangeNotifier`/`ValueNotifier`/`InheritedWidget`/`Provider` usage today) —
+this is the first story to need any cross-widget-tree reactive signal, since flipping the toggle must repaint the whole `MaterialApp`
+from above the point where `SettingsPage`/`HomePage` live.
+
+**Acceptance Criteria:**
+
+1. **(Toggle available)** Given the Settings screen or `HomePage`'s `AppBar.actions` (where the existing `settings-action` button lives),
+   **When** I look for a way to switch themes, **Then** a discoverable control (e.g. a `Switch`/icon toggle) lets me pick light or dark —
+   placed either inside `SettingsPage`'s body (no existing `SwitchListTile`/`ListTile` precedent there yet — match the screen's existing
+   `Key('settings-*')` naming convention) or beside the `settings-action` icon in `HomePage`'s app bar.
+2. **(Live effect, app-wide)** Given I flip the toggle, **When** the change applies, **Then** the entire app — not just the current
+   screen — repaints in the chosen theme immediately, with no restart required.
+3. **(Persisted across launches)** Given I've chosen a theme, **When** I relaunch the app, **Then** it reopens in that same theme —
+   persisted via the same `shared_preferences` mechanism `RepoRootStore` (`storage/repo_root_store.dart`) already uses for the repo-root
+   path (not `flutter_secure_storage`, since a theme choice is not a secret), following the same small `read`/`write`/(`clear`) store-class
+   shape, and living alongside it in `lib/storage/`.
+4. **(Centralized theme-definition file)** Given the app's theme, typography, and any decoration choices that differ from plain Material
+   defaults, **When** this story ships, **Then** they live in one dedicated file (e.g. `lib/app/theme.dart`) — both a light and a dark
+   `ThemeData`, the repeated `'monospace'` code/editor `TextStyle` (today duplicated across `editor_toolbar.dart`, `file_editor.dart`, and
+   twice in `markdown_preview.dart`), and the small set of recurring decoration constants (badge/banner corner radius, the flat
+   `errorContainer`-tinted banner pattern used in four places) are defined once there and referenced from every call site — not
+   reimplemented inline per-widget as they are today.
+5. **(No regression to existing color usage)** Given every existing widget already reads colors via `Theme.of(context).colorScheme`/
+   `textTheme` rather than hardcoded color literals, **When** dark mode is added, **Then** no widget needs a rewrite to look correct in
+   dark mode — this story does not have to touch every screen, only the theme definitions themselves plus the specific inline
+   `TextStyle`/decoration duplications called out in AC4.
+6. **(Never crashes, never blocks)** Given a missing or corrupted stored theme preference, **When** the app launches, **Then** it falls
+   back to a sensible default (e.g. light) and never throws — mirroring `RepoRootStore`'s own "absent means unset, not an error" contract.
+   *(AD-8)*
+
+**Notes:** Not tied to a new FR — a UX/hygiene story, mirroring Story 5.1's own framing. No state-management package
+(`provider`/`riverpod`/etc.) exists in this app; a `ValueNotifier<ThemeMode>` (or an equivalent minimal `ChangeNotifier`) owned in
+`main.dart`'s composition root and threaded into `LoreStoryApp`, with `MaterialApp` wrapped in a `ValueListenableBuilder`/`AnimatedBuilder`,
+is the natural fit and introduces no new package dependency — but it does introduce the *concept* to this codebase for the first time, so
+the dev-story implementation should call this choice out explicitly rather than silently picking something heavier. The new preference
+store class should live in `lib/storage/` beside `RepoRootStore` (same non-secret, `shared_preferences`-backed shape), not a new slice
+(AD-12). Independent of every other Epic 4/Epic 5 story — no dependencies.
+
+### Story 5.3: Show the resolved connection target when testing the AI connection
+
+As the author,
+I want Test Connection to tell me the exact server address (and protocol/model) it just tried,
+So that I can verify the app actually picked up my latest edit to `lore-story.json` — the file syncs via Syncthing along with the rest
+of the repo, so it can take a moment to arrive, and today Test Connection's outcome message gives no way to tell whether the app is
+still testing a stale value.
+
+**Context:** Story 4.7 built Test Connection (`_testConnection` in `settings_page.dart`) and its own AC5 was explicit that the Settings
+screen shows **no** server/protocol/model picker or display — those are configured entirely by editing `lore-story.json`, not shown
+in-app. That restriction was about not cluttering Settings with a permanent config summary; it was never validated against a scenario
+where the author *actively wants* to confirm what the app currently believes the config is, at the exact moment they've asked it to
+prove the connection works. Today `_testConnection` already resolves everything needed for this — `resolveOrigin(serverConfig)` and
+`resolveEffectiveProtocol(serverConfig)` are already called to build the test `AiRequest` (`settings_page.dart:183-184`) — but the
+outcome SnackBar (`'Connection successful.'`, the "no text returned" message, and the `AiClientException` messages) never surfaces any
+of it. There is direct precedent for exactly this kind of display elsewhere in the app: Story 4.7's own review fix added a `Server`
+section to the FR22 context preview in `translate_action.dart`/`grammar_action.dart`, built as
+`ContextSection(label: 'Server', text: resolvedOrigin?.toString() ?? kDefaultAnthropicEndpoint)` — the same reasoning ("the destination
+itself must be part of what's shown") applies here, just surfaced through Test Connection's SnackBar instead of a context-preview
+sheet.
+
+**Acceptance Criteria:**
+
+1. **(Resolved destination shown on test outcome)** Given I tap Test Connection and the app successfully resolves `lore-story.json`'s
+   `ai` object and sends a request, **When** the outcome arrives — success, "server returned no text," or a remote/local failure that
+   happened after the request was built — **Then** the message also states the exact endpoint used (falling back to the same
+   `kDefaultAnthropicEndpoint` string the FR22 context preview already falls back to when no override applies), the protocol
+   (`anthropic`/`openai`), and the model, if one is set — all three come from the same `lore-story.json` fields a sync delay could
+   leave stale, so all three matter equally for "did the app pick up my edit yet."
+2. **(Narrow amendment to Story 4.7's AC5, not a repeal)** Given Story 4.7's AC5 ("Settings shows only the API key field — no
+   server/protocol/model picker or display"), **When** this story ships, **Then** that rule is narrowed, not reversed: Settings still
+   shows no persistent, always-visible config picker or summary anywhere on the screen — the resolved destination/protocol/model
+   appears **only** as part of Test Connection's own outcome feedback, exactly when and because the author explicitly triggered a live
+   test.
+3. **(Config-resolution failures are unaffected)** Given `resolveOrigin`/`resolveEffectiveProtocol` themselves throw an
+   `AiConfigException` before any request is built (e.g. `server: "custom"` with no `baseUrl`), **When** Test Connection reports this,
+   **Then** the existing typed-exception message is shown exactly as it is today — those messages already state what's inconsistent by
+   name; no additional "tried ..." text is added, since nothing was actually resolved to attempt.
+4. **(No behavior change beyond the message text)** Given the connection-testing logic Story 4.7/4.8 already built — the request
+   itself, retry/timeout handling, the re-entrancy guards (`_testing`/`_saving`), the cancellable `_testSubscription` — **When** this
+   story ships, **Then** none of it changes; this is a UI-only enrichment of the outcome message's text, not a rework of the test flow.
+
+**Non-goals** (explicitly out of scope):
+- No automatic staleness DETECTION (checking `lore-story.json`'s modified time, a content hash, or a "sync in progress" indicator) —
+  the author's own ask is only to see what value the app resolved, so they can visually cross-check it against what they intended to
+  write; detecting sync lag automatically is a different, unrequested feature.
+- No persistent "current configuration" summary shown at all times on the Settings screen — still gated behind explicitly tapping Test
+  Connection (AC2), preserving the spirit of Story 4.7's AC5 restriction on a permanent picker/display.
+- No change to the request itself, retry/timeout/cancellation behavior, or the generic-`catch (_)` fallback message
+  (`settings_page.dart:234-241`, an unclassified failure) — only the specific outcome messages named in AC1 gain the new suffix.
