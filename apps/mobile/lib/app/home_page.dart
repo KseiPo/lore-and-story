@@ -9,6 +9,8 @@ import 'conflicts_page.dart';
 import 'editor_page.dart';
 import 'root_picker_page.dart';
 import 'settings_page.dart';
+import 'theme.dart';
+import 'theme_mode_controller.dart';
 
 /// The states of the v0.1 landing surface. A real browsing UI is Epic 2 — this
 /// stays deliberately thin.
@@ -31,6 +33,10 @@ class HomePage extends StatefulWidget {
   /// action (the same chain `storage`/`loreDir` already thread through).
   final AiClient aiClient;
 
+  /// Story 5.2 — the app-wide theme signal + persistence, threaded down to
+  /// `SettingsPage` (the toggle's host); this page never reads it itself.
+  final ThemeModeController themeModeController;
+
   const HomePage({
     super.key,
     required this.rootStore,
@@ -38,6 +44,7 @@ class HomePage extends StatefulWidget {
     required this.storageFactory,
     required this.keyStore,
     required this.aiClient,
+    required this.themeModeController,
   });
 
   @override
@@ -338,6 +345,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           keyStore: widget.keyStore,
           aiClient: widget.aiClient,
           storage: storage,
+          themeModeController: widget.themeModeController,
         ),
       ),
     );
@@ -505,7 +513,7 @@ class _ReadyView extends StatelessWidget {
           // Conflict copies are surfaced, never hidden (FR17). Tapping opens the
           // badged, tappable list (Story 2.4).
           InkWell(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(kBannerCornerRadius),
             onTap: onOpenConflicts,
             child: Container(
               key: const Key('conflict-banner'),
@@ -513,7 +521,7 @@ class _ReadyView extends StatelessWidget {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: theme.colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(kBannerCornerRadius),
               ),
               child: Row(
                 children: [

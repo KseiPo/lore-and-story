@@ -1,9 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/app/app.dart';
+import 'package:lore_and_story/app/theme_mode_controller.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
 import 'fakes.dart';
+
+/// Pumps [LoreStoryApp] with the varying collaborators (root/permission/
+/// storage) a test needs, plus fixed fakes for everything else — including a
+/// fresh [ThemeModeController] every call, since this file doesn't exercise
+/// theming (that's `theme_toggle_test.dart`/`settings_page_test.dart`'s job).
+Future<void> _pumpApp(
+  WidgetTester tester, {
+  required RepoRootStore rootStore,
+  required StoragePermission permission,
+  required RepoStorageFactory storageFactory,
+}) async {
+  await tester.pumpWidget(LoreStoryApp(
+    rootStore: rootStore,
+    permission: permission,
+    storageFactory: storageFactory,
+    keyStore: FakeKeyStore(),
+    aiClient: FakeAiClient(),
+    themeModeController: ThemeModeController(FakeThemeModeStore()),
+  ));
+  await tester.pumpAndSettle();
+}
 
 // Home-orchestration states (grant → choose-root → ready), conflict surfacing,
 // rescan-on-refresh/resume, and the error state. The Categories → Entities
@@ -11,14 +33,12 @@ import 'fakes.dart';
 void main() {
   testWidgets('shows grant-access state when permission is not granted',
       (tester) async {
-    await tester.pumpWidget(LoreStoryApp(
+    await _pumpApp(
+      tester,
       rootStore: FakeRepoRootStore(),
       permission: FakeStoragePermission(granted: false),
       storageFactory: (root) => FakeRepoStorage(root),
-      keyStore: FakeKeyStore(),
-      aiClient: FakeAiClient(),
-    ));
-    await tester.pumpAndSettle();
+    );
 
     expect(find.text('Grant access'), findsOneWidget);
     expect(find.text('Choose repo folder'), findsNothing);
@@ -26,14 +46,12 @@ void main() {
 
   testWidgets('shows choose-folder state when granted but no root stored',
       (tester) async {
-    await tester.pumpWidget(LoreStoryApp(
+    await _pumpApp(
+      tester,
       rootStore: FakeRepoRootStore(),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => FakeRepoStorage(root),
-      keyStore: FakeKeyStore(),
-      aiClient: FakeAiClient(),
-    ));
-    await tester.pumpAndSettle();
+    );
 
     expect(find.text('Choose repo folder'), findsOneWidget);
   });
@@ -57,14 +75,12 @@ void main() {
       },
       fileContents: {'lore/frank.md': '# Frank\n'},
     );
-    await tester.pumpWidget(LoreStoryApp(
+    await _pumpApp(
+      tester,
       rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
-      keyStore: FakeKeyStore(),
-      aiClient: FakeAiClient(),
-    ));
-    await tester.pumpAndSettle();
+    );
 
     expect(find.byKey(const Key('conflict-banner')), findsOneWidget);
     expect(find.textContaining('1 sync-conflict copy —'), findsOneWidget);
@@ -87,14 +103,12 @@ void main() {
       dirEntries: {'lore': loreDir},
       fileContents: {'lore/frank.md': '# Frank\n'},
     );
-    await tester.pumpWidget(LoreStoryApp(
+    await _pumpApp(
+      tester,
       rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
-      keyStore: FakeKeyStore(),
-      aiClient: FakeAiClient(),
-    ));
-    await tester.pumpAndSettle();
+    );
 
     expect(find.byKey(const Key('conflict-banner')), findsNothing);
 
@@ -125,14 +139,12 @@ void main() {
       dirEntries: {'lore': loreDir},
       fileContents: {'lore/frank.md': '# Frank\n'},
     );
-    await tester.pumpWidget(LoreStoryApp(
+    await _pumpApp(
+      tester,
       rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
-      keyStore: FakeKeyStore(),
-      aiClient: FakeAiClient(),
-    ));
-    await tester.pumpAndSettle();
+    );
     expect(find.byKey(const Key('conflict-banner')), findsNothing);
 
     loreDir.add(const RepoEntry(
@@ -157,14 +169,12 @@ void main() {
       '/storage/emulated/0/repo',
       throwOnListDir: true,
     );
-    await tester.pumpWidget(LoreStoryApp(
+    await _pumpApp(
+      tester,
       rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => storage,
-      keyStore: FakeKeyStore(),
-      aiClient: FakeAiClient(),
-    ));
-    await tester.pumpAndSettle();
+    );
 
     expect(find.text('Something went wrong'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
@@ -174,14 +184,12 @@ void main() {
   testWidgets('(review fix) the AppBar settings icon navigates to '
       'SettingsPage — Task 3.2\'s wiring, not just Task 4.3\'s pumping of '
       'SettingsPage directly', (tester) async {
-    await tester.pumpWidget(LoreStoryApp(
+    await _pumpApp(
+      tester,
       rootStore: FakeRepoRootStore(initial: '/storage/emulated/0/repo'),
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => FakeRepoStorage('/storage/emulated/0/repo'),
-      keyStore: FakeKeyStore(),
-      aiClient: FakeAiClient(),
-    ));
-    await tester.pumpAndSettle();
+    );
 
     await tester.tap(find.byKey(const Key('settings-action')));
     await tester.pumpAndSettle();
@@ -193,14 +201,12 @@ void main() {
   testWidgets(
       '(Story 4.7) Settings still opens when no repo root has been picked '
       'yet — storage: null, never blocks or throws', (tester) async {
-    await tester.pumpWidget(LoreStoryApp(
+    await _pumpApp(
+      tester,
       rootStore: FakeRepoRootStore(), // no root stored yet → needsRoot stage
       permission: FakeStoragePermission(granted: true),
       storageFactory: (root) => FakeRepoStorage(root),
-      keyStore: FakeKeyStore(),
-      aiClient: FakeAiClient(),
-    ));
-    await tester.pumpAndSettle();
+    );
 
     expect(find.text('Choose repo folder'), findsOneWidget,
         reason: 'confirms we are genuinely in the no-root-yet state');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/app/app.dart';
 import 'package:lore_and_story/app/editor_page.dart';
+import 'package:lore_and_story/app/theme_mode_controller.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
 import '../fakes.dart';
@@ -40,6 +41,7 @@ Future<void> _pumpReady(WidgetTester tester, FakeRepoStorage storage) async {
     storageFactory: (root) => storage,
     keyStore: FakeKeyStore(),
     aiClient: FakeAiClient(),
+    themeModeController: ThemeModeController(FakeThemeModeStore()),
   ));
   await tester.pumpAndSettle();
 }

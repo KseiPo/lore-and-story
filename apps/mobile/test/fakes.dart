@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:lore_and_story/ai/ai.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
@@ -17,6 +18,23 @@ class FakeRepoRootStore extends RepoRootStore {
 
   @override
   Future<void> clear() async => _root = null;
+}
+
+/// In-memory [ThemeModeStore] for widget tests (no plugin channel) — Story
+/// 5.2, mirrors [FakeRepoRootStore]'s exact shape.
+class FakeThemeModeStore extends ThemeModeStore {
+  ThemeMode? _mode;
+
+  FakeThemeModeStore({ThemeMode? initial}) : _mode = initial;
+
+  @override
+  Future<ThemeMode?> read() async => _mode;
+
+  @override
+  Future<void> write(ThemeMode mode) async => _mode = mode;
+
+  @override
+  Future<void> clear() async => _mode = null;
 }
 
 /// In-memory [KeyStore] for widget tests (no `flutter_secure_storage`

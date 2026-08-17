@@ -4,6 +4,7 @@ import '../ai/ai.dart';
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'editor_page.dart';
+import 'theme.dart';
 
 /// The badged, tappable list of Syncthing conflict copies the walk surfaced
 /// (Story 2.4, FR17) — reached by tapping the home conflict banner.
@@ -108,7 +109,7 @@ class _ConflictBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: theme.colorScheme.error,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(kBadgeCornerRadius),
       ),
       child: Text(
         'CONFLICT',

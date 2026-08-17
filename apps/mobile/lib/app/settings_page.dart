@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../ai/ai.dart';
 import '../storage/storage.dart';
+import 'theme.dart';
+import 'theme_mode_controller.dart';
 
 /// The states this screen can be in. [error] covers any secure-storage
 /// failure (read/write/delete) — AD-8: never crash, always a visible state.
@@ -38,11 +40,17 @@ class SettingsPage extends StatefulWidget {
   /// defaults, never blocking Settings from opening (AD-8).
   final RepoStorage? storage;
 
+  /// Story 5.2 — the app-wide theme signal + persistence this screen's
+  /// toggle reads (to decide which icon to show) and calls [ThemeModeController.set]
+  /// on (to flip it and save the change together).
+  final ThemeModeController themeModeController;
+
   const SettingsPage({
     super.key,
     required this.keyStore,
     required this.aiClient,
     required this.storage,
+    required this.themeModeController,
   });
 
   @override
@@ -241,6 +249,43 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  /// Story 5.2 (AC1/AC2/AC3) — flips light↔dark only (never `system`, per
+  /// Non-goals). [ThemeModeController.set] applies the change immediately
+  /// (the [ValueListenableBuilder] above `MaterialApp` — see `app.dart` —
+  /// repaints the whole app the instant the value changes) and persists it
+  /// in the background, all behind that one call: a persistence failure
+  /// can't undo or block the visual toggle that already happened (AC6/AD-8),
+  /// and this widget no longer needs its own separate persist-and-swallow
+  /// logic (Review fix — that guarantee now lives once, in the controller).
+  void _toggleTheme() {
+    final current = widget.themeModeController.value;
+    final newMode = current == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    unawaited(widget.themeModeController.set(newMode));
+  }
+
+  /// The theme toggle (AC1) — an icon button matching the existing
+  /// `settings-action`-style icon-button convention (rather than introducing
+  /// a `Switch`, this app's first). Shows the icon for the theme a tap would
+  /// switch *to*. Wrapped in its own [ValueListenableBuilder] (Review fix)
+  /// rather than reading `widget.themeModeController.value` as a plain field
+  /// access — the icon now reacts to *any* change to the theme (not just a
+  /// tap on this exact button), instead of relying on the enclosing screen
+  /// happening to rebuild for an unrelated reason.
+  Widget _themeToggleButton() {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: widget.themeModeController.listenable,
+      builder: (context, mode, _) {
+        final isDark = mode == ThemeMode.dark;
+        return IconButton(
+          key: const Key('theme-toggle-button'),
+          tooltip: isDark ? 'Switch to light theme' : 'Switch to dark theme',
+          icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+          onPressed: _toggleTheme,
+        );
+      },
+    );
+  }
+
   Future<void> _clear() async {
     if (_saving || _testing) return;
     setState(() => _saving = true);
@@ -263,7 +308,10 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: const Text('Settings'),
+        actions: [_themeToggleButton()],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: _buildBody(),
@@ -284,7 +332,7 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: scheme.errorContainer,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(kBannerCornerRadius),
         ),
         child: Row(
           children: [

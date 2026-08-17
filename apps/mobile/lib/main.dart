@@ -5,6 +5,7 @@ import 'ai/ai.dart';
 import 'ai/messages_api_client.dart';
 import 'ai/openai_compatible_client.dart';
 import 'app/app.dart';
+import 'app/theme_mode_controller.dart';
 import 'storage/all_files_repo_storage.dart';
 import 'storage/storage.dart';
 
@@ -27,6 +28,15 @@ void main() {
   );
   RepoStorage buildStorage(String rootPath) => AllFilesRepoStorage(rootPath);
 
+  // Story 5.2 — starts at the AC6 default (light) before the stored
+  // preference is known, mirroring the existing pattern where `main()` stays
+  // synchronous and never blocks `runApp` on I/O (`RepoRootStore`'s own
+  // persisted value is likewise read later, not here). `ThemeModeController`
+  // owns the notifier + persistence behind one controlled surface (Review
+  // fix) — its `loadStored()` never throws and safely no-ops if the user has
+  // already toggled the theme by the time this fire-and-forget call resolves.
+  final themeModeController = ThemeModeController(ThemeModeStore());
+
   runApp(
     LoreStoryApp(
       rootStore: rootStore,
@@ -34,6 +44,9 @@ void main() {
       storageFactory: buildStorage,
       keyStore: keyStore,
       aiClient: aiClient,
+      themeModeController: themeModeController,
     ),
   );
+
+  themeModeController.loadStored();
 }

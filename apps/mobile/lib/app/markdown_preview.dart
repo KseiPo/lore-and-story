@@ -8,6 +8,7 @@ import 'package:markdown/markdown.dart' as md;
 import '../lore/lore.dart';
 import '../storage/storage.dart';
 import 'convention_styles.dart';
+import 'theme.dart';
 
 /// A read-only rendered view of markdown [text] (FR10).
 ///
@@ -254,12 +255,12 @@ class _MarkdownRenderer {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(kBannerCornerRadius),
       ),
       child: Text(
         code,
         style: (textTheme.bodyMedium ?? const TextStyle())
-            .copyWith(fontFamily: 'monospace'),
+            .copyWith(fontFamily: kMonospaceTextStyle.fontFamily),
       ),
     );
   }
@@ -403,7 +404,7 @@ class _MarkdownRenderer {
             spans.add(TextSpan(
               text: node.textContent,
               style: base.copyWith(
-                fontFamily: 'monospace',
+                fontFamily: kMonospaceTextStyle.fontFamily,
                 backgroundColor: scheme.surfaceContainerHighest,
               ),
             ));

@@ -10,3 +10,4 @@ export 'repo_storage.dart';
 export 'android_storage.dart';
 export 'repo_root_store.dart';
 export 'storage_permission.dart';
+export 'theme_mode_store.dart';

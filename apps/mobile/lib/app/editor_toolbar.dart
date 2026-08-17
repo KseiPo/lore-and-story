@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../lore/lore.dart';
+import 'theme.dart';
 
 /// The helper toolbar (FR8) and its pure text-operation functions.
 ///
@@ -614,7 +615,7 @@ class _TextBtn extends StatelessWidget {
           backgroundColor: active ? theme.colorScheme.primaryContainer : null,
           foregroundColor: active ? theme.colorScheme.onPrimaryContainer : null,
         ),
-        child: Text(label, style: const TextStyle(fontFamily: 'monospace')),
+        child: Text(label, style: kMonospaceTextStyle),
       ),
     );
   }

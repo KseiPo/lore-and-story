@@ -6,6 +6,7 @@ import '../storage/storage.dart';
 import 'convention_highlighting_controller.dart';
 import 'editor_toolbar.dart';
 import 'markdown_preview.dart';
+import 'theme.dart';
 import 'wikilink_autocomplete.dart';
 
 /// The per-file editing surface — everything about editing **one** file, minus
@@ -473,7 +474,7 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
                     maxLines: null,
                     expands: true,
                     keyboardType: TextInputType.multiline,
-                    style: const TextStyle(fontFamily: 'monospace'),
+                    style: kMonospaceTextStyle,
                     decoration: const InputDecoration(border: InputBorder.none),
                   ),
                 ),

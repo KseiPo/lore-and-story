@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/ai/ai.dart';
 import 'package:lore_and_story/app/settings_page.dart';
+import 'package:lore_and_story/app/theme_mode_controller.dart';
 import 'package:lore_and_story/lore/lore.dart' show kProjectConfigFile;
 import 'package:lore_and_story/storage/storage.dart';
 
@@ -18,12 +19,15 @@ Future<void> _pump(
   KeyStore keyStore, {
   AiClient? aiClient,
   RepoStorage? storage,
+  ThemeModeController? themeModeController,
 }) async {
   await tester.pumpWidget(MaterialApp(
     home: SettingsPage(
       keyStore: keyStore,
       aiClient: aiClient ?? FakeAiClient(),
       storage: storage,
+      themeModeController:
+          themeModeController ?? ThemeModeController(FakeThemeModeStore()),
     ),
   ));
   await tester.pumpAndSettle();
@@ -132,6 +136,7 @@ void main() {
         keyStore: recovered,
         aiClient: FakeAiClient(),
         storage: null,
+        themeModeController: ThemeModeController(FakeThemeModeStore()),
       ),
     ));
     await tester.tap(find.byKey(const Key('settings-retry-button')));
@@ -428,6 +433,120 @@ void main() {
       expect(find.byKey(const Key('settings-ai-config-warning')), findsOneWidget);
     });
   });
+
+  group('Theme toggle (Story 5.2)', () {
+    testWidgets('starts as the dark-mode icon when currently light (tap to go dark)',
+        (tester) async {
+      await _pump(tester, FakeKeyStore(),
+          themeModeController: ThemeModeController(FakeThemeModeStore(),
+              initial: ThemeMode.light));
+
+      expect(find.byKey(const Key('theme-toggle-button')), findsOneWidget);
+      expect(find.byIcon(Icons.dark_mode_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.light_mode_outlined), findsNothing);
+    });
+
+    testWidgets('starts as the light-mode icon when currently dark (tap to go light)',
+        (tester) async {
+      await _pump(tester, FakeKeyStore(),
+          themeModeController: ThemeModeController(FakeThemeModeStore(),
+              initial: ThemeMode.dark));
+
+      expect(find.byIcon(Icons.light_mode_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.dark_mode_outlined), findsNothing);
+    });
+
+    testWidgets(
+        'tapping the toggle flips the controller and persists the new mode '
+        '(AC2, AC3)', (tester) async {
+      final store = FakeThemeModeStore();
+      final controller = ThemeModeController(store, initial: ThemeMode.light);
+      await _pump(tester, FakeKeyStore(), themeModeController: controller);
+
+      await tester.tap(find.byKey(const Key('theme-toggle-button')));
+      await tester.pumpAndSettle();
+
+      expect(controller.value, ThemeMode.dark);
+      expect(find.byIcon(Icons.light_mode_outlined), findsOneWidget);
+      expect(await store.read(), ThemeMode.dark);
+    });
+
+    testWidgets('tapping it again flips back to light', (tester) async {
+      final store = FakeThemeModeStore(initial: ThemeMode.dark);
+      final controller = ThemeModeController(store, initial: ThemeMode.dark);
+      await _pump(tester, FakeKeyStore(), themeModeController: controller);
+
+      await tester.tap(find.byKey(const Key('theme-toggle-button')));
+      await tester.pumpAndSettle();
+
+      expect(controller.value, ThemeMode.light);
+      expect(await store.read(), ThemeMode.light);
+    });
+
+    testWidgets(
+        'a persistence failure never blocks the visual toggle (AC6/AD-8)',
+        (tester) async {
+      final controller =
+          ThemeModeController(_FailingThemeModeStore(), initial: ThemeMode.light);
+      await _pump(tester, FakeKeyStore(), themeModeController: controller);
+
+      await tester.tap(find.byKey(const Key('theme-toggle-button')));
+      await tester.pumpAndSettle();
+
+      // The write failed, but the toggle itself still applied and the app
+      // never crashed.
+      expect(tester.takeException(), isNull);
+      expect(controller.value, ThemeMode.dark);
+      expect(find.byIcon(Icons.light_mode_outlined), findsOneWidget);
+    });
+
+    testWidgets(
+        "a still-in-flight loadStored() call never reverts a user's own "
+        'toggle (Review fix — end-to-end coverage of the ThemeModeController '
+        'race guard, from an actual widget tap)', (tester) async {
+      final store = _SlowReadThemeModeStore();
+      final controller = ThemeModeController(store, initial: ThemeMode.light);
+      await _pump(tester, FakeKeyStore(), themeModeController: controller);
+
+      // Simulate `main.dart`'s fire-and-forget load still being in flight
+      // when the user opens Settings and taps the toggle.
+      final loadFuture = controller.loadStored();
+
+      await tester.tap(find.byKey(const Key('theme-toggle-button')));
+      await tester.pumpAndSettle();
+      expect(controller.value, ThemeMode.dark);
+
+      // The pending load resolves with a stale value read before the tap —
+      // it must not override the toggle that already happened.
+      store.release(ThemeMode.light);
+      await loadFuture;
+
+      expect(controller.value, ThemeMode.dark);
+      expect(find.byIcon(Icons.light_mode_outlined), findsOneWidget);
+    });
+  });
+}
+
+/// A [ThemeModeStore] whose [read] doesn't resolve until [release] is
+/// called — lets a test hold a "load in flight" state deliberately, to
+/// exercise the race between a still-pending load and a user's own toggle.
+class _SlowReadThemeModeStore extends ThemeModeStore {
+  final _gate = Completer<ThemeMode?>();
+
+  void release(ThemeMode? value) => _gate.complete(value);
+
+  @override
+  Future<ThemeMode?> read() => _gate.future;
+}
+
+/// A [ThemeModeStore] whose [write] always throws — for exercising the AD-8
+/// never-crash path (Story 5.2, AC6): a persistence failure must never block
+/// the immediate visual toggle.
+class _FailingThemeModeStore extends ThemeModeStore {
+  @override
+  Future<void> write(ThemeMode mode) async {
+    throw Exception('boom (fake persistence failure)');
+  }
 }
 
 /// An [AiClient] whose `sendMessage` stream stays open until [complete] is
