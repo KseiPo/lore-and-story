@@ -8,6 +8,7 @@ import 'package:lore_and_story/app/entity_detail_page.dart';
 import 'package:lore_and_story/storage/storage.dart';
 
 import '../fakes.dart';
+import 'test_image_fixtures.dart';
 
 /// A [FakeRepoStorage] whose [movePath] pauses until [releaseMove] is called.
 /// The plain fake resolves every call near-instantly (no real I/O delay), so
@@ -111,6 +112,9 @@ void main() {
       expect(storage.ensureDirCalls, ['characters/frank']);
       expect(await storage.exists('characters/frank.md'), isFalse);
       expect(await storage.read('characters/frank/frank.md'), '# Frank\n');
+      // Story 5.1 (AC2): nothing to rewrite here (no image references), so
+      // no extra write beyond the plain move happens — today's behavior.
+      expect(storage.writeCalls, isEmpty);
     });
 
     testWidgets('cancelling the confirm dialog leaves everything untouched',
@@ -274,6 +278,140 @@ void main() {
 
       expect(find.byType(EntityDetailPage), findsOneWidget);
       expect(find.byType(EditorPage), findsNothing);
+    });
+  });
+
+  group('Preserve image paths on promotion (Story 5.1, FR26)', () {
+    testWidgets(
+        'a promoted card with one relative image reference still renders '
+        'the image afterwards (AC1 — verified by actually rendering, not '
+        'string-diffing)', (tester) async {
+      final storage = FakeRepoStorage(
+        '/storage/emulated/0/repo',
+        dirEntries: {
+          '': const [
+            RepoEntry(
+                name: 'characters', path: 'characters', isDirectory: true),
+          ],
+          'characters': [
+            const RepoEntry(
+                name: 'frank.md', path: 'characters/frank.md', isDirectory: false),
+          ],
+        },
+        fileContents: {
+          'characters/frank.md': '# Frank\n\n![Frank](media/frank.jpg)\n',
+        },
+        // Seeded at the path the rewritten (../media/frank.jpg) src must
+        // still resolve to from the card's new location.
+        fileBytes: {'characters/media/frank.jpg': validPngFixture},
+      );
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('promote-entity-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(
+        await storage.read('characters/frank/frank.md'),
+        '# Frank\n\n![Frank](../media/frank.jpg)\n',
+      );
+
+      await tester.tap(find.text('Frank'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EntityDetailPage), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
+    });
+
+    testWidgets(
+        'a card with multiple image references (plain-relative, already '
+        '../-relative, and subfolder-relative) promotes with each src '
+        'rewritten and nothing else changed (AC4)', (tester) async {
+      const original = '# Frank\n\n'
+          '![One](media/one.jpg)\n\n'
+          'Some prose in between.\n\n'
+          '![Two](../shared/two.png)\n\n'
+          '![Three](media/sub/three.jpg)\n';
+      const expected = '# Frank\n\n'
+          '![One](../media/one.jpg)\n\n'
+          'Some prose in between.\n\n'
+          '![Two](../../shared/two.png)\n\n'
+          '![Three](../media/sub/three.jpg)\n';
+      final storage = _repo();
+      // Overwrite the seeded card with one that has multiple images.
+      await storage.writeAtomic('characters/frank.md', original);
+      storage.writeCalls.clear();
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('promote-entity-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(await storage.read('characters/frank/frank.md'), expected);
+    });
+
+    testWidgets(
+        'a card with no image references promotes unchanged, with no extra '
+        'write beyond the move (AC2, AC4)', (tester) async {
+      final storage = _repo();
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('promote-entity-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(await storage.read('characters/frank/frank.md'), '# Frank\n');
+      expect(storage.writeCalls, isEmpty);
+    });
+
+    testWidgets(
+        'a card with malformed/unparseable image markup still promotes '
+        'successfully, with content left as-is (AC3 — rewrite failure never '
+        'blocks the move)', (tester) async {
+      const malformed = '# Frank\n\n![broken](media/x.jpg\n\nmore text after';
+      final storage = _repo();
+      await storage.writeAtomic('characters/frank.md', malformed);
+      storage.writeCalls.clear();
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('promote-entity-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Failed to promote this entity.'), findsNothing);
+      expect(storage.moveCalls, [
+        ('characters/frank.md', 'characters/frank/frank.md'),
+      ]);
+      expect(await storage.read('characters/frank/frank.md'), malformed);
+    });
+
+    testWidgets(
+        'network and absolute image references are left untouched by '
+        'promotion (AC2)', (tester) async {
+      const original = '# Frank\n\n'
+          '![Remote](https://example.com/hero.png)\n\n'
+          '![Abs](/etc/hero.png)\n';
+      final storage = _repo();
+      await storage.writeAtomic('characters/frank.md', original);
+      storage.writeCalls.clear();
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('promote-entity-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(await storage.read('characters/frank/frank.md'), original);
+      expect(storage.writeCalls, isEmpty);
     });
   });
 }

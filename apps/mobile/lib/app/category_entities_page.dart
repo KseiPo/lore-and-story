@@ -168,6 +168,14 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
       final newFolderPath = _repoPath(newFolderId);
       final newCardPath = _repoPath(newCardId);
 
+      // Story 5.1: promotion adds one directory level, which silently breaks
+      // any relative local image reference (`![alt](src)`) the card contains
+      // (Story 2.16 resolves `src` against the card's *current* directory).
+      // Computed up front from the already-loaded `entry.text` — no extra
+      // `storage.read` — and applied only after the move itself succeeds, so
+      // a rewrite failure never blocks the move (AC3).
+      final rewrittenText = rewriteRelativeImagePaths(entry.text);
+
       try {
         if (await widget.storage.exists(newCardPath)) {
           if (!mounted) return;
@@ -178,6 +186,14 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
         }
         await widget.storage.ensureDir(newFolderPath);
         await widget.storage.movePath(cardPath, newCardPath);
+        if (rewrittenText != entry.text) {
+          try {
+            await widget.storage.writeAtomic(newCardPath, rewrittenText);
+          } catch (_) {
+            // The move already succeeded — a rewrite-write failure here must
+            // never surface as a promotion failure (AC3).
+          }
+        }
       } on RepoStorageException {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

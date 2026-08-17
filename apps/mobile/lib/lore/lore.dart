@@ -8,6 +8,7 @@ library;
 
 export 'convention_lint.dart';
 export 'convention_matcher.dart';
+export 'image_path_rewriter.dart';
 export 'lore_browse.dart';
 export 'lore_loader.dart';
 export 'lore_model.dart';
