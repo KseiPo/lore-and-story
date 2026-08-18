@@ -242,7 +242,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Connection successful.'), findsOneWidget);
+      expect(find.textContaining('Connection successful.'), findsOneWidget);
       expect(aiClient.requests, hasLength(1));
     });
 
@@ -262,7 +262,7 @@ void main() {
       // remote response body (`_extractErrorMessage`) — a custom endpoint
       // could put attacker-chosen text there, so it must never render
       // indistinguishably from the app's own copy.
-      expect(find.text('Server said: bad key'), findsOneWidget);
+      expect(find.textContaining('Server said: bad key'), findsOneWidget);
       expect(find.text('bad key'), findsNothing,
           reason: 'the raw, unprefixed message must not also be shown');
     });
@@ -278,7 +278,12 @@ void main() {
       await tester.tap(find.byKey(const Key('settings-test-connection-button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('No API key configured.'), findsOneWidget);
+      // Story 5.3: this failure happens after config resolution succeeds
+      // (it's thrown during the actual request, not while resolving
+      // server/protocol), so it also gains the "tried ..." suffix (AC1) —
+      // textContaining rather than exact match, same as the other
+      // AiClientException-path assertions this story touches.
+      expect(find.textContaining('No API key configured.'), findsOneWidget);
       expect(find.textContaining('Server said:'), findsNothing);
     });
 
@@ -319,6 +324,10 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(aiClient.requests, isEmpty);
       expect(find.textContaining('server'), findsOneWidget);
+      // Story 5.3 (AC3): resolveOrigin/resolveEffectiveProtocol never
+      // succeeded here, so nothing was resolved to append — the message
+      // must stay exactly as it was pre-Story-5.3, no "Tried: ..." suffix.
+      expect(find.textContaining('Tried:'), findsNothing);
     });
 
     testWidgets(
@@ -352,9 +361,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Connection successful.'), findsOneWidget);
+      expect(find.textContaining('Connection successful.'), findsOneWidget);
+      expect(find.textContaining(kDefaultAnthropicEndpoint), findsOneWidget);
       expect(aiClient.requests.single.model, isNull);
       expect(aiClient.requests.single.baseUrl, isNull);
+      // Story 5.3 (AC1): the model segment is gracefully omitted when no
+      // model override is set — no dangling ", null" / trailing comma
+      // artifact from the Anthropic-default case's null model.
+      expect(find.textContaining(', null'), findsNothing);
     });
 
     testWidgets('a resolved lore-story.json ai object flows into the test '
@@ -374,6 +388,15 @@ void main() {
       expect(aiClient.requests.single.model, 'local-model');
       expect(aiClient.requests.single.baseUrl,
           Uri.parse('http://localhost:1234/v1'));
+      // Story 5.3 (AC1): the outcome message states the exact resolved
+      // endpoint, protocol, and model — so a sync-lagged lore-story.json
+      // shows itself immediately instead of silently testing a stale value.
+      expect(find.textContaining('http://localhost:1234/v1'), findsOneWidget);
+      // No explicit "protocol" in this config, and `server: "custom"` alone
+      // defaults to anthropic (resolveEffectiveProtocol's own documented
+      // default) — not openai.
+      expect(find.textContaining('anthropic'), findsOneWidget);
+      expect(find.textContaining('local-model'), findsOneWidget);
     });
   });
 

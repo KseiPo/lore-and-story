@@ -278,6 +278,41 @@ Uri? resolveOrigin(AiServerConfig config) {
   return origin;
 }
 
+/// Describes the complete endpoint URL a request with the already-resolved
+/// [origin]/[protocol] would actually hit — not just the bare origin, but
+/// with the protocol-specific request path appended exactly the way each
+/// adapter's own endpoint resolution does: `/messages` for Anthropic
+/// ([MessagesApiClient]), `/chat/completions` for OpenAI
+/// ([OpenAiCompatibleClient]). Story 5.3 review fix — the Settings screen's
+/// Test Connection outcome previously showed the bare origin for a custom
+/// server (e.g. `http://localhost:1234/v1`) while [kDefaultAnthropicEndpoint]
+/// already includes its path, an inconsistency that undermined the point of
+/// showing "exactly what was tried."
+///
+/// Pure and total (never throws) — takes [origin]/[protocol] already
+/// resolved by [resolveOrigin]/[resolveEffectiveProtocol] rather than
+/// re-resolving from an [AiServerConfig] itself, so a caller that already
+/// has those values (and has already handled any [AiConfigException] they
+/// could throw) doesn't pay for or risk a second resolution. Diagnostic/
+/// display use only — the adapters still resolve their own endpoint
+/// completely independently; this must stay behaviorally identical to them
+/// (same trailing-slash handling), not become a second source of truth they
+/// read from.
+String describeEndpoint({required Uri? origin, required AiProtocol protocol}) {
+  if (origin == null) {
+    // No override — resolveOrigin only ever returns null when the effective
+    // protocol is anthropic (an openai-protocol resolution with no usable
+    // origin throws instead), so the app's own hardcoded Anthropic default
+    // — already a complete endpoint — is exactly right here.
+    return kDefaultAnthropicEndpoint;
+  }
+  final path = origin.path.endsWith('/')
+      ? origin.path.substring(0, origin.path.length - 1)
+      : origin.path;
+  final suffix = protocol == AiProtocol.openai ? 'chat/completions' : 'messages';
+  return origin.replace(path: '$path/$suffix').toString();
+}
+
 /// A [raw] string is a valid custom origin only when it parses as an
 /// absolute `http`/`https` URI with a non-empty host (Review fix, Story
 /// 4.7 code review) — `Uri.tryParse` alone accepts almost anything

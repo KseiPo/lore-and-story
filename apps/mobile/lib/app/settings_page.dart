@@ -148,6 +148,26 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  /// Story 5.3 (AC1) — narrows Story 4.7's AC5 "no server/protocol/model
+  /// display" rule: that rule was about not permanently cluttering the
+  /// screen with a config summary, not about withholding this information
+  /// at the one moment the author explicitly asked the app to prove the
+  /// connection works (`lore-story.json` syncs via Syncthing, so it can take
+  /// a moment to arrive — this is how the author checks whether the app
+  /// already picked up their latest edit). [model] is gracefully omitted
+  /// (no dangling comma) when `null` — the Anthropic-default case with no
+  /// override set.
+  ///
+  /// On its own line (Review fix), not appended inline with a bare leading
+  /// space: [e.message] in the exception-handler call site can originate
+  /// from a remote server's response body (an untrusted string, per the
+  /// existing "Review fix" comment there) — a plain space is too weak a
+  /// boundary between that and this trusted, app-generated text. The
+  /// `Tried:` label makes this segment's origin unambiguous even if a
+  /// crafted remote message tried to imitate it.
+  String _connectionTargetSuffix(String endpoint, AiProtocol protocol, String? model) =>
+      '\nTried: $endpoint (${protocol.name}${model != null ? ', $model' : ''})';
+
   /// Story 4.7/AC4 — makes one minimal live request against the resolved
   /// server/model (falling back to today's hardcoded Anthropic defaults when
   /// [SettingsPage.storage] is `null`) and reports success or a clear
@@ -176,20 +196,55 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _testConnection() async {
     if (_testing || _saving) return;
     setState(() => _testing = true);
+
+    // Story 5.3 (AC3, Review fix) — resolved first, in its own try/catch,
+    // exactly mirroring `translate_action.dart`/`grammar_action.dart`'s own
+    // early-resolve pattern: an `AiConfigException` here means nothing was
+    // actually resolved, so it's shown exactly as it was pre-Story-5.3, with
+    // no diagnostic suffix. Structuring it this way (rather than one shared
+    // try/catch with a nullable "did resolution succeed" flag threaded
+    // through it) makes that a fact the rest of this method can rely on,
+    // not a runtime flag every future edit has to keep consistent by hand.
+    final AiServerConfig serverConfig;
+    final Uri? resolvedOrigin;
+    final AiProtocol protocol;
     try {
-      final serverConfig = widget.storage != null
+      serverConfig = widget.storage != null
           ? await resolveAiServerConfig(widget.storage!)
           : AiServerConfig.empty;
+      resolvedOrigin = resolveOrigin(serverConfig);
+      protocol = resolveEffectiveProtocol(serverConfig);
+    } on AiConfigException catch (e) {
+      if (!mounted) return;
+      setState(() => _testing = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _testing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Connection test failed.')),
+      );
+      return;
+    }
+
+    // Story 5.3 (AC1) — the exact endpoint/protocol/model this test will
+    // try. `describeEndpoint` mirrors each `AiClient` adapter's own request
+    // path (`/messages`/`/chat/completions`), not just the bare origin
+    // (Review fix), so what's shown matches what's actually requested.
+    final endpoint = describeEndpoint(origin: resolvedOrigin, protocol: protocol);
+    final targetSuffix =
+        _connectionTargetSuffix(endpoint, protocol, serverConfig.model);
+
+    try {
       final request = AiRequest(
         system: 'Reply with exactly: OK',
         userContent: 'Connection test.',
         maxTokens: 16384,
         model: serverConfig.model,
-        // May throw AiConfigException (an unusable server/baseUrl/protocol
-        // combination) — caught below exactly like any other
-        // AiClientException, never silently falling back to Anthropic.
-        baseUrl: resolveOrigin(serverConfig),
-        protocol: resolveEffectiveProtocol(serverConfig),
+        baseUrl: resolvedOrigin,
+        protocol: protocol,
       );
 
       var receivedText = false;
@@ -209,10 +264,10 @@ class _SettingsPageState extends State<SettingsPage> {
         if (!mounted) return;
         setState(() => _testing = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
               content: Text(
                   'Connected, but the server returned no text — check the '
-                  'server address and protocol.')),
+                  'server address and protocol.$targetSuffix')),
         );
         return;
       }
@@ -220,7 +275,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) return;
       setState(() => _testing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Connection successful.')),
+        SnackBar(content: Text('Connection successful.$targetSuffix')),
       );
     } on AiClientException catch (e) {
       _testSubscription = null;
@@ -238,7 +293,11 @@ class _SettingsPageState extends State<SettingsPage> {
           e is AiRateLimitException ||
           e is AiServerException;
       final text = fromRemoteBody ? 'Server said: ${e.message}' : e.message;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      // Story 5.3 (AC1) — reached only once resolution already succeeded
+      // above, so `targetSuffix` is always available here (see this
+      // method's own restructuring note).
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$text$targetSuffix')));
     } catch (_) {
       _testSubscription = null;
       if (!mounted) return;

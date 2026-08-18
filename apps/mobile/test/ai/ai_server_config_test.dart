@@ -457,4 +457,43 @@ void main() {
       expect(resolveOrigin(config), Uri.parse('https://api.example.com/v1'));
     });
   });
+
+  group('describeEndpoint (Story 5.3 review fix)', () {
+    test('null origin (the Anthropic-default case) returns kDefaultAnthropicEndpoint '
+        'verbatim — already a complete endpoint', () {
+      expect(
+        describeEndpoint(origin: null, protocol: AiProtocol.anthropic),
+        kDefaultAnthropicEndpoint,
+      );
+    });
+
+    test('a custom anthropic-protocol origin gets /messages appended', () {
+      expect(
+        describeEndpoint(
+            origin: Uri.parse('http://localhost:1234/v1'),
+            protocol: AiProtocol.anthropic),
+        'http://localhost:1234/v1/messages',
+      );
+    });
+
+    test('a custom openai-protocol origin gets /chat/completions appended '
+        '(not /messages — the request path must match the real adapter)', () {
+      expect(
+        describeEndpoint(
+            origin: Uri.parse('http://localhost:1234/v1'),
+            protocol: AiProtocol.openai),
+        'http://localhost:1234/v1/chat/completions',
+      );
+    });
+
+    test('a trailing slash on origin never produces a double slash before '
+        'the appended path', () {
+      expect(
+        describeEndpoint(
+            origin: Uri.parse('http://localhost:1234/v1/'),
+            protocol: AiProtocol.openai),
+        'http://localhost:1234/v1/chat/completions',
+      );
+    });
+  });
 }
