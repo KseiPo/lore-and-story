@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/ai/ai.dart';
@@ -917,7 +915,7 @@ void main() {
         (tester) async {
       final storage =
           FakeRepoStorage('/repo', fileContents: {'a.md': 'text'});
-      final aiClient = _ControllableAiClient();
+      final aiClient = ControllableAiClient();
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: Builder(
@@ -958,21 +956,4 @@ void main() {
       await tester.pumpAndSettle();
     });
   });
-}
-
-/// An [AiClient] whose `sendMessage` stream stays open until [complete] is
-/// called — lets a test hold a review "in flight" deliberately, unlike
-/// [FakeAiClient] which always resolves immediately. Mirrors
-/// `paired_editor_page_test.dart`'s own `_ControllableAiClient`.
-class _ControllableAiClient implements AiClient {
-  final _controller = StreamController<String>();
-
-  @override
-  Stream<String> sendMessage(AiRequest request) => _controller.stream;
-
-  void complete(String text) {
-    _controller
-      ..add(text)
-      ..close();
-  }
 }

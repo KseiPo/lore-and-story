@@ -206,7 +206,7 @@ void main() {
     testWidgets(
         '(Story 4.8) Save is disabled while a test is in flight in the '
         'notConfigured stage', (tester) async {
-      final aiClient = _ControllableAiClient();
+      final aiClient = ControllableAiClient();
       await _pump(tester, FakeKeyStore(), aiClient: aiClient);
 
       await tester.tap(find.byKey(const Key('settings-test-connection-button')));
@@ -333,7 +333,7 @@ void main() {
     testWidgets(
         '(Review fix) Replace/Clear are disabled while a test is in flight',
         (tester) async {
-      final aiClient = _ControllableAiClient();
+      final aiClient = ControllableAiClient();
       await _pump(tester, FakeKeyStore(initial: 'sk-ant-already-saved'),
           aiClient: aiClient);
 
@@ -569,22 +569,5 @@ class _FailingThemeModeStore extends ThemeModeStore {
   @override
   Future<void> write(ThemeMode mode) async {
     throw Exception('boom (fake persistence failure)');
-  }
-}
-
-/// An [AiClient] whose `sendMessage` stream stays open until [complete] is
-/// called — lets a test hold a connection test "in flight" deliberately,
-/// unlike [FakeAiClient] which always resolves immediately. Mirrors
-/// `paired_editor_page_test.dart`'s own `_ControllableAiClient`.
-class _ControllableAiClient implements AiClient {
-  final _controller = StreamController<String>();
-
-  @override
-  Stream<String> sendMessage(AiRequest request) => _controller.stream;
-
-  void complete(String text) {
-    _controller
-      ..add(text)
-      ..close();
   }
 }

@@ -11,8 +11,11 @@ library;
 // (`_anthropicClient`, `_openAiClient`) — an initializing formal would make
 // the parameter's *name* private too, which Dart forbids passing by name
 // from outside this file (same reasoning as `messages_api_client.dart`'s
-// own file-level ignore).
+// own file-level ignore). Covers `WakeLockAiClient` (Story 5.4) too — same
+// shape, `inner`/`screenWakeLock` public, `_inner`/`_screenWakeLock` private.
 // ignore_for_file: prefer_initializing_formals
+
+import 'screen_wake_lock.dart';
 
 /// Which wire format a request uses (Story 4.7/FR27, made functional by
 /// Story 4.8/FR28). A **port-level** concept — [AiRequest.protocol] routes a
@@ -173,5 +176,54 @@ class ProtocolRoutingAiClient implements AiClient {
       AiProtocol.openai => _openAiClient.sendMessage(request),
       AiProtocol.anthropic || null => _anthropicClient.sendMessage(request),
     };
+  }
+}
+
+/// Wraps any [AiClient] to hold the device screen awake for the exact span
+/// of [sendMessage]'s stream (Story 5.4, AC1) — a slow local model (e.g. LM
+/// Studio on a LAN) can legitimately take longer to respond than it takes
+/// for the screen to lock, and once it does, Android's Doze/background
+/// restrictions sever the in-flight connection out from under the request.
+/// Keeping the screen on keeps the app in the foreground-active lifecycle
+/// state, which is what actually prevents that.
+///
+/// A **pure**, zero-I/O implementation of [AiClient] itself — same reasoning
+/// as [ProtocolRoutingAiClient]'s own doc comment for why it belongs beside
+/// the interface it implements rather than in an adapter file: it does no
+/// I/O of its own, only delegates to [_inner] and calls out to
+/// [_screenWakeLock]. `main.dart` (the composition root) wraps the single
+/// long-lived [AiClient] instance with this once, outermost — every current
+/// and future caller (`runTranslate`, `runGrammarReview`,
+/// `SettingsPage._testConnection`) gets the same protection transparently,
+/// with nothing to remember to wrap individually (AC2).
+///
+/// `finally` on an `async*` generator runs on normal completion, on an
+/// error propagating through, **and** on the subscription being cancelled
+/// (documented Dart async-generator semantics) — so [_screenWakeLock]'s
+/// [ScreenWakeLock.disable] is guaranteed to run exactly once no matter how
+/// the stream ends, covering AC4's cancellation case (e.g.
+/// `SettingsPage.dispose()`'s `_testSubscription?.cancel()`) with the same
+/// code path as success/failure, not a separate one. [ScreenWakeLock]'s own
+/// methods are total (never throw — see that class's doc comment), so a
+/// wake-lock failure can never mask, or be mistaken for, the request's own
+/// real outcome (AC3).
+class WakeLockAiClient implements AiClient {
+  final AiClient _inner;
+  final ScreenWakeLock _screenWakeLock;
+
+  const WakeLockAiClient({
+    required AiClient inner,
+    required ScreenWakeLock screenWakeLock,
+  })  : _inner = inner,
+        _screenWakeLock = screenWakeLock;
+
+  @override
+  Stream<String> sendMessage(AiRequest request) async* {
+    await _screenWakeLock.enable();
+    try {
+      yield* _inner.sendMessage(request);
+    } finally {
+      await _screenWakeLock.disable();
+    }
   }
 }

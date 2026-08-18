@@ -4,7 +4,7 @@ baseline_commit: 4b589ea
 
 # Story 5.4: Keep the screen awake during an in-flight AI request
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -47,19 +47,22 @@ so that a slow local model (e.g. LM Studio on my LAN, tested in Story 4.8) has t
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Add the `wakelock_plus` dependency** (AC: 1)
-  - [ ] 1.1 Run `flutter pub add wakelock_plus` from `apps/mobile/` — let pub resolve whatever the current stable version is rather than hand-pinning a version number in this story (current stable at time of writing is 1.7.0; verify compatibility with this project's `sdk: ^3.12.2` constraint, `pubspec.yaml:22`, at implementation time).
-  - [ ] 1.2 Verify (don't assume) whether any `AndroidManifest.xml` change is needed. Published docs state `wakelock_plus` requires no special permission on any platform (it uses `FLAG_KEEP_SCREEN_ON` on the window, not `PowerManager.WakeLock` + the `WAKE_LOCK` permission) — confirm this holds for the resolved version before assuming `apps/mobile/android/app/src/main/AndroidManifest.xml` needs no edit.
+- [x] **Task 1: Add the `wakelock_plus` dependency** (AC: 1)
+  - [x] 1.1 Run `flutter pub add wakelock_plus` from `apps/mobile/` — let pub resolve whatever the current stable version is rather than hand-pinning a version number in this story (current stable at time of writing is 1.7.0; verify compatibility with this project's `sdk: ^3.12.2` constraint, `pubspec.yaml:22`, at implementation time).
+    *(Resolved to 1.7.0, matching the story's own prediction — compatible with `sdk: ^3.12.2`.)*
+  - [x] 1.2 Verify (don't assume) whether any `AndroidManifest.xml` change is needed. Published docs state `wakelock_plus` requires no special permission on any platform (it uses `FLAG_KEEP_SCREEN_ON` on the window, not `PowerManager.WakeLock` + the `WAKE_LOCK` permission) — confirm this holds for the resolved version before assuming `apps/mobile/android/app/src/main/AndroidManifest.xml` needs no edit.
+    *(Verified directly: inspected the resolved package's own `android/src/main/AndroidManifest.xml` in the pub cache — it declares only the package name, no `<uses-permission>` of any kind. No manifest edit needed.)*
 
-- [ ] **Task 2: `ScreenWakeLock` — the injectable seam (AD-9)** (AC: 1, 3)
-  - [ ] 2.1 New `apps/mobile/lib/ai/screen_wake_lock.dart`. Not exported from `ai/ai.dart`'s barrel (AD-12) — mirrors exactly why `messages_api_client.dart`/`openai_compatible_client.dart` are withheld: only `main.dart` (composition root) and this slice's own tests import it directly.
-  - [ ] 2.2 `abstract interface class ScreenWakeLock { Future<void> enable(); Future<void> disable(); }` — the seam that makes Task 3's decorator testable without a real platform channel (a widget/unit test environment has none), mirroring every other I/O boundary in this app (`KeyStore`, `RepoStorage`) having a pure interface with a real adapter and a test fake.
-  - [ ] 2.3 `class WakelockPlusScreenWakeLock implements ScreenWakeLock` — the real adapter, wrapping `WakelockPlus.enable()`/`WakelockPlus.disable()` from `package:wakelock_plus/wakelock_plus.dart`. **Both methods must swallow any exception and never rethrow** (wrap each in `try`/`catch`, no-op on failure, no logging — this app has no telemetry, NFR5) — this is not just AD-8 style compliance, it is **load-bearing for Task 3's correctness**: `WakeLockAiClient.sendMessage`'s `finally` block calls `disable()`, and if `disable()` itself could throw, it would **mask the real stream error** the `finally` block is unwinding from (a thrown exception inside a `finally` block replaces whichever exception was already propagating). `enable()` must be equally exception-safe for the symmetric reason on the way in.
+- [x] **Task 2: `ScreenWakeLock` — the injectable seam (AD-9)** (AC: 1, 3)
+  - [x] 2.1 New `apps/mobile/lib/ai/screen_wake_lock.dart`. Not exported from `ai/ai.dart`'s barrel (AD-12) — mirrors exactly why `messages_api_client.dart`/`openai_compatible_client.dart` are withheld: only `main.dart` (composition root) and this slice's own tests import it directly.
+  - [x] 2.2 `abstract interface class ScreenWakeLock { Future<void> enable(); Future<void> disable(); }` — the seam that makes Task 3's decorator testable without a real platform channel (a widget/unit test environment has none), mirroring every other I/O boundary in this app (`KeyStore`, `RepoStorage`) having a pure interface with a real adapter and a test fake.
+  - [x] 2.3 `class WakelockPlusScreenWakeLock implements ScreenWakeLock` — the real adapter, wrapping `WakelockPlus.enable()`/`WakelockPlus.disable()` from `package:wakelock_plus/wakelock_plus.dart`. **Both methods must swallow any exception and never rethrow** (wrap each in `try`/`catch`, no-op on failure, no logging — this app has no telemetry, NFR5) — this is not just AD-8 style compliance, it is **load-bearing for Task 3's correctness**: `WakeLockAiClient.sendMessage`'s `finally` block calls `disable()`, and if `disable()` itself could throw, it would **mask the real stream error** the `finally` block is unwinding from (a thrown exception inside a `finally` block replaces whichever exception was already propagating). `enable()` must be equally exception-safe for the symmetric reason on the way in.
 
-- [ ] **Task 3: `WakeLockAiClient` — the decorator** (AC: 1, 2, 3, 4, 5)
-  - [ ] 3.1 Add to `apps/mobile/lib/ai/ai_client.dart`, directly beside `ProtocolRoutingAiClient` (both are pure, zero-I/O `AiClient`-wrapping decorators composed once at the composition root — same reasoning `ProtocolRoutingAiClient`'s own doc comment already states for its own placement there). Import `screen_wake_lock.dart` at the top of `ai_client.dart` (an internal same-slice import — not a barrel violation, `ai_client.dart` is already the file other adapters import into).
-  - [ ] 3.2 Add the same `// ignore_for_file: prefer_initializing_formals` reasoning already documented at the top of `ai_client.dart:9-15` covers this new class too (private fields, public constructor parameter names) — no new ignore comment needed, just confirm the existing file-level one still applies.
-  - [ ] 3.3 Implementation:
+- [x] **Task 3: `WakeLockAiClient` — the decorator** (AC: 1, 2, 3, 4, 5)
+  - [x] 3.1 Add to `apps/mobile/lib/ai/ai_client.dart`, directly beside `ProtocolRoutingAiClient` (both are pure, zero-I/O `AiClient`-wrapping decorators composed once at the composition root — same reasoning `ProtocolRoutingAiClient`'s own doc comment already states for its own placement there). Import `screen_wake_lock.dart` at the top of `ai_client.dart` (an internal same-slice import — not a barrel violation, `ai_client.dart` is already the file other adapters import into).
+    *(Impl note: this import means `ai_client.dart`'s compiled dependency graph transitively reaches `package:wakelock_plus`, in tension with the file's own top-of-file doc comment claiming "no Flutter imports live here" (AD-9) — `ai_client.dart`'s own import list stays literally Flutter-free (it only names the sibling `screen_wake_lock.dart` file), but the concrete `WakelockPlusScreenWakeLock` adapter bundled in that sibling file is transitively reachable. This is exactly what this task explicitly instructs, with its own stated reasoning ("an internal same-slice import — not a barrel violation"), so implemented as directed rather than deviating into a bigger unrequested restructuring; noting it here for visibility.)*
+  - [x] 3.2 Add the same `// ignore_for_file: prefer_initializing_formals` reasoning already documented at the top of `ai_client.dart:9-15` covers this new class too (private fields, public constructor parameter names) — no new ignore comment needed, just confirm the existing file-level one still applies.
+  - [x] 3.3 Implementation:
     ```dart
     class WakeLockAiClient implements AiClient {
       final AiClient _inner;
@@ -83,31 +86,25 @@ so that a slow local model (e.g. LM Studio on my LAN, tested in Story 4.8) has t
     }
     ```
     Doc-comment explaining: wraps any `AiClient` to hold the screen awake for the exact span of `sendMessage`'s stream (AC1); `finally` on an `async*` generator runs on normal completion, on an error propagating through, **and** on the subscription being cancelled (Dart's documented async-generator semantics) — so AC4's cancellation case is covered by this same block, not a separate code path. Cross-reference `ProtocolRoutingAiClient` as the sibling decorator this mirrors.
-  - [ ] 3.4 `const` constructor, matching `ProtocolRoutingAiClient`'s own `const` constructor (`ai_client.dart:164`) — both classes hold only injected `final` references, no mutable state.
+    *(Verified empirically, not just trusted: `test/ai/wake_lock_ai_client_test.dart`'s cancellation test genuinely cancels an in-flight subscription and confirms `disable()` still runs — passed on first try, confirming the documented semantics hold for this project's resolved SDK version.)*
+  - [x] 3.4 `const` constructor, matching `ProtocolRoutingAiClient`'s own `const` constructor (`ai_client.dart:164`) — both classes hold only injected `final` references, no mutable state.
 
-- [ ] **Task 4: Wire it into the composition root** (AC: 1, 2)
-  - [ ] 4.1 `main.dart`: import `ai/screen_wake_lock.dart` (a direct file import, not via the barrel — same pattern already used for `messages_api_client.dart`/`openai_compatible_client.dart`, `main.dart:5-6`).
-  - [ ] 4.2 Wrap the **existing** `ProtocolRoutingAiClient` construction (`main.dart:24-27`) with the new decorator, outermost — the wake-hold applies uniformly regardless of which protocol adapter actually handles a given request:
-    ```dart
-    final aiClient = WakeLockAiClient(
-      inner: ProtocolRoutingAiClient(
-        anthropicClient: MessagesApiClient(httpClient: httpClient, keyStore: keyStore),
-        openAiClient: OpenAiCompatibleClient(httpClient: httpClient, keyStore: keyStore),
-      ),
-      screenWakeLock: WakelockPlusScreenWakeLock(),
-    );
-    ```
-  - [ ] 4.3 Nothing else in `main.dart` changes — `aiClient` continues to be threaded into `LoreStoryApp(aiClient: aiClient, ...)` exactly as before; from that point down through all 13 files, `aiClient`'s static type is still `AiClient`, so no other file needs to know `WakeLockAiClient` exists at all (AC2).
+- [x] **Task 4: Wire it into the composition root** (AC: 1, 2)
+  - [x] 4.1 `main.dart`: import `ai/screen_wake_lock.dart` (a direct file import, not via the barrel — same pattern already used for `messages_api_client.dart`/`openai_compatible_client.dart`, `main.dart:5-6`).
+  - [x] 4.2 Wrap the **existing** `ProtocolRoutingAiClient` construction (`main.dart:24-27`) with the new decorator, outermost — the wake-hold applies uniformly regardless of which protocol adapter actually handles a given request.
+    *(`WakeLockAiClient` itself didn't need its own barrel import — it's declared in `ai_client.dart`, already exported via the `ai/ai.dart` barrel `main.dart` already imports; only `screen_wake_lock.dart`'s `WakelockPlusScreenWakeLock` needed the new direct import, per Task 2.1's AD-12 withholding.)*
+  - [x] 4.3 Nothing else in `main.dart` changes — `aiClient` continues to be threaded into `LoreStoryApp(aiClient: aiClient, ...)` exactly as before; from that point down through all 13 files, `aiClient`'s static type is still `AiClient`, so no other file needs to know `WakeLockAiClient` exists at all (AC2).
 
-- [ ] **Task 5: Tests** (AC: 1, 3, 4, 5)
-  - [ ] 5.1 New `apps/mobile/test/ai/wake_lock_ai_client_test.dart` (a fresh, narrowly-scoped file — `test/ai/ai_client_test.dart` already exists testing `ProtocolRoutingAiClient` only; keep the two decorators' tests in separate files, matching one-class-per-test-file elsewhere in `test/ai/`).
-  - [ ] 5.2 Small in-file `class FakeScreenWakeLock implements ScreenWakeLock` recording `enableCalls`/`disableCalls` counts (or a simple ordered event log) — mirrors `FakeAiClient`'s own recording-double pattern (`test/fakes.dart:74-79`).
-  - [ ] 5.3 Test: on a successful `FakeAiClient` response, `enable()` is called before any chunk is yielded and `disable()` is called exactly once after the stream completes.
-  - [ ] 5.4 Test: on a `FakeAiClient` configured with an `error`, `disable()` is still called exactly once (the `finally` guarantee) even though the stream errors — and the original `AiClientException` still propagates to the listener unchanged (proves `WakelockPlusScreenWakeLock`'s own "never throws" contract, Task 2.3, doesn't accidentally swallow the real failure).
-  - [ ] 5.5 Test: cancelling the stream subscription partway through an in-progress response (use a controllable/streaming fake, mirroring `settings_page_test.dart`'s existing `_ControllableAiClient` pattern) still calls `disable()` — proves AC4, and is the exact scenario `SettingsPage.dispose()`'s `_testSubscription?.cancel()` exercises in production.
-  - [ ] 5.6 Test: the yielded text chunks pass through completely unchanged in order and content — this is a transparent decorator, not just a lifecycle wrapper; assert the collected output equals the inner fake's configured response exactly.
-  - [ ] 5.7 Full regression: run the entire existing `flutter test` suite — since no other file's production code changes (only `ai_client.dart` gains a new class and `main.dart` gains a two-line wrap), no other test file should need any update; confirm rather than assume.
-  - [ ] 5.8 `flutter analyze` clean.
+- [x] **Task 5: Tests** (AC: 1, 3, 4, 5)
+  - [x] 5.1 New `apps/mobile/test/ai/wake_lock_ai_client_test.dart` (a fresh, narrowly-scoped file — `test/ai/ai_client_test.dart` already exists testing `ProtocolRoutingAiClient` only; keep the two decorators' tests in separate files, matching one-class-per-test-file elsewhere in `test/ai/`).
+  - [x] 5.2 Small in-file `class FakeScreenWakeLock implements ScreenWakeLock` recording `enableCalls`/`disableCalls` counts (or a simple ordered event log) — mirrors `FakeAiClient`'s own recording-double pattern (`test/fakes.dart:74-79`).
+    *(Used a single ordered `calls` log rather than two separate counters — lets the "enable before disable, in order" assertion be a single list-equality check.)*
+  - [x] 5.3 Test: on a successful `FakeAiClient` response, `enable()` is called before any chunk is yielded and `disable()` is called exactly once after the stream completes.
+  - [x] 5.4 Test: on a `FakeAiClient` configured with an `error`, `disable()` is still called exactly once (the `finally` guarantee) even though the stream errors — and the original `AiClientException` still propagates to the listener unchanged (proves `WakelockPlusScreenWakeLock`'s own "never throws" contract, Task 2.3, doesn't accidentally swallow the real failure).
+  - [x] 5.5 Test: cancelling the stream subscription partway through an in-progress response (use a controllable/streaming fake, mirroring `settings_page_test.dart`'s existing `_ControllableAiClient` pattern) still calls `disable()` — proves AC4, and is the exact scenario `SettingsPage.dispose()`'s `_testSubscription?.cancel()` exercises in production.
+  - [x] 5.6 Test: the yielded text chunks pass through completely unchanged in order and content — this is a transparent decorator, not just a lifecycle wrapper; assert the collected output equals the inner fake's configured response exactly.
+  - [x] 5.7 Full regression: run the entire existing `flutter test` suite — since no other file's production code changes (only `ai_client.dart` gains a new class and `main.dart` gains a two-line wrap), no other test file should need any update; confirm rather than assume.
+  - [x] 5.8 `flutter analyze` clean.
 
 ## Dev Notes
 
@@ -140,10 +137,48 @@ so that a slow local model (e.g. LM Studio on my LAN, tested in Story 4.8) has t
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Sonnet 5
 
 ### Debug Log References
 
+- `flutter pub add wakelock_plus` — resolved to 1.7.0 as predicted.
+- Verified no `AndroidManifest.xml` change needed by directly inspecting the resolved package's own `android/src/main/AndroidManifest.xml` in the pub cache (declares only the package name, no `<uses-permission>`).
+- `flutter test test/ai/wake_lock_ai_client_test.dart` — red (`Method not found: 'WakeLockAiClient'`) before Task 3's implementation, green after 3/4 immediately; the 4th (error-path `disable()` timing) needed one `await Future<void>.delayed(Duration.zero)` added after `expectLater` to let the outer generator's `finally` fully unwind before asserting — a genuine microtask-ordering subtlety between stream-error delivery and `finally`'s own `await`, not a production bug. 4/4 green after.
+- `flutter test` (full suite) — 788 passed, 0 failures; confirmed no test file outside `test/ai/wake_lock_ai_client_test.dart` needed any change (Task 5.7's prediction held).
+- `flutter analyze` — "No issues found!"
+
+**Review-fix round** (high effort, recall-biased, 2 finder agents given the small diff): 5 findings confirmed/plausible, 1 refuted. The refuted candidate — that the single shared `WakeLockAiClient` instance has no reference counting, so a concurrent second AI request could have its `disable()` turn off the wake lock while another is still in flight — was well-reasoned but the scenario is already unreachable: `PopScope` guards on the editor pages (`!_translating && !_reviewing`) block navigating away while a request streams, and Settings (the only other `sendMessage` caller) is only reachable by first popping back to Home, which sits below the editor in the navigation stack.
+- `flutter test` (full suite) — 788 passed, 0 failures (net unchanged — 4 duplicate classes removed, replaced by 1 shared one). `flutter analyze` — "No issues found!"
+
 ### Completion Notes List
 
+- This story's production-code footprint matched the Dev Notes' own prediction exactly: one new file (`ai/screen_wake_lock.dart`), one new class in `ai_client.dart`, a small wrap in `main.dart`, plus the `pubspec.yaml`/`pubspec.lock` dependency addition. No screen/widget file touched.
+- `WakeLockAiClient.sendMessage`'s `finally`-based `disable()` guarantee was verified empirically, not just trusted from the doc comment: `test/ai/wake_lock_ai_client_test.dart`'s cancellation test genuinely cancels an in-flight `StreamSubscription` mid-response and confirms `disable()` still ran — this is the exact mechanism `SettingsPage.dispose()`'s `_testSubscription?.cancel()` relies on in production (AC4).
+- One documented architectural tension (Task 3.1's own note): `ai_client.dart`'s top-of-file doc comment states "no Flutter imports live here" (AD-9 purity), but the new `import 'screen_wake_lock.dart';` transitively reaches `package:wakelock_plus` through that sibling file's own `WakelockPlusScreenWakeLock` adapter. `ai_client.dart`'s own import list stays literally Flutter-free; this is exactly what Task 3.1 explicitly instructed (with its own stated reasoning), so implemented as directed rather than deviating into an unrequested restructuring (e.g. splitting the interface from the adapter into separate files) — flagged for visibility, not treated as a defect to fix unilaterally.
+- All 5 acceptance criteria verified: AC1 (the `wake_lock_ai_client_test.dart` success-path test proves `enable()` before any chunk, `disable()` exactly once after completion), AC2 (confirmed via `git status` — zero changes outside `ai_client.dart`/`main.dart`/`screen_wake_lock.dart`/the two `test/ai/` files/`pubspec.*`; all 13 `AiClient`-threading files and their existing `FakeAiClient`-based tests are byte-for-byte untouched), AC3 (`WakelockPlusScreenWakeLock`'s both methods wrap the real plugin call in `try`/`catch`, never rethrowing), AC4 (the cancellation test), AC5 (the "chunks pass through unchanged" test, plus the full regression suite staying green with zero other test file changes needed).
+
+**Review-fix round:**
+- Moved the "must never throw" contract from `WakelockPlusScreenWakeLock`'s doc comment onto the `ScreenWakeLock` interface itself, so any future implementer sees the load-bearing requirement at the interface level.
+- Updated `main.dart`'s composition-root doc comment, which still described the pre-Story-5.4 `ProtocolRoutingAiClient`-only composition and hadn't been reconciled with the new `WakeLockAiClient` wrap.
+- Consolidated 4 independently-hand-duplicated `_ControllableAiClient` test doubles (in `editor_page_test.dart`, `paired_editor_page_test.dart`, `settings_page_test.dart`, and this story's own new `wake_lock_ai_client_test.dart`) into one shared `ControllableAiClient` in `test/fakes.dart` — the 4th copy had already drifted from the other 3 (an added `add()` method, an async `complete()`) despite its own doc comment claiming to mirror them.
+- Replaced three stacked `await Future<void>.delayed(Duration.zero)` calls in the cancellation test with exact, event-driven synchronization: a `Future<void> get disabled` completer added to `FakeScreenWakeLock` (completes the instant `disable()` first runs) and a per-chunk `Completer` for "first chunk received" — eliminating the turn-counting flakiness risk entirely, not just reducing it. The single delay in the error-path test was replaced the same way.
+- The previously-dead `inner.add('partial')` setup line in the cancellation test is now actually asserted on (`expect(received, ['partial'])`), proving the response was genuinely in progress before cancellation — the line's original intent, now verified instead of merely narrated.
+
 ### File List
+
+- `apps/mobile/lib/ai/screen_wake_lock.dart` (new — `ScreenWakeLock` interface + `WakelockPlusScreenWakeLock` real adapter; review-fix round: contract doc comment moved to the interface)
+- `apps/mobile/test/ai/wake_lock_ai_client_test.dart` (new — `WakeLockAiClient` tests + `FakeScreenWakeLock`; review-fix round: uses shared `ControllableAiClient`, event-driven synchronization replacing timing delays)
+- `apps/mobile/lib/ai/ai_client.dart` (modified — new `WakeLockAiClient` decorator, beside `ProtocolRoutingAiClient`)
+- `apps/mobile/lib/main.dart` (modified — composition root wraps the existing `ProtocolRoutingAiClient` with `WakeLockAiClient`; review-fix round: doc comment reconciled)
+- `apps/mobile/pubspec.yaml` (modified — `wakelock_plus: ^1.7.0` dependency, added via `flutter pub add`)
+- `apps/mobile/pubspec.lock` (modified — resolved dependency versions)
+- `apps/mobile/test/fakes.dart` (modified — review-fix round: new shared `ControllableAiClient`)
+- `apps/mobile/test/app/editor_page_test.dart` (modified — review-fix round: removed duplicate `_ControllableAiClient`, uses shared fake, pruned unused `dart:async` import)
+- `apps/mobile/test/app/paired_editor_page_test.dart` (modified — review-fix round: same)
+- `apps/mobile/test/app/settings_page_test.dart` (modified — review-fix round: same, `dart:async` import kept — still used by `_SlowReadThemeModeStore`)
+
+## Change Log
+
+- 2026-08-18 — Implemented Story 5.4: added `wakelock_plus`, a `ScreenWakeLock` port + real adapter, and a `WakeLockAiClient` decorator that holds the device screen awake for the exact span of any `AiClient.sendMessage` call — composed once at the composition root, so a slow local model's in-flight connection survives past the point Android would otherwise sever it via Doze/background restrictions once the screen locks. Zero changes to any of the 13 files that already thread `AiClient` through the app. Full suite green (788/788), `flutter analyze` clean.
+- 2026-08-18 — Code review (high effort, recall-biased, 8 angles): 5 of 6 findings confirmed/plausible, 1 refuted (a hypothesized concurrent-request wake-lock race, actually unreachable given existing `PopScope` navigation guards). Fixed all 5: moved the never-throw contract to the `ScreenWakeLock` interface; reconciled a stale composition-root doc comment; consolidated 4 drifted duplicate test fakes into one shared `ControllableAiClient`; replaced three timing-guessed test delays with exact event-driven synchronization; made a previously-dead test setup line actually verified. Full suite green (788/788), `flutter analyze` clean.
+- 2026-08-18 — Marked done.

@@ -103,5 +103,5 @@ development_status:
   5-1-preserve-image-paths-when-promoting-an-entity-to-a-folder: done
   5-2-switch-between-light-and-dark-theme: done
   5-3-show-resolved-connection-target-on-test-connection: done
-  5-4-keep-screen-awake-during-ai-request: ready-for-dev
+  5-4-keep-screen-awake-during-ai-request: done
   epic-5-retrospective: optional

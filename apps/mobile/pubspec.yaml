@@ -39,6 +39,7 @@ dependencies:
   markdown: ^7.3.1
   flutter_secure_storage: ^11.0.0
   http: ^1.6.0
+  wakelock_plus: ^1.7.0
 
 dev_dependencies:
   flutter_test:

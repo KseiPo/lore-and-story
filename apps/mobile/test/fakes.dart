@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart' show ThemeMode;
@@ -101,6 +102,32 @@ class FakeAiClient implements AiClient {
     requests.add(request);
     if (error != null) throw error!;
     if (response != null) yield response!;
+  }
+}
+
+/// A controllable [AiClient] whose stream is driven manually by the test —
+/// step through partial chunks via [add], finish via [complete] — for
+/// holding a request deliberately "in flight" (e.g. to test a re-entrancy
+/// guard, or cancellation mid-stream), unlike [FakeAiClient] whose configured
+/// response/error resolves immediately. (Review fix, Story 5.4: previously
+/// hand-duplicated as a private `_ControllableAiClient` in four separate test
+/// files, which had already drifted from each other — one shared fake here
+/// instead.)
+class ControllableAiClient implements AiClient {
+  final _controller = StreamController<String>();
+
+  @override
+  Stream<String> sendMessage(AiRequest request) => _controller.stream;
+
+  /// Adds one chunk without closing the stream — the request stays "in
+  /// flight" until [complete] is called.
+  void add(String text) => _controller.add(text);
+
+  /// Adds a final chunk and closes the stream.
+  void complete(String text) {
+    _controller
+      ..add(text)
+      ..close();
   }
 }
 

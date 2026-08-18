@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lore_and_story/ai/ai.dart';
@@ -529,7 +527,7 @@ void main() {
         '(review fix) backing out while a translation is in flight is '
         'blocked, not silently discarded', (tester) async {
       final storage = translationStorage();
-      final aiClient = _ControllableAiClient();
+      final aiClient = ControllableAiClient();
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: Builder(
@@ -1001,7 +999,7 @@ void main() {
           'events/scene.en.md': '# Scene\n',
         },
       );
-      final aiClient = _ControllableAiClient();
+      final aiClient = ControllableAiClient();
       await pumpPaired(tester, storage, pairItem(), aiClient: aiClient);
 
       // RU is the default active tab.
@@ -1055,7 +1053,7 @@ void main() {
         'not silently discarded — mirrors the Translate PopScope guard',
         (tester) async {
       final storage = pairStorage();
-      final aiClient = _ControllableAiClient();
+      final aiClient = ControllableAiClient();
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: Builder(
@@ -1099,7 +1097,7 @@ void main() {
         '(Review fix) Translate is disabled while a review is in flight',
         (tester) async {
       final storage = pairStorage();
-      final aiClient = _ControllableAiClient();
+      final aiClient = ControllableAiClient();
       await pumpPaired(tester, storage, pairItem(), aiClient: aiClient);
 
       // Start a review on the active (RU) tab.
@@ -1128,7 +1126,7 @@ void main() {
         (tester) async {
       // Translate into the blank, create-only EN tab, so no
       // overwrite-confirm dialog complicates the assertion.
-      final aiClient = _ControllableAiClient();
+      final aiClient = ControllableAiClient();
       await pumpPaired(tester, translationStorage(), translationItem(),
           aiClient: aiClient);
       await tester.tap(find.text('EN'));
@@ -1148,20 +1146,4 @@ void main() {
       await tester.pumpAndSettle();
     });
   });
-}
-
-/// An [AiClient] whose `sendMessage` stream stays open until [complete] is
-/// called — lets a test hold a translation "in flight" deliberately, unlike
-/// [FakeAiClient] which always resolves immediately.
-class _ControllableAiClient implements AiClient {
-  final _controller = StreamController<String>();
-
-  @override
-  Stream<String> sendMessage(AiRequest request) => _controller.stream;
-
-  void complete(String text) {
-    _controller
-      ..add(text)
-      ..close();
-  }
 }
