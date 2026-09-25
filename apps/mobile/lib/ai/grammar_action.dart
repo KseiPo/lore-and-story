@@ -73,7 +73,7 @@ This project uses markup conventions that are intentional, not errors — never 
 - Variable placeholders in readable square brackets, e.g. `[имя героя]`.
 - Lore wikilinks: `[[Title]]` with no separator.
 - Scene/passage links: `[[Choice text->Passage Name]]`, `[[Choice text|Passage Name]]`, and return links `[[back<-Label]]`.
-- Em-dash conditional markers: `— если … — иначе … — конец условия —`.
+- Em-dash conditional markers: `— если … — иначе — … — конец условия —` in Russian and `— if … — else — … — end if —` in English.
 - A leading `<!-- scene ⇄ passage: "Passage Name" · lang: xx -->` comment.''';
 
 /// The JSON response-format contract `_parseFindings` depends on — always

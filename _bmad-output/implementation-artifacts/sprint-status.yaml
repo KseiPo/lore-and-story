@@ -106,5 +106,5 @@ development_status:
   5-4-keep-screen-awake-during-ai-request: done
   5-5-stop-flagging-emphasized-labels-as-malformed-dialogue: done
   5-6-drop-the-language-suffix-when-promoting-an-entity-to-a-folder: done
-  5-7-translate-emotions-and-conditional-keywords: ready-for-dev
+  5-7-translate-emotions-and-conditional-keywords: done
   epic-5-retrospective: optional

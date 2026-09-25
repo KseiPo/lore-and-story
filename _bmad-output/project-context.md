@@ -195,6 +195,12 @@ a `server.js` route + a `<script>` tag — never an `import`.
 - Dialogue `Name (emotion): phrase.`; inner monologue `Мысль: …` / `Thought: …`
   (plain, no italics — the linter flags the italic `*Thought:*` form);
   variable placeholders in readable brackets `[имя героя]` — never `<<=$var>>`.
+  Translating a dialogue line covers the name, the **emotion** and the phrase
+  (`Селена (спокойно): …` → `Selena (calmly): …`, 2026-09-24).
+- Authoring conditionals: RU `— если <condition> — … — иначе — … — конец условия —`,
+  EN `— if <condition> — … — else — … — end if —` (2026-09-24). Keywords follow
+  the file's language and are converted by translation; the linter pair-checks
+  both (the opener must sit on one line, with no `[`/`]` in the condition).
 - Multi-passage scenes stay ONE file with a `# <Passage Name>` section per passage,
   each carrying its own scene⇄passage comment.
 

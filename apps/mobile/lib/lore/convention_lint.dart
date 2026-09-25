@@ -92,7 +92,7 @@ String _messageFor(ConventionKind kind) {
     case ConventionKind.malformedDialogue:
       return 'Dialogue line is missing a space after the colon.';
     case ConventionKind.unpairedConditional:
-      return 'Em-dash conditional marker («если» / «конец условия») has no matching counterpart.';
+      return 'Em-dash conditional marker («если» / «конец условия», or «if» / «end if») has no matching counterpart.';
     case ConventionKind.italicMonologue:
       return 'Inner monologue is plain `Thought:` / `Мысль:` — the italic form is retired.';
     // Not error kinds — never reached via the isError(token.kind) branch,

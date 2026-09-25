@@ -51,30 +51,34 @@ const String _kInstructionsEnToRu =
 /// it language dependent, so better have one const for each language
 /// direction for now"), reverting an earlier single-shared-constant attempt
 /// that traded away RU→EN's byte-for-byte history (AC5) for a generic
-/// wording. This constant is byte-for-byte identical to what Story 4.3/4.4
-/// shipped. [_kConventionsEnToRu] is its EN→RU mirror. The `ai-prompts.md`
+/// wording. Story 5.7 (KseiPo, 2026-09-24) then changed two lines on
+/// purpose: a dialogue line's emotion is translated along with the name and
+/// the phrase, and the conditional keywords are converted into the target
+/// language (если/иначе/конец условия ↔ if/else/end if). The other lines are
+/// still byte-for-byte what Story 4.3/4.4 shipped.
+/// [_kConventionsEnToRu] is its EN→RU mirror. The `ai-prompts.md`
 /// `# Conventions` override (`AiPromptConfig.conventions`) stays a single
 /// shared field applied to whichever of these two is the direction's
 /// default — only the hardcoded defaults are forked, not the override
 /// scheme (see this story's Non-goals).
 const String _kConventionsRuToEn = '''
-- Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate only the name and the phrase.
+- Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate the name, the emotion and the phrase.
 - Inner monologue is `Мысль: …` in Russian and `Thought: …` in English — use the English form.
 - Variable placeholders are readable square brackets, e.g. `[имя героя]` — translate the words inside the brackets, keep the bracket form, never emit `<<=\$var>>` or other code syntax.
 - Player-choice / passage links: `[[Choice text->Passage Name]]` or `[[Choice text|Passage Name]]` — translate the choice text (the label before the separator); never translate or alter the Passage Name (the target after the separator) — it is an identifier, not prose.
 - Return links: `[[back<-Label]]` — translate the Label only; the backlink form itself never changes.
-- Em-dash conditional markers: `— если … — иначе … — конец условия —` — these delimit authoring conditionals, not prose to render; preserve the em-dash markers and translate only the human-readable text between them.
+- Em-dash conditional markers delimit authoring conditionals, not prose to render: Russian `— если <condition> — … — иначе — … — конец условия —` is English `— if <condition> — … — else — … — end if —`. Keep the em-dash marker shape; replace the keywords with the English ones (если → if, иначе → else, конец условия → end if) and translate the condition and branch text.
 - `[[Title]]` with no separator is a lore-entity wikilink (not a passage jump) — translate Title to that entity's English form from the glossary when the glossary lists one; otherwise leave it unchanged rather than guessing.
 - A file may open with a `<!-- scene ⇄ passage: "Passage Name" · lang: ru -->` comment — keep the passage name unchanged, but update `lang: ru` to `lang: en` in the translated output; if no such comment exists, do not add one.''';
 
 /// The EN→RU mirror of [_kConventionsRuToEn] (Story 4.5).
 const String _kConventionsEnToRu = '''
-- Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate only the name and the phrase.
+- Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate the name, the emotion and the phrase.
 - Inner monologue is `Мысль: …` in Russian and `Thought: …` in English — use the Russian form.
 - Variable placeholders are readable square brackets, e.g. `[имя героя]` — translate the words inside the brackets, keep the bracket form, never emit `<<=\$var>>` or other code syntax.
 - Player-choice / passage links: `[[Choice text->Passage Name]]` or `[[Choice text|Passage Name]]` — translate the choice text (the label before the separator); never translate or alter the Passage Name (the target after the separator) — it is an identifier, not prose.
 - Return links: `[[back<-Label]]` — translate the Label only; the backlink form itself never changes.
-- Em-dash conditional markers: `— если … — иначе … — конец условия —` — these delimit authoring conditionals, not prose to render; preserve the em-dash markers and translate only the human-readable text between them.
+- Em-dash conditional markers delimit authoring conditionals, not prose to render: English `— if <condition> — … — else — … — end if —` is Russian `— если <condition> — … — иначе — … — конец условия —`. Keep the em-dash marker shape; replace the keywords with the Russian ones (if → если, else → иначе, end if → конец условия) and translate the condition and branch text.
 - `[[Title]]` with no separator is a lore-entity wikilink (not a passage jump) — translate Title to that entity's Russian form from the glossary when the glossary lists one; otherwise leave it unchanged rather than guessing.
 - A file may open with a `<!-- scene ⇄ passage: "Passage Name" · lang: en -->` comment — keep the passage name unchanged, but update `lang: en` to `lang: ru` in the translated output; if no such comment exists, do not add one.''';
 

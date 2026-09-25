@@ -230,7 +230,9 @@ twee exists only in the final passages.
 **Prose conventions** (enforced across lore 2026-07-14):
 
 - Dialogue: `Name (emotion): phrase.` — e.g. `Селена (спокойно): Иногда
-техника чувствует, когда на неё злятся.` Emotion is optional.
+техника чувствует, когда на неё злятся.` Emotion is optional. Translating
+  a line covers the name, the emotion and the phrase — `Селена (спокойно): …` →
+  `Selena (calmly): …` (2026-09-24).
 - Inner monologue: `Мысль: …` (RU) / `Thought: …` (EN) — plain, not italic.
   The earlier italic `*Thought:* …` form is retired (2026-08-08); the linter
   flags it.
@@ -261,7 +263,10 @@ twee exists only in the final passages.
 - English-only scenes are legitimate (original lost or authored in EN);
   a lone `.en.md` is not a defect.
 - Authoring conditionals: em-dash markers — `— если игрок знаком с доктором
-Джулией — … — иначе — … — конец условия —`.
+Джулией — … — иначе — … — конец условия —`. English files use English
+  keywords (2026-09-24): `— if the player knows Dr. Julia — … — else — … —
+  end if —`; a translation converts the keywords (если ↔ if, иначе ↔ else,
+  конец условия ↔ end if) along with the text. The linter pair-checks both.
 - `[[Wikilinks]]` (no separator) are lore entity references (cards/overviews).
   A `[[...]]` pair **with** a separator (`->`, `|`, `<-`) is a scene-navigation
   link instead (2026-08-05) — see the passage/return link forms above.

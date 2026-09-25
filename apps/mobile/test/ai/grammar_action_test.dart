@@ -442,6 +442,24 @@ void main() {
   });
 
   testWidgets(
+      '(Story 5.7) the default instructions list both the Russian and the '
+      'English conditional markers as intentional markup', (tester) async {
+    final aiClient = FakeAiClient(response: '[]');
+    await _pumpHost(
+      tester,
+      storage: _storageNoOverride(),
+      aiClient: aiClient,
+      text: 'text',
+      onResult: (_) {},
+    );
+    await tester.tap(find.text('review'));
+    await tester.pumpAndSettle();
+
+    expect(_sectionText(tester, 0), contains('конец условия'));
+    expect(_sectionText(tester, 0), contains('end if'));
+  });
+
+  testWidgets(
       'an empty-body Grammar Instructions section falls back to the '
       'hardcoded default, not an override with empty text (AC5)',
       (tester) async {

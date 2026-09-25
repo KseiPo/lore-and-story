@@ -254,8 +254,9 @@ same kind of output:
   translate or change the passage name after the separator; it's an identifier.
 - **Return links**: translate the label after `<-`. The return type before it
   (`back`, `wake up`) never changes.
-- **Conditionals**: keep the markers (`— если`, `— иначе —`, `— конец условия —`)
-  as they are, and translate the condition text and the branch prose.
+- **Conditionals**: keep the em-dash marker shape, convert the keywords (`если` ↔
+  `if`, `иначе` ↔ `else`, `конец условия` ↔ `end if`), and translate the condition
+  text and the branch prose.
 - **Lore wikilinks** `[[Title]]`: use the entity's name in the target language only
   when it is one of that entity's title or aliases, so the link still resolves.
   Otherwise leave it unchanged.
@@ -400,22 +401,29 @@ app opens the entity, and the linter flags a link that matches nothing as dangli
 
 ### 6.7 Authoring conditionals
 
-Conditionals use em-dash markers with Russian keywords, built from a real `—`
-(U+2014) with spaces around it:
+Conditionals use em-dash markers built from a real `—` (U+2014) with spaces
+around it. The keywords follow the file's language:
 
 ```
 — если игрок знаком с доктором Джулией — текст для этого случая — иначе — другой текст — конец условия —
+— if the player knows Dr. Julia — text for this case — else — other text — end if —
 ```
 
-- Every `— если … —` needs a matching `— конец условия —` somewhere after it.
-  `— иначе —` is optional. The branches can span several lines or paragraphs.
-- The opening marker `— если <condition> —` must sit on **one line**. Keep the
-  condition under about 300 characters, with **no square brackets in the
-  condition**: no `[[wikilinks]]` and no `[placeholders]`. Otherwise the app loses
-  the opening marker and flags the closer.
+- Every opener (`— если … —` / `— if … —`) needs a matching closer
+  (`— конец условия —` / `— end if —`) somewhere after it. `— иначе —` /
+  `— else —` is optional. The branches can span several lines or paragraphs.
+- The opening marker must sit on **one line**. Keep the condition under about 300
+  characters, with **no square brackets in the condition**: no `[[wikilinks]]` and
+  no `[placeholders]`. Otherwise the app loses the opening marker and flags the
+  closer.
 - Only `—` works. Markers written with `–` or `-` aren't recognized.
-- The keywords stay in Russian in English files too, because they are the only form
-  the app checks (see §4.1).
+- Russian files use `если` / `иначе` / `конец условия`, English files use `if` /
+  `else` / `end if`. The app checks both. Translation converts them (§4.1).
+- In an English file that uses conditionals, an ordinary aside like
+  "She would come — if he asked — and stay." reads as an unclosed opener, so the
+  linter flags it. The warning is harmless: don't rewrite the author's dashes to
+  silence it. In new prose you write yourself, prefer commas or parentheses for
+  such asides ("She would come, if he asked, and stay.").
 
 ### 6.8 Images
 
@@ -499,7 +507,7 @@ Don't edit these unless the author asks.
 | Unclosed wikilink | `[[Selena` |
 | Dialogue colon without a space | `Frank:hello`, `**Type:**value` |
 | Italic inner monologue (retired form) | `*Thought:* …`, `_Thought:_ …`, `*Мысль:* …` |
-| Unpaired conditional | a `— если … —` with no `— конец условия —` (checked only once the file contains at least one closer) |
+| Unpaired conditional | a `— если … —` / `— if … —` with no `— конец условия —` / `— end if —` (checked only once the file contains at least one closer) |
 | Dangling wikilink | `[[Selina]]` when no entity has that title or alias |
 
 Valid conventions (dialogue, links, placeholders, conditionals) and emphasized

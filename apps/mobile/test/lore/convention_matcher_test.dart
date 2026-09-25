@@ -581,6 +581,79 @@ void main() {
     });
   });
 
+  group('matchConventions — English conditional markers (Story 5.7, FR18)', () {
+    test('a fully paired English conditional is never flagged', () {
+      const text = '— if the player knows Julia — text — else — other — '
+          'end if —';
+      expect(kindsOf(text), isNot(contains(ConventionKind.unpairedConditional)));
+    });
+
+    test('no closer anywhere means no finding (the file-level gate) — '
+        'including an ordinary literary "— if … —" aside', () {
+      const withoutCloser = '— if the player knows Julia — text';
+      expect(kindsOf(withoutCloser),
+          isNot(contains(ConventionKind.unpairedConditional)));
+      const literaryAside = 'She would come — if he asked — and stay.';
+      expect(kindsOf(literaryAside),
+          isNot(contains(ConventionKind.unpairedConditional)));
+    });
+
+    test('an unclosed English opener is flagged once the file has a closer '
+        'elsewhere, spanning the opener', () {
+      const text = '— if A — text — end if — later — if B — never closed';
+      final tokens = matchConventions(text)
+          .where((t) => t.kind == ConventionKind.unpairedConditional);
+      expect(tokens, hasLength(1));
+      expect(text.substring(tokens.first.start, tokens.first.end),
+          contains('if B'));
+    });
+
+    test('a stray "— end if —" with no opener is flagged at the closer', () {
+      const text = 'some text — end if —';
+      final tokens = matchConventions(text);
+      expect(tokens, hasLength(1));
+      expect(tokens.first.kind, ConventionKind.unpairedConditional);
+      expect(text.substring(tokens.first.start, tokens.first.end),
+          contains('end if'));
+    });
+
+    test('an opener and a closer on different lines pair up', () {
+      const text = '— if something —\ntext on another line\n— end if —';
+      expect(kindsOf(text), isNot(contains(ConventionKind.unpairedConditional)));
+    });
+
+    test('is case-insensitive', () {
+      const text = '— If the player knows Julia — text — END IF —';
+      expect(kindsOf(text), isNot(contains(ConventionKind.unpairedConditional)));
+    });
+
+    test('"if" must be a whole word — "iffy" / "ifs" are never openers '
+        '(AC2)', () {
+      // The closer satisfies the gate; if either aside were read as an
+      // opener it would be left unpaired and flagged.
+      const text = '— if A — text — end if — then — iffy weather — and — ifs '
+          'and buts — done';
+      expect(kindsOf(text), isNot(contains(ConventionKind.unpairedConditional)));
+    });
+
+    test('a wikilink in an English condition keeps the opener from '
+        'matching, so the closer is flagged — the same bracket rule as '
+        'Russian', () {
+      const text = '— if [[Selena]] knows — text — end if —';
+      expect(kindsOf(text), contains(ConventionKind.wikilink));
+      expect(kindsOf(text), contains(ConventionKind.unpairedConditional));
+    });
+
+    test('pairing is language-agnostic: a Russian opener closed by '
+        '"— end if —" counts as paired', () {
+      const text = '— если игрок знаком с Джулией — текст — end if —';
+      expect(kindsOf(text), isNot(contains(ConventionKind.unpairedConditional)));
+      const reverse = '— if the player knows Julia — text — конец условия —';
+      expect(
+          kindsOf(reverse), isNot(contains(ConventionKind.unpairedConditional)));
+    });
+  });
+
   group('matchConventions — robustness', () {
     test('CRLF input is not broken by the trailing \\r', () {
       // Heading + list marker still detected across CRLF line endings.

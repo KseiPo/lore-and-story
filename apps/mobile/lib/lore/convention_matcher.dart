@@ -36,7 +36,8 @@ enum ConventionKind {
   // Error kinds (Story 3.1, FR18) — extends the above with two checks Story
   // 2.6 deliberately deferred: a dialogue-shaped line whose colon is missing
   // its required trailing space, and an em-dash conditional marker
-  // (`— если …` / `— конец условия —`) with no matching counterpart.
+  // (`— если …` / `— конец условия —`, or the English `— if …` / `— end if —`
+  // since Story 5.7) with no matching counterpart.
   malformedDialogue,
   unpairedConditional,
   // Error kind (Story 5.5) — the retired italic inner-monologue form
@@ -246,20 +247,38 @@ final RegExp _unterminatedWikilink = RegExp(r'\[\[(?![^\[\]\n]*\]\])');
 // silently fails to anchor right after Cyrillic text (Cyrillic letters aren't
 // `\w` by default) — found by a failing test while adding this pattern, not
 // assumed. The `—\s*` prefix is specific enough on its own.
-final RegExp _condOpen =
-    RegExp(r'—\s*если[^—\n\[\]]{1,300}—', caseSensitive: false);
+//
+// English keywords (Story 5.7, KseiPo 2026-09-24): English files write the
+// same markers with translated keywords — `— if <condition> — … — else — … —
+// end if —` — so both patterns carry an English alternative. `if` must be a
+// whole word: the `(?=\s)` lookahead rejects `— iffy …` / `— ifs …`. It is
+// deliberately stricter than `\b`, which would also accept `if` followed by
+// punctuation (`— if, …`): a real opener's keyword is always followed by its
+// condition, so it must be followed by whitespace. Everything else — the
+// file-level closer gate, the one-line / 300-char / no-brackets opener
+// limits, the stack pairing — applies unchanged to both languages. The
+// accepted false-positive class carries over too: in an English file that
+// uses the convention (it has an `— end if —`), a literary aside such as
+// "She would come — if he asked — and stay." reads as an unclosed opener,
+// exactly like Russian "— если бы …" asides.
+final RegExp _condOpen = RegExp(r'—\s*(?:если|if(?=\s))[^—\n\[\]]{1,300}—',
+    caseSensitive: false);
 final RegExp _condClose =
-    RegExp(r'—\s*конец\s+условия\s*—', caseSensitive: false);
+    RegExp(r'—\s*(?:конец\s+условия|end\s+if)\s*—', caseSensitive: false);
 
 /// Cross-line pass (unlike every other check in this file, which is
-/// per-line): scans the whole [text] for em-dash conditional markers and
-/// returns a token for each **unpaired** one — a stray close with no
-/// preceding open, or an open with no later close. Pairing is a simple
-/// stack (LIFO): the source convention doesn't document nesting, but a stack
-/// degrades to a reasonable default if markers are ever interleaved.
+/// per-line): scans the whole [text] for em-dash conditional markers, Russian
+/// or English, and returns a token for each **unpaired** one — a stray close
+/// with no preceding open, or an open with no later close. Pairing is a
+/// simple stack (LIFO): the source convention doesn't document nesting, but a
+/// stack degrades to a reasonable default if markers are ever interleaved.
+/// Pairing is deliberately language-agnostic (Story 5.7): a Russian opener
+/// closed by `— end if —` counts as paired. Author files are single-language,
+/// so this can't hide a real mistake, and it keeps the pass free of language
+/// bookkeeping.
 ///
-/// Returns nothing at all unless the text contains at least one closer —
-/// see [_condOpen]'s doc comment for why.
+/// Returns nothing at all unless the text contains at least one closer (in
+/// either language) — see [_condOpen]'s doc comment for why.
 List<ConventionToken> _matchConditionalMarkers(String text) {
   if (!_condClose.hasMatch(text)) return const [];
 

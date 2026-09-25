@@ -59,6 +59,28 @@ void main() {
       expect(findings, isEmpty);
     });
 
+    test('(Story 5.7) a fully paired English conditional produces no finding',
+        () {
+      final findings = lintText('— if the player knows Dr. Julia — '
+          'something — else — something else — end if —');
+      expect(findings, isEmpty);
+    });
+
+    test('(Story 5.7) an unpaired English opener produces a finding on its '
+        'own line, and the message names both keyword sets', () {
+      final findings = lintText('intro\n— if A — text — end if —\n'
+          '— if the player knows Julia — something\nmore text');
+      final unpaired = findings
+          .where((f) => f.kind == ConventionKind.unpairedConditional)
+          .toList();
+      expect(unpaired, hasLength(1));
+      expect(unpaired.first.line, 3);
+      expect(
+          unpaired.first.message,
+          'Em-dash conditional marker («если» / «конец условия», or «if» / '
+          '«end if») has no matching counterpart.');
+    });
+
     test('a valid sceneLink never produces a finding', () {
       expect(lintText('[[Continue->Next Scene]]'), isEmpty);
     });

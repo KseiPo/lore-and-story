@@ -687,11 +687,42 @@ void main() {
       expect(ruToEnConventions, contains('lang: ru` to `lang: en`'));
       expect(enToRuConventions, contains('use the Russian form'));
       expect(enToRuConventions, contains('lang: en` to `lang: ru`'));
+
+      // Story 5.7 (KseiPo, 2026-09-24): the emotion is translated in both
+      // directions, and the conditional keywords are converted into the
+      // target language — each direction maps its own way.
+      const emotionRule = 'translate the name, the emotion and the phrase';
+      expect(ruToEnConventions, contains(emotionRule));
+      expect(enToRuConventions, contains(emotionRule));
+      expect(ruToEnConventions, contains('конец условия → end if'));
+      expect(enToRuConventions, contains('end if → конец условия'));
+      expect(enToRuConventions, contains('if → если'));
+      expect(enToRuConventions, contains('else → иначе'));
+      expect(ruToEnConventions, contains('если → if'));
+      expect(ruToEnConventions, contains('иначе → else'));
+      // The two EN→RU lines Story 5.7 changed, pinned exactly (the RU→EN
+      // block is pinned in full by the test below).
+      expect(
+          enToRuConventions,
+          contains('- Dialogue lines are `Name (emotion): phrase.` — the '
+              'emotion is optional. Keep this exact shape; translate the '
+              'name, the emotion and the phrase.'));
+      expect(
+          enToRuConventions,
+          contains('- Em-dash conditional markers delimit authoring '
+              'conditionals, not prose to render: English `— if <condition> '
+              '— … — else — … — end if —` is Russian `— если <condition> — … '
+              '— иначе — … — конец условия —`. Keep the em-dash marker shape; '
+              'replace the keywords with the Russian ones (if → если, else → '
+              'иначе, end if → конец условия) and translate the condition and '
+              'branch text.'));
     });
 
     testWidgets(
-        '(Review decision, 2026-08-08, AC5) the RU→EN conventions default is '
-        'byte-for-byte the same text Story 4.3/4.4 shipped', (tester) async {
+        '(Story 5.7) the RU→EN conventions default is exactly the text '
+        'KseiPo approved on 2026-09-24 — deliberately superseding the Story '
+        '4.3/4.4 pin (translated emotions and conditional keywords)',
+        (tester) async {
       await _pumpHost(
         tester,
         storage: _storageWithEntities(),
@@ -703,12 +734,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_sectionText(tester, 3), '''
-- Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate only the name and the phrase.
+- Dialogue lines are `Name (emotion): phrase.` — the emotion is optional. Keep this exact shape; translate the name, the emotion and the phrase.
 - Inner monologue is `Мысль: …` in Russian and `Thought: …` in English — use the English form.
 - Variable placeholders are readable square brackets, e.g. `[имя героя]` — translate the words inside the brackets, keep the bracket form, never emit `<<=\$var>>` or other code syntax.
 - Player-choice / passage links: `[[Choice text->Passage Name]]` or `[[Choice text|Passage Name]]` — translate the choice text (the label before the separator); never translate or alter the Passage Name (the target after the separator) — it is an identifier, not prose.
 - Return links: `[[back<-Label]]` — translate the Label only; the backlink form itself never changes.
-- Em-dash conditional markers: `— если … — иначе … — конец условия —` — these delimit authoring conditionals, not prose to render; preserve the em-dash markers and translate only the human-readable text between them.
+- Em-dash conditional markers delimit authoring conditionals, not prose to render: Russian `— если <condition> — … — иначе — … — конец условия —` is English `— if <condition> — … — else — … — end if —`. Keep the em-dash marker shape; replace the keywords with the English ones (если → if, иначе → else, конец условия → end if) and translate the condition and branch text.
 - `[[Title]]` with no separator is a lore-entity wikilink (not a passage jump) — translate Title to that entity's English form from the glossary when the glossary lists one; otherwise leave it unchanged rather than guessing.
 - A file may open with a `<!-- scene ⇄ passage: "Passage Name" · lang: ru -->` comment — keep the passage name unchanged, but update `lang: ru` to `lang: en` in the translated output; if no such comment exists, do not add one.''');
     });

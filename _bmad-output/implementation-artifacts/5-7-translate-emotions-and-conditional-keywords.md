@@ -4,7 +4,7 @@ baseline_commit: 9c8facc4a58abdfcd0aa30b155c820de43435e42
 
 # Story 5.7: Translate emotions and conditional keywords, and lint English conditionals
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -126,8 +126,8 @@ hand.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Matcher — English conditional markers** (AC: 1, 2)
-  - [ ] 1.1 In `apps/mobile/lib/lore/convention_matcher.dart`, widen the two
+- [x] **Task 1: Matcher — English conditional markers** (AC: 1, 2)
+  - [x] 1.1 In `apps/mobile/lib/lore/convention_matcher.dart`, widen the two
         patterns by adding alternatives. Do not add new patterns or new passes:
         ```dart
         final RegExp _condOpen = RegExp(
@@ -140,14 +140,14 @@ hand.
         branch alone would be inconsistent. A lookahead needs no boundary class at
         all. Both patterns stay linear: a two-way literal alternation and the same
         bounded negated class.
-  - [ ] 1.2 Leave `_matchConditionalMarkers` alone. The gate
+  - [x] 1.2 Leave `_matchConditionalMarkers` alone. The gate
         (`_condClose.hasMatch`), the adjacency dedupe, the LIFO stack and the
         unpaired-token emission already work per match. Pairing is
         language-agnostic by design: an opener in one language closed in the other
         counts as paired. Author files are single-language, so this can't hide a
         real mistake, and it keeps the code free of language bookkeeping. Say so in
         the doc comment.
-  - [ ] 1.3 Update the comments that name only the Russian form:
+  - [x] 1.3 Update the comments that name only the Russian form:
         - the `ConventionKind.unpairedConditional` enum comment (currently
           "(`— если …` / `— конец условия —`)");
         - the large comment block above `_condOpen` (add the English form and the
@@ -156,33 +156,33 @@ hand.
         - `_matchConditionalMarkers`'s doc comment.
 
         Credit the decision to KseiPo, 2026-09-24.
-  - [ ] 1.4 **Do not touch** the enum values, `errorKinds`, `_priority()`, or any
+  - [x] 1.4 **Do not touch** the enum values, `errorKinds`, `_priority()`, or any
         other pattern. Story 5.5 (in parallel, own branch) adds an
         `italicMonologue` kind and edits `_malformedDialogue`, so keeping this story
         inside the conditional block keeps the merge trivial.
 
-- [ ] **Task 2: Lint message** (AC: 3)
-  - [ ] 2.1 `apps/mobile/lib/lore/convention_lint.dart`, `_messageFor`: reword the
+- [x] **Task 2: Lint message** (AC: 3)
+  - [x] 2.1 `apps/mobile/lib/lore/convention_lint.dart`, `_messageFor`: reword the
         `unpairedConditional` case to the exact AC3 string. Change no other case.
         Story 5.5 inserts a new case right after this one, so expect an adjacent-line
         merge.
 
-- [ ] **Task 3: Translate prompt defaults** (AC: 4)
-  - [ ] 3.1 `apps/mobile/lib/ai/translate_action.dart`: in **both**
+- [x] **Task 3: Translate prompt defaults** (AC: 4)
+  - [x] 3.1 `apps/mobile/lib/ai/translate_action.dart`: in **both**
         `_kConventionsRuToEn` and `_kConventionsEnToRu`, replace the dialogue line
         and the conditionals line with the exact texts in Dev Notes → "New
         conventions lines". Change no other line (inner monologue, placeholders,
         links, wikilinks, the `scene ⇄ passage` comment line).
-  - [ ] 3.2 Update the doc comment above `_kConventionsRuToEn`. Today it says the
+  - [x] 3.2 Update the doc comment above `_kConventionsRuToEn`. Today it says the
         constant "is byte-for-byte identical to what Story 4.3/4.4 shipped". Reword
         it: the text was deliberately changed in Story 5.7 (KseiPo, 2026-09-24:
         translated emotions and conditional keywords), and the per-direction fork
         and the shared `# Conventions` override scheme are unchanged.
-  - [ ] 3.3 `AiPromptConfig`, `runTranslate` and the section layout stay unchanged;
+  - [x] 3.3 `AiPromptConfig`, `runTranslate` and the section layout stay unchanged;
         the preview still shows exactly what's sent (AD-11), just with the new text.
 
-- [ ] **Task 4: Grammar defaults** (AC: 5)
-  - [ ] 4.1 `apps/mobile/lib/ai/grammar_action.dart`, `_kGrammarInstructions`:
+- [x] **Task 4: Grammar defaults** (AC: 5)
+  - [x] 4.1 `apps/mobile/lib/ai/grammar_action.dart`, `_kGrammarInstructions`:
         replace the line
         ``- Em-dash conditional markers: `— если … — иначе … — конец условия —`.``
         with
@@ -190,8 +190,8 @@ hand.
         Leave `_kResponseFormatContract` untouched; it is never overridable and not
         part of this change.
 
-- [ ] **Task 5: Tests** (AC: 1–5)
-  - [ ] 5.1 `apps/mobile/test/lore/convention_matcher_test.dart`: add an English
+- [x] **Task 5: Tests** (AC: 1–5)
+  - [x] 5.1 `apps/mobile/test/lore/convention_matcher_test.dart`: add an English
         subgroup (or tests) next to the existing "unpaired conditional markers"
         group, mirroring its Russian cases one-for-one:
         - a fully paired `— if the player knows Julia — text — else — other — end if —` → no finding;
@@ -209,25 +209,25 @@ hand.
           language-agnostic pairing decision).
 
         Keep every existing Russian test unchanged; they are AC1's regression proof.
-  - [ ] 5.2 `apps/mobile/test/lore/convention_lint_test.dart`: an English
+  - [x] 5.2 `apps/mobile/test/lore/convention_lint_test.dart`: an English
         unpaired-opener finding lands on its own line with kind
         `unpairedConditional`; the ARCHITECTURE-style English example produces no
         findings; and one assertion on the reworded message (the message is
         business output the author reads, not UI chrome).
-  - [ ] 5.3 `apps/mobile/test/ai/translate_action_test.dart`:
+  - [x] 5.3 `apps/mobile/test/ai/translate_action_test.dart`:
         - update the byte-for-byte pinned RU→EN test to the new full text and
           retitle it `(Story 5.7) the RU→EN conventions default is exactly the text
           KseiPo approved on 2026-09-24` (see Context);
         - add `contains` assertions to the existing per-direction test for the
           EN→RU keyword mapping (`end if` → `конец условия`) and for the emotion
           wording in both directions.
-  - [ ] 5.4 `apps/mobile/test/ai/grammar_action_test.dart`: next to the existing
+  - [x] 5.4 `apps/mobile/test/ai/grammar_action_test.dart`: next to the existing
         "(Review fix) … inner-monologue convention" test, assert that section 0
         contains `end if` (and `конец условия`).
-  - [ ] 5.5 No UI presence tests (project testing emphasis).
+  - [x] 5.5 No UI presence tests (project testing emphasis).
 
-- [ ] **Task 6: Docs** (AC: 6)
-  - [ ] 6.1 `ARCHITECTURE.md` §3.3:
+- [x] **Task 6: Docs** (AC: 6)
+  - [x] 6.1 `ARCHITECTURE.md` §3.3:
         - Dialogue bullet: add that a translation translates the name, the emotion
           and the phrase (example `Селена (спокойно): …` → `Selena (calmly): …`).
         - Authoring conditionals bullet: add the English form
@@ -235,12 +235,12 @@ hand.
           and translations convert them, and date it 2026-09-24. Story 5.5 edits
           the neighbouring inner-monologue bullet, so keep this edit to these two
           bullets.
-  - [ ] 6.2 `_bmad-output/project-context.md`, "Scene file (plain-prose)
+  - [x] 6.2 `_bmad-output/project-context.md`, "Scene file (plain-prose)
         conventions":
         - extend the Dialogue bullet with the emotion-translation rule;
         - add one bullet for conditionals (RU and EN forms, translated with the
           file; the linter checks both). The file has no conditionals bullet today.
-  - [ ] 6.3 `docs/agent-writing-rules.md`:
+  - [x] 6.3 `docs/agent-writing-rules.md`:
         - §4.1: the Dialogue bullet already says to translate the emotion (keep it).
           Change the Conditionals bullet from "keep the markers" to "convert the
           keywords (если ↔ if, иначе ↔ else, конец условия ↔ end if), translate
@@ -251,15 +251,33 @@ hand.
         - §10: the unpaired-conditional row covers either language.
         - Bump the "Last synced" date.
 
-- [ ] **Task 7: Gates** (AC: all)
-  - [ ] 7.1 `flutter analyze` clean and `flutter test` green, run from
+- [x] **Task 7: Gates** (AC: all)
+  - [x] 7.1 `flutter analyze` clean and `flutter test` green, run from
         `apps/mobile` via PowerShell with
         `$env:PATH = "C:\programs\flutter\bin;" + $env:PATH`. Record before/after
         counts.
-  - [ ] 7.2 `npm test` 4/4 at the repo root.
-  - [ ] 7.3 Contract gate: `git status --porcelain lib/lore.js test/fixtures/
+  - [x] 7.2 `npm test` 4/4 at the repo root.
+  - [x] 7.3 Contract gate: `git status --porcelain lib/lore.js test/fixtures/
         scripts/ apps/mobile/lib/lore/lore_loader.dart
         apps/mobile/lib/lore/lore_model.dart` is **empty**.
+
+### Review Findings
+
+Code review 2026-09-25, cross-model (implemented on Opus 5.5; all three layers on Sonnet 5: Blind Hunter, Edge Case Hunter with live Dart probes, Acceptance Auditor). The Auditor found all 6 ACs satisfied: prompt lines and the lint message match the spec exactly, Story 5.5's enum/`errorKinds`/`_priority` are untouched, the contract gate is clean, and the tests pass 153/153.
+
+- [x] [Review][Patch] The §6.7 aside guidance ("Word such asides differently.") read as broken. Rewritten: the linter warning on a literary `— if … —` aside is harmless, agents must not rewrite the author's dashes to silence it, and new prose they write should prefer commas or parentheses. [docs/agent-writing-rules.md:421]
+- [x] [Review][Patch] EN→RU conventions had only loose `contains` checks while RU→EN is pinned in full. Now both changed EN→RU lines are pinned exactly, and all three keyword mappings are asserted in both directions. [apps/mobile/test/ai/translate_action_test.dart]
+- [x] [Review][Patch] The `(?=\s)` comment claimed the "same reason" as the Cyrillic `\b` note. Corrected: for `if` the lookahead is deliberately stricter than `\b`, because a real opener's keyword is followed by its condition, never by punctuation. [apps/mobile/lib/lore/convention_matcher.dart]
+- [x] [Review][Patch] Added the reverse mixed-language pairing case (an English opener closed by `— конец условия —`). [apps/mobile/test/lore/convention_matcher_test.dart]
+- [x] [Review][Patch] Reworded the "a translation translates …" phrasing in ARCHITECTURE.md §3.3 and project-context.md.
+- [x] [Review][Defer] Two conditionals written back to back and sharing one em dash (`… — конец условия — если B — …`, or the English `… — end if — if B — …`): the Story 3.1 shared-delimiter dedupe drops the second opener, so its closer is reported as a spurious unpaired marker. [apps/mobile/lib/lore/convention_matcher.dart `_matchConditionalMarkers`] — deferred, pre-existing since Story 3.1; this story only makes it reachable in English too. A fix must keep close→open adjacency while preserving the non-overlap guarantee.
+- Dismissed (6), each verified:
+  - "the grammar prompt's English example drops the dash after `else`": false, since the line reads `— else — …`;
+  - `\s` letting `— end\nif —` span a line break: benign leniency with the same shape as the Russian pattern;
+  - the grammar test not pinning the literal example: it would only matter for the false finding above;
+  - no whole-word guard on `если`: pre-existing, and there's no realistic Cyrillic prefix collision;
+  - `—if` without a space matching: the same `—\s*` leniency as Russian, intended;
+  - three docs restating the rule: by design (contract, repo-agent rules, external-agent rules).
 
 ## Dev Notes
 
@@ -428,12 +446,61 @@ No new dependencies. No web research needed: regex, prompt text, docs.
 
 ### Agent Model Used
 
+Claude Opus 5.5 (claude-opus-5-5)
+
 ### Debug Log References
+
+- Branched from main at 4973c3e, which already includes Story 5.5 (its matcher changes: `italicMonologue`, `_afterCloser`, the `_malformedDialogue` lookbehind). This story touched only the conditional block, so there were no conflicts. Baseline suite: 822 passing.
+- Red: the new and updated tests failed first, 7 of them. Examples:
+  - the English unpaired-opener and stray-closer tests;
+  - the wikilink-in-condition test;
+  - the reworded lint message;
+  - the grammar markers test;
+  - the updated translate pin and the per-direction assertions.
+
+  The English "paired" and "no closer" tests passed even before the change, because an English closer never tripped the gate. They stay as regression guards.
+- Green: affected files 153/153. Full `flutter test` 834 passing (+12), `flutter analyze` clean, `npm test` 4/4, contract gate empty.
+- Probe (verify-before-asserting): a `dart run` script against the real `convention_lint.dart` confirmed the doc's §6.7 RU and EN examples lint clean. The English literary aside is flagged only in a file that has an `— end if —`.
 
 ### Completion Notes List
 
+- `convention_matcher.dart`: the patterns gained English alternatives:
+  - `_condOpen` is now `—\s*(?:если|if(?=\s))[^—\n\[\]]{1,300}—`;
+  - `_condClose` is now `—\s*(?:конец\s+условия|end\s+if)\s*—`.
+
+  The `(?=\s)` lookahead makes `if` a whole word (not `\b`, per Story 3.1's Cyrillic lesson). The gate, limits, stack pairing and overlap handling are unchanged. Pairing is language-agnostic, as documented. No enum, `errorKinds` or `_priority` change. The comments cover the English form and its accepted false-positive class (literary `— if … —` asides in files that use the convention).
+- `convention_lint.dart`: the unpaired-conditional message names both keyword sets (the exact AC3 string).
+- `translate_action.dart`: in both directional defaults, the dialogue line now says "translate the name, the emotion and the phrase", and the conditionals line converts keywords to the target language (если→if, иначе→else, конец условия→end if, and the reverse). The other six lines are unchanged. The doc comment no longer claims byte-for-byte identity with 4.3/4.4.
+- `grammar_action.dart`: the intentional-markup list names both the RU and the EN conditional markers.
+- Tests:
+  - an English group in `convention_matcher_test.dart` (9 tests, mirroring the Russian cases plus whole-word and mixed-language pairing);
+  - 2 lint tests (one pins the message);
+  - 1 grammar test;
+  - the translate byte-for-byte pin deliberately updated to the approved text and retitled, plus emotion and keyword-mapping assertions in the per-direction test.
+- Docs:
+  - ARCHITECTURE.md §3.3 Dialogue and Authoring conditionals bullets;
+  - project-context.md: the emotion rule plus a new conditionals bullet;
+  - `docs/agent-writing-rules.md` §4.1, §6.7 (both forms, the aside caveat) and §10.
+- Migration regexes for existing `.en.md` files are in this story's Context section, for KseiPo to run by hand.
+
 ### File List
+
+- apps/mobile/lib/lore/convention_matcher.dart (modified)
+- apps/mobile/lib/lore/convention_lint.dart (modified)
+- apps/mobile/lib/ai/translate_action.dart (modified)
+- apps/mobile/lib/ai/grammar_action.dart (modified)
+- apps/mobile/test/lore/convention_matcher_test.dart (modified)
+- apps/mobile/test/lore/convention_lint_test.dart (modified)
+- apps/mobile/test/ai/translate_action_test.dart (modified)
+- apps/mobile/test/ai/grammar_action_test.dart (modified)
+- ARCHITECTURE.md (modified: §3.3)
+- _bmad-output/project-context.md (modified: scene conventions)
+- docs/agent-writing-rules.md (modified: §4.1, §6.7, §10)
+- _bmad-output/implementation-artifacts/5-7-translate-emotions-and-conditional-keywords.md (this file)
+- _bmad-output/implementation-artifacts/sprint-status.yaml (status)
 
 ## Change Log
 
 - 2026-09-24: Story created from KseiPo's 2026-09-24 decisions (translate conditional keywords with `if / else / end if`; translate dialogue emotions). Ultimate context engine analysis completed; comprehensive developer guide created.
+- 2026-09-25: Implemented. The linter recognizes English conditional markers. The translate defaults translate emotions and convert conditional keywords, and the grammar defaults list both marker sets. Docs updated. `flutter test` 822 → 834, analyze clean, `npm test` 4/4, contract gate clean.
+- 2026-09-25: Code review, cross-model (Sonnet 5, all three layers). 5 low patches applied (§6.7 aside guidance, EN→RU prompt pins, lookahead comment, reverse mixed-language test, doc phrasing), 1 deferred (pre-existing shared-dash dedupe), 6 dismissed. Marked done.
