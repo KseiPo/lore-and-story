@@ -188,7 +188,8 @@ a `server.js` route + a `<script>` tag — never an `import`.
 - `[[Title]]` with **no** separator is a lore-entity wikilink, unchanged —
   disambiguation from a scene link is purely syntactic (separator presence),
   never a lookup against a passage/entity namespace.
-- Dialogue `Name (emotion): phrase.`; inner monologue `Мысль: …` / `*Thought:* …`;
+- Dialogue `Name (emotion): phrase.`; inner monologue `Мысль: …` / `Thought: …`
+  (plain, no italics — the linter flags the italic `*Thought:*` form);
   variable placeholders in readable brackets `[имя героя]` — never `<<=$var>>`.
 - Multi-passage scenes stay ONE file with a `# <Passage Name>` section per passage,
   each carrying its own scene⇄passage comment.

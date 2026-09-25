@@ -53,7 +53,7 @@ and MOBILE.md serve as the technical-requirements source.)
 - **FR21** *(AI-1)*: Generate an EN translation into the EN tab (a create) using a context pack of the RU file + alias glossary + prose conventions.
 - **FR22** *(AI-1)*: Show a mandatory context preview of exactly what leaves the device before any AI send; gate sending behind it.
 - **FR23** *(AI-2)*: Request a grammar/style review and render a structured findings list (line/issue/suggestion/severity); never a rewritten file.
-- **FR26** *(Promotion phase)*: Promote a simple entity to an entity folder (`<slug>.md` → `<slug>/<slug>.md`, card bytes preserved) so it can hold sub-entries; the only authoring op that moves a file.
+- **FR26** *(Promotion phase)*: Promote a simple entity to an entity folder (`<slug>.md` → `<slug>/<slug>.md`, card bytes preserved) so it can hold sub-entries; the only authoring op that moves a file. A language-suffixed card (`<slug>.ru.md`/`<slug>.en.md`) promotes to the same suffix-free `<slug>/<slug>.md` — folders never carry a language suffix (Story 5.6, 2026-09-24).
 - **FR27** *(AI phases)*: Let the author configure which AI Server (official Anthropic API, OpenRouter, or a custom/local network address), API Protocol (Anthropic Messages format or OpenAI chat-completions format), and model an AI action uses — not a single hardcoded triple — via a plain config file in the synced repo, not an in-app settings screen (KseiPo, 2026-08-08: none of this is secret, so it belongs with the other repo-versioned project config, mirroring Story 4.4's `ai-prompts.md` precedent). The Settings screen holds only the API key (secure device storage, never written to the repo — unchanged from Story 4.1). Verify a resolved configuration with a live "test connection" check before relying on it.
 - **FR28** *(AI phases)*: Implement an OpenAI-compatible chat-completions client (streamed, with the same typed-error/retry discipline as the Story 4.1 Anthropic client) as a second protocol adapter, so the app can talk to OpenAI-protocol servers — OpenRouter, or a self-hosted local server such as LM Studio.
 - **FR29** *(AI phases)*: Let the author override the AI instructions/conventions text an AI action sends from a plain file in the synced repo (`ai-prompts.md` at the repo root) instead of the app's hardcoded defaults — per-section (an author may override only one piece), never blocking when the file is absent, unreadable, or defines neither recognized section.
@@ -203,6 +203,11 @@ awake for the duration of an in-flight AI request, so a slow local model
 isn't cut off by the screen turning off first. 5.5 — stop the Story 3.1
 linter flagging emphasized labels (`**Role:** …`) as malformed dialogue, and
 give the retired italic `*Thought:*` monologue form its own accurate finding.
+5.6 — drop the language suffix when promoting an entity to a folder
+(`frank.ru.md` → `frank/frank.md`;
+extends FR26, reverses a Story 2.17 non-goal). 5.7 — translate dialogue
+emotions and conditional keywords (EN `— if … — else — … — end if —`), with
+the linter recognizing the English markers (extends FR18/FR21/FR23/FR30).
 
 ---
 
@@ -767,6 +772,11 @@ awake for the duration of an in-flight AI request, so a slow local model
 isn't cut off by the screen turning off first. 5.5 — stop the Story 3.1
 linter flagging emphasized labels (`**Role:** …`) as malformed dialogue, and
 give the retired italic `*Thought:*` monologue form its own accurate finding.
+5.6 — drop the language suffix when promoting an entity to a folder
+(`frank.ru.md` → `frank/frank.md`;
+extends FR26, reverses a Story 2.17 non-goal). 5.7 — translate dialogue
+emotions and conditional keywords (EN `— if … — else — … — end if —`), with
+the linter recognizing the English markers (extends FR18/FR21/FR23/FR30).
 
 ### Story 5.1: Preserve image paths when promoting an entity to a folder
 
@@ -994,6 +1004,41 @@ with a message that is wrong for it (there *is* a space).
 than unflagging it, or fixing bold labels only (which would leave every italic label, including the `_…_` the
 toolbar's italic button inserts, flagged with the wrong message). Bold monologue labels (`**Thought:**`) were never a
 convention in any version and stay out of scope. A correctness fix to Story 3.1 (FR18), no new FR; like every
-`convention_matcher.dart` change, it never touches the JS reference or the golden fixtures. Follow-up outside the
-repo's tracked files: `docs/agent-writing-rules.md` currently tells external agents to avoid the `**Type:** value`
+`convention_matcher.dart` change, it never touches the JS reference or the golden fixtures. Follow-up: `docs/agent-writing-rules.md` (added on `main`
+in parallel) currently tells external agents to avoid the `**Type:** value`
 form because of this false positive — update it once this ships.
+
+### Story 5.6: Drop the language suffix when promoting an entity to a folder
+
+As the author,
+I want Promote to folder to name the new folder and its card without a language suffix,
+So that entity folders always get clean names (`frank/frank.md`) however the flat card was named.
+
+**Context (KseiPo, 2026-09-24):** folders never carry a language suffix. Story 2.17's promotion derives the slug by stripping only `.md`, so a language-suffixed card — including every simple entity the app's own New-entity button creates (`<slug>.ru.md`, Story 2.10) — promotes to an oddly named `frank.ru/frank.ru.md` (a documented Story 2.17 non-goal, now reversed). The card inside the folder must lose the suffix too: the loader only recognizes a folder card named exactly `<folder>.md` (or `index.md`), and entity-folder cards are language-neutral by design (never paired — see Story 2.18's exclusion of folder cards).
+
+**Acceptance Criteria:**
+
+1. **Given** a simple entity whose file name carries a language suffix (`<slug>.ru.md` / `<slug>.en.md`, matched case-insensitively like the loader's own language regex), **When** I promote it, **Then** the app creates `<slug>/` and moves the card to `<slug>/<slug>.md` — the suffix is dropped from both the folder and the card name — and the card's content is unchanged apart from Story 5.1's relative image-path rewrite. *(extends FR26)*
+2. **Given** a simple entity without a suffix (`<slug>.md`), **When** I promote it, **Then** the behavior is exactly as before (`<slug>/<slug>.md`).
+3. **Given** a card already exists at the suffix-free target (e.g. `frank.ru.md` and `frank.en.md` both exist and one of them was already promoted to `frank/frank.md`), **When** I promote the other, **Then** the existing collision guard refuses with an error and leaves the source file untouched — never an overwrite. *(AD-8)*
+4. **Given** the promotion, **When** it runs, **Then** it is still a single atomic `movePath` (no read-write-delete of the card) and the entity list rescans to show the new folder entity. *(AD-4, AD-10)*
+
+**Notes:** No migration of folders already promoted with a suffix (`frank.ru/frank.ru.md` still loads correctly as an entity folder) — the author renames those by hand if wanted. Expected footprint: `_promoteEntity`'s slug derivation in `app/category_entities_page.dart`, the promote tests, and the rules docs (`docs/agent-writing-rules.md` §2.5). Depends on Stories 2.17 and 5.1 (both done).
+
+### Story 5.7: Translate emotions and conditional keywords, and lint English conditionals
+
+As the author,
+I want English files to use English conditional keywords and translated emotions — produced by the app's AI translation and checked by the linter,
+So that an English scene reads fully in English while keeping the authoring conventions intact.
+
+**Context (KseiPo, 2026-09-24):** two translation conventions change. (1) Authoring-conditional keywords are translated: RU `— если <condition> — … — иначе — … — конец условия —` ↔ EN `— if <condition> — … — else — … — end if —`. (2) A dialogue line's emotion is translated along with the name and the phrase (`Селена (спокойно): …` → `Selena (calmly): …`). Today the translate prompt defaults (Stories 4.3/4.5) tell the model to preserve the markers and to "translate only the name and the phrase"; the convention matcher (Story 3.1) recognizes only the Russian keywords, so English markers are never pair-checked; and the grammar-review default instructions (Story 4.6) list only the Russian markers as intentional markup.
+
+**Acceptance Criteria:**
+
+1. **Given** an English conditional — a `— if <condition> —` opener and an `— end if —` closer (case-insensitive; `if` must be a whole word) — **When** the matcher runs, **Then** it pairs and flags unpaired markers exactly like the Russian ones: the same `unpairedConditional` kind, the same file-level "at least one closer present" gate, the same one-line / 300-character / no-brackets limits on the opener. Russian behavior is unchanged. *(extends FR18)*
+2. **Given** an unpaired-conditional finding, **When** the linter lists it, **Then** its message names both keyword sets.
+3. **Given** the translate prompt defaults (RU→EN and EN→RU), **When** a translation runs without an `ai-prompts.md` `# Conventions` override, **Then** the conventions text instructs the model to translate a dialogue line's emotion together with its name and phrase, and to convert the conditional keywords to the target language (если → if, иначе → else, конец условия → end if, and the reverse) while keeping the em-dash marker shape and translating the condition and branch text. *(extends FR21/FR30)*
+4. **Given** the grammar-review default instructions, **When** a review runs, **Then** both the Russian and the English conditional markers are listed as intentional markup, never to be flagged. *(extends FR23)*
+5. **Given** ARCHITECTURE.md §3.3, project-context.md and `docs/agent-writing-rules.md`, **When** this ships, **Then** they document the English keywords and the translated-emotion rule.
+
+**Notes:** Existing English files that still carry Russian markers (e.g. produced by the old prompt) are migrated by the author with find/replace regexes delivered with the story — no in-repo migration tooling (Story 2.15 precedent). An author-supplied `ai-prompts.md` `# Conventions` override still wins over the new defaults (unchanged Story 4.4 mechanism); an author who has one updates its text themselves. Runs in parallel with Story 5.5 (linter false positive on emphasized labels), which also edits `convention_matcher.dart` — different patterns, merge carefully.
