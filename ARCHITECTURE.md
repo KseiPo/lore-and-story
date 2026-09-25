@@ -132,7 +132,10 @@ Free markdown body. May reference other entries as [[Display Title]]
 This is how "a character has a card plus folders of related content (events,
 relationship quests…)" is expressed — structurally, with no schema. A simple
 `mira.md` and a full `selena/` folder are the same kind of thing to every
-consumer; growing one into the other is just `mkdir` + move.
+consumer; growing one into the other is just `mkdir` + move. Folder names — and
+so the card inside, which must match its folder — never carry a language
+suffix: `mira.md` and `mira.ru.md` both promote to `mira/mira.md` (decided
+2026-09-24; entity-folder cards are language-neutral and never paired).
 
 - `# Title` (first heading) is the canonical name; filename/folder is a slug.
 - `aliases:` line (optional) extends mention detection; include foreign-language

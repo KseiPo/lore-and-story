@@ -4,7 +4,7 @@ baseline_commit: 9c8facc4a58abdfcd0aa30b155c820de43435e42
 
 # Story 5.6: Drop the language suffix when promoting an entity to a folder
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -125,8 +125,8 @@ card to a stray root overview.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Pure promotion-target helper in `lore/`** (AC: 1, 2)
-  - [ ] 1.1 New file `apps/mobile/lib/lore/promotion.dart`: a pure, total function
+- [x] **Task 1: Pure promotion-target helper in `lore/`** (AC: 1, 2)
+  - [x] 1.1 New file `apps/mobile/lib/lore/promotion.dart`: a pure, total function
         `({String folderId, String cardId}) promotionTargetOf(String entryId)`. It
         takes a loreDir-relative simple-entity id (e.g. `characters/frank.ru.md`)
         and returns the loreDir-relative folder and card ids
@@ -137,13 +137,13 @@ card to a stray root overview.
         own `_langRe` exactly and say so in a comment ("keep in sync"), the same
         duplication-with-a-comment precedent as `_kAiPromptConfigFileName`.
         **Do not import or edit `lore_loader.dart`** (contract gate below).
-  - [ ] 1.2 Library doc comment: name KseiPo's 2026-09-24 decision (folders never
+  - [x] 1.2 Library doc comment: name KseiPo's 2026-09-24 decision (folders never
         carry a language suffix), explain why the card name must match the folder
         (the loader's `<folder>.md` card rule), and state that the stripped name is
         exactly the loader's `base`.
-  - [ ] 1.3 Export it from the `lore/lore.dart` barrel, beside
+  - [x] 1.3 Export it from the `lore/lore.dart` barrel, beside
         `image_path_rewriter.dart`.
-  - [ ] 1.4 Unit tests `apps/mobile/test/lore/promotion_test.dart`:
+  - [x] 1.4 Unit tests `apps/mobile/test/lore/promotion_test.dart`:
         - `characters/frank.md` → `characters/frank` / `characters/frank/frank.md`
         - `.ru.md` and `.en.md` both drop the suffix
         - an upper/mixed-case suffix (`frank.RU.md`, `frank.En.md`) drops it too
@@ -153,74 +153,74 @@ card to a stray root overview.
         - a name that only looks suffix-like (`frank.russian.md`, `ru.md`) keeps
           today's `.md`-only strip
 
-- [ ] **Task 2: Use it in `_promoteEntity`, harden the guard, reword the dialog** (AC: 1–6, 8)
-  - [ ] 2.1 In `apps/mobile/lib/app/category_entities_page.dart`, replace the inline
+- [x] **Task 2: Use it in `_promoteEntity`, harden the guard, reword the dialog** (AC: 1–6, 8)
+  - [x] 2.1 In `apps/mobile/lib/app/category_entities_page.dart`, replace the inline
         `lastSlash`/`dirId`/`fileName`/`slug`/`newFolderId`/`newCardId` derivation
         with `promotionTargetOf(entry.id)`. Compute it **before** showing the
         confirm dialog (AC6 needs the destination). Keep `_repoPath(...)` for the
         repo-relative storage paths exactly as today.
-  - [ ] 2.2 Extend the pre-flight guard: refuse (same snackbar text, same early
+  - [x] 2.2 Extend the pre-flight guard: refuse (same snackbar text, same early
         return, before `ensureDir`) when `exists(newCardPath)` **or**
         `exists('<newFolderPath>/index.md')`. Keep the Story 2.17 review decision:
         an existing folder with no card is **not** a collision.
-  - [ ] 2.2b AC8: before the collision guard (and before `ensureDir`), if the
+  - [x] 2.2b AC8: before the collision guard (and before `ensureDir`), if the
         target folder's own name (the last segment of `folderId`) is exactly
         `media`, show `"media" is reserved and cannot be used as a folder name.` and
         return. Compare exactly and case-sensitively, like `_isSkippedWalkDir`
         (`name == 'media'`). Simplest placement: right after computing the target,
         before even opening the confirm dialog, so the author isn't asked to
         confirm an impossible promotion.
-  - [ ] 2.3 `_showPromoteConfirmDialog`: pass the loreDir-relative destination
+  - [x] 2.3 `_showPromoteConfirmDialog`: pass the loreDir-relative destination
         card id and replace "The card itself is unchanged — just moved." with a
         line naming it, e.g. `Its card moves to characters/frank/frank.md.` Keep
         the title (`Promote to folder?`) and the `promote-entity-confirm` key
         unchanged; existing tests find the dialog by both.
-  - [ ] 2.4 Change nothing else in `_promoteEntity`: the `_promotingIds`
+  - [x] 2.4 Change nothing else in `_promoteEntity`: the `_promotingIds`
         re-entrancy guard, the `entry.tree != null` defensive return, the Story
         5.1 rewrite (computed from `entry.text` up front, written only after a
         successful move, a rewrite-write failure never surfacing as a promotion
         failure), both catch clauses (`on RepoStorageException` + `catch (_)`), and
         the `_rescan()` after success.
-  - [ ] 2.5 Update `_promoteEntity`'s doc comment: `<slug>.md` → `<slug>/<slug>.md`
+  - [x] 2.5 Update `_promoteEntity`'s doc comment: `<slug>.md` → `<slug>/<slug>.md`
         now reads "a card named `<slug>.md` or `<slug>.<lang>.md` → `<slug>/<slug>.md`",
         and mention the added `index.md` collision check.
 
-- [ ] **Task 3: Widget tests in `apps/mobile/test/app/promote_entity_test.dart`** (AC: 1–6, 8)
-  - [ ] 3.1 Generalize the `_repo()` helper to take the simple entity's file name
+- [x] **Task 3: Widget tests in `apps/mobile/test/app/promote_entity_test.dart`** (AC: 1–6, 8)
+  - [x] 3.1 Generalize the `_repo()` helper to take the simple entity's file name
         (default `frank.md`, so every existing test is untouched). Optionally also
         take a pre-existing `index.md` card in the target folder.
-  - [ ] 3.2 `frank.ru.md` promotes: `moveCalls == [('characters/frank.ru.md',
+  - [x] 3.2 `frank.ru.md` promotes: `moveCalls == [('characters/frank.ru.md',
         'characters/frank/frank.md')]`, `ensureDirCalls == ['characters/frank']`,
         the content is preserved, and `writeCalls` is empty (no images).
-  - [ ] 3.3 `frank.en.md` promotes the same way (one test, or parameterize 3.2 over
+  - [x] 3.3 `frank.en.md` promotes the same way (one test, or parameterize 3.2 over
         both suffixes).
-  - [ ] 3.4 AC4 end-to-end: after promoting `frank.ru.md`, tap the row and expect
+  - [x] 3.4 AC4 end-to-end: after promoting `frank.ru.md`, tap the row and expect
         `EntityDetailPage`, not `EditorPage`. This is the test that proves the
         loader accepts the new name, so don't skip it (mirror the existing Story
         2.17 test of the same shape).
-  - [ ] 3.5 AC3: `frank.ru.md` with an existing `frank/frank.md`, and separately
+  - [x] 3.5 AC3: `frank.ru.md` with an existing `frank/frank.md`, and separately
         with an existing `frank/index.md`, shows "A folder with this name already
         exists." with `ensureDirCalls` and `moveCalls` both empty.
-  - [ ] 3.5b AC8: `characters/media.ru.md` shows the reserved-name snackbar,
+  - [x] 3.5b AC8: `characters/media.ru.md` shows the reserved-name snackbar,
         with `ensureDirCalls` and `moveCalls` empty and the source untouched.
-  - [ ] 3.6 AC1 + Story 5.1 together: a suffixed card with one relative image
+  - [x] 3.6 AC1 + Story 5.1 together: a suffixed card with one relative image
         (`![Frank](media/frank.jpg)`) promotes to `characters/frank/frank.md`
         containing `../media/frank.jpg`.
-  - [ ] 3.7 Don't add a test that only asserts the dialog's new wording renders
+  - [x] 3.7 Don't add a test that only asserts the dialog's new wording renders
         (a UI presence test; project testing emphasis). The destination
         *computation* is already covered by Task 1.4 and 3.2.
-  - [ ] 3.8 Every existing promote test (Story 2.17 + 5.1 groups) stays green
+  - [x] 3.8 Every existing promote test (Story 2.17 + 5.1 groups) stays green
         unchanged.
 
-- [ ] **Task 4: Docs** (AC: 7)
-  - [ ] 4.1 `ARCHITECTURE.md` §3.2, after "growing one into the other is just
+- [x] **Task 4: Docs** (AC: 7)
+  - [x] 4.1 `ARCHITECTURE.md` §3.2, after "growing one into the other is just
         `mkdir` + move": add that folder and card names never carry a language
         suffix, so promotion turns `mira.md` or `mira.ru.md` into
         `mira/mira.md` (decided 2026-09-24).
-  - [ ] 4.2 `_bmad-output/project-context.md`, "Entity resolution" bullets: add one
+  - [x] 4.2 `_bmad-output/project-context.md`, "Entity resolution" bullets: add one
         bullet with the same rule (entity-folder names and their cards are
         suffix-free; promotion drops a suffix).
-  - [ ] 4.3 `docs/agent-writing-rules.md`:
+  - [x] 4.3 `docs/agent-writing-rules.md`:
         - §2.2: add "Folder names never carry a language suffix."
         - §2.5 step 1: drop any suffix (`frank.ru.md` and `frank.md` both → `frank/frank.md`).
         - §2.5 closing paragraph: replace "If the card has a language suffix
@@ -231,19 +231,39 @@ card to a stray root overview.
           section/quest overviews; a simple entity may carry one.
         - §4: leave the New-entity-button note.
         - Bump the "Last synced" footer date.
-  - [ ] 4.4 Leave the PRD (`prds/…/prd.md` FR26) alone; epics.md's FR26 already
+  - [x] 4.4 Leave the PRD (`prds/…/prd.md` FR26) alone; epics.md's FR26 already
         carries the 2026-09-24 note.
 
-- [ ] **Task 5: Gates** (AC: all)
-  - [ ] 5.1 `flutter analyze` clean and `flutter test` green, run from
+- [x] **Task 5: Gates** (AC: all)
+  - [x] 5.1 `flutter analyze` clean and `flutter test` green, run from
         `apps/mobile` via PowerShell with
         `$env:PATH = "C:\programs\flutter\bin;" + $env:PATH`. Record before/after
         counts.
-  - [ ] 5.2 `npm test` 4/4 at the repo root.
-  - [ ] 5.3 Contract gate: `git status --porcelain lib/lore.js test/fixtures/
+  - [x] 5.2 `npm test` 4/4 at the repo root.
+  - [x] 5.3 Contract gate: `git status --porcelain lib/lore.js test/fixtures/
         scripts/ apps/mobile/lib/lore/lore_loader.dart
         apps/mobile/lib/lore/lore_model.dart` is **empty**. No loader, model or
         fixture change; the loader already recognizes `<slug>/<slug>.md`.
+
+### Review Findings
+
+Code review 2026-09-25, cross-model (implemented on Opus 5.5; review layers on Sonnet 5). Blind Hunter and Acceptance Auditor completed. **Edge Case Hunter failed** (Fable out of usage credits, then the Sonnet session limit). Its main edge classes (suffix case, double suffix, same-slug siblings, reserved names) were covered by Blind Hunter and by the spec's own analysis. Acceptance Auditor: all 8 ACs satisfied; it independently confirmed the contract gate is clean and re-ran the tests (28/28).
+
+- [x] [Review][Patch] `_promoteEntity`'s doc comment claimed exact byte preservation "apart from" the Story 5.1 rewrite, which read as a contradiction. Reworded: the move itself never re-encodes, and the rewrite is a separate write after the move. [apps/mobile/lib/app/category_entities_page.dart:135]
+- [x] [Review][Patch] `docs/agent-writing-rules.md` §2.5's stop-and-ask list implied the app itself blocks promotion when both `frank.ru.md` and `frank.en.md` exist. It doesn't, and by spec it shouldn't (Out of scope: a same-slug sibling stays a separate entity, with no data loss). Clarified that the list is for manual promotion, that the app refuses the first two cases, and that in the third it promotes the picked file and leaves the other in place. Also reflowed an uneven §2.2 line wrap. [docs/agent-writing-rules.md:163]
+- Dismissed (12), each verified against the code:
+  - a bare `frank.md` sibling next to a promoted `frank.ru.md`: out of scope per the spec; nothing is lost, and a second promotion is refused by the collision guard;
+  - AC numbering gaps in test names: a blind-review artifact; AC2/5/6/7 are covered by existing tests or aren't test-shaped;
+  - the duplicated suffix regex: drift can't make a folder unrecognizable, since the card name always equals the folder name by construction; it would only leave a new language's suffix in place;
+  - the `media` literal: same shape as the existing create-flow guards;
+  - a double suffix tested only as a pure function: the loader's `<x>/<x>.md` rule is generic and is exercised end to end by AC4;
+  - the `.MD` case mismatch: unreachable, because the loader only lists lowercase `.md` files as entities;
+  - the image test not asserting `writeCalls`: the content assertion proves the write;
+  - the dialog showing a path: required by AC6;
+  - the untested legacy suffixed-folder claim: follows from the loader's card rule pinned by golden fixtures;
+  - `'$newFolderPath/index.md'` interpolation: the same join style as the rest of the file;
+  - the barrel export sits in alphabetical order, the file's convention (Auditor nit);
+  - §4's New-entity note was edited although the task said "leave it": the edit is accurate (Auditor nit).
 
 ## Dev Notes
 
@@ -394,12 +414,46 @@ surface).
 
 ### Agent Model Used
 
+Claude Opus 5.5 (claude-opus-5-5)
+
 ### Debug Log References
+
+- Baseline: `flutter test` 788 passing (Story 5.4's recorded count; HEAD since then changed docs only).
+- Task 1, red → green: `test/lore/promotion_test.dart` first failed to compile (`Method not found: 'promotionTargetOf'`), then passed 8/8 after `lib/lore/promotion.dart` landed.
+- Task 3 before Task 2, red → green: with `_repo()` generalized, all 14 existing promote tests stayed green and 6 of the 7 new Story 5.6 tests failed. For example, `moveCalls` showed `characters/frank.ru/frank.ru.md` where `characters/frank/frank.md` was expected. The AC4 end-to-end test passed even before the change, because the old `frank.ru/frank.ru.md` is also a card the loader recognizes. It stays as a guard that the new name is recognized too. After Task 2, `promote_entity_test.dart` + `promotion_test.dart` pass 28/28.
+- `flutter test` (full suite): 803 passing (+15 = 8 unit + 7 widget), 0 failures. `flutter analyze`: No issues found.
+- `npm test`: 4/4. Contract gate (`git status --porcelain lib/lore.js test/fixtures/ scripts/ apps/mobile/lib/lore/lore_loader.dart apps/mobile/lib/lore/lore_model.dart`): empty.
 
 ### Completion Notes List
 
+- New pure helper `promotionTargetOf(entryId)` (`lib/lore/promotion.dart`, exported via the `lore/` barrel):
+  - Strips the final `.ru.md`/`.en.md` case-insensitively (a documented mirror of the loader's private `_langRe`; the loader itself is untouched), otherwise the plain `.md`, and returns the loreDir-relative folder and card ids.
+  - The stripped name equals the loader's own `base`, so the result is always a card the loader recognizes.
+- `_promoteEntity` now uses the helper and computes the target **before** the confirm dialog, which names the destination (`Its card moves to characters/frank/frank.md.`). This replaces the no-longer-true "unchanged — just moved" line.
+- Two guards were added, both before any storage call:
+  - a reserved `media` folder name (AC8), refused before the dialog opens, with the same wording as the create flows' reserved-name checks;
+  - an existing `<folder>/index.md` counts as a card collision alongside `<folder>/<slug>.md` (AC3).
+- The Story 2.17 decision that an existing card-less folder is not a collision is unchanged. So are the single `movePath`, the ensureDir → move → optional rewrite order, the Story 5.1 rewrite (it still can't fail a promotion), the `_promotingIds` guard, both catch clauses and the rescan.
+- Reverses Story 2.17's recorded non-goal (`frank.ru.md` → `frank.ru/frank.ru.md`). Existing suffixed folders aren't migrated; they still load as entity folders.
+- Docs:
+  - ARCHITECTURE.md §3.2 and project-context.md "Entity resolution" state the suffix-free folder rule.
+  - `docs/agent-writing-rules.md` §2.2, §2.5 (procedure, stop-and-ask cases, legacy suffixed folders), §3, §4 and the checklist match the new behavior.
+
 ### File List
+
+- apps/mobile/lib/lore/promotion.dart (new)
+- apps/mobile/lib/lore/lore.dart (modified: export)
+- apps/mobile/lib/app/category_entities_page.dart (modified: `_promoteEntity`, `_showPromoteConfirmDialog`)
+- apps/mobile/test/lore/promotion_test.dart (new)
+- apps/mobile/test/app/promote_entity_test.dart (modified: `_repo()` generalized, `_promoteAndConfirm` helper, new Story 5.6 group)
+- ARCHITECTURE.md (modified: §3.2)
+- _bmad-output/project-context.md (modified: Entity resolution)
+- docs/agent-writing-rules.md (modified: §2.2, §2.5, §3, §4, §9)
+- _bmad-output/implementation-artifacts/5-6-drop-the-language-suffix-when-promoting-an-entity-to-a-folder.md (this file)
+- _bmad-output/implementation-artifacts/sprint-status.yaml (status)
 
 ## Change Log
 
 - 2026-09-24: Story created from KseiPo's 2026-09-24 decision (folders never carry a language suffix). Ultimate context engine analysis completed; comprehensive developer guide created.
+- 2026-09-24: Implemented. Promote to folder drops a language suffix (`frank.ru.md` → `frank/frank.md`) via the new pure `promotionTargetOf`. Adds an `index.md` collision check and a reserved-`media` guard, and the confirm dialog names the destination. Docs updated. `flutter test` 788 → 803, `flutter analyze` clean, `npm test` 4/4, contract gate clean.
+- 2026-09-25: Code review, cross-model (Sonnet 5 Blind Hunter + Acceptance Auditor; Edge Case Hunter failed on usage limits). 2 low patches applied (doc-comment wording; §2.5 manual-vs-app promotion clarification), 12 dismissed, 0 deferred. Marked done.

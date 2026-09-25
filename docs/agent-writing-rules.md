@@ -77,10 +77,10 @@ before you create a new top-level folder.
   entity's content. (`index.md` also works as the card, but the existing lore uses
   `<folder-name>.md`. Never have both.)
 
-**The card never has a language suffix.** If `selena/` contains only
-`selena.ru.md`, the app does not treat it as a card. It treats `selena/` as a
-sub-category, and every file inside it, events included, turns into a separate
-loose entity.
+**Folder names never carry a language suffix, and neither does the card inside
+the folder.** If `selena/` contains only `selena.ru.md`, the app does not treat it
+as a card. It treats `selena/` as a sub-category, and every file inside it, events
+included, turns into a separate loose entity.
 
 ```
 characters/
@@ -153,16 +153,26 @@ directly in the entity folder, like `arc.md`.
 
 When a simple entity needs events or quests (ask the author first):
 
-1. Create `<slug>/` next to `<slug>.md` and move the card to `<slug>/<slug>.md`
-   without changing its content, except for step 2.
+1. Create `<slug>/` next to the card and move the card to `<slug>/<slug>.md`
+   without changing its content, except for step 2. **Drop any language suffix**:
+   `frank.md` and `frank.ru.md` both become `frank/frank.md`.
 2. The card is now one level deeper, so prefix every **relative** image path in it
    with `../`: `![](media/frank.jpg)` becomes `![](../media/frank.jpg)`. Leave
-   `http(s)://` and absolute paths alone. The app's own "Promote to folder" action
-   does exactly this.
+   `http(s)://` and absolute paths alone.
 3. Then add the sub-entries.
 
-Promote only top-level simple entities. If the card has a language suffix
-(`frank.ru.md`), ask the author how to name the folder.
+The app's "Promote to folder" action performs steps 1 and 2 the same way. Promote
+only top-level simple entities. When promoting by hand, stop and ask the author if:
+
+- `<slug>/` already holds a card (`<slug>.md` or `index.md`);
+- the folder name would be `media`;
+- both `frank.ru.md` and `frank.en.md` exist (only one of them can become the card).
+
+The app refuses the first two cases on its own. In the third it promotes whichever
+file the author picks and leaves the other one in place as a separate entity.
+
+Folders that older app versions named with a suffix (`frank.ru/frank.ru.md`) still
+load correctly. Rename them only with the author's go-ahead.
 
 ### 2.6 Names the app treats specially
 
@@ -188,8 +198,10 @@ Don't use these names by accident:
   `# Title` inside the file, which can be in any language.
 - **Language suffix**: `.ru.md` or `.en.md` (lowercase) after the slug. Both files
   of a pair share exactly the same slug.
-- **Cards take no suffix.** That covers entity cards, simple entities, and section
-  or quest overviews (§4).
+- **Folders never take a suffix, and neither do the cards named after them**:
+  entity cards (`<folder>/<folder>.md`) and section or quest overviews. A simple
+  entity may carry one (the app's "New entity" button creates `<slug>.ru.md`), but
+  it isn't paired either way (§4).
 - **New sub-entries always get a suffix**, normally `<slug>.ru.md` because Russian
   is the default authoring language. The app treats a suffix-less sub-entry as
   "language not assigned yet".
@@ -211,14 +223,16 @@ Don't use these names by accident:
 - A lone `.ru.md` shows a "needs translation" badge. That badge is an intended to-do
   signal, not an error, so don't create empty or stub `.en.md` files to clear it. A
   lone `.en.md` is also fine: it's an English-only or English-original scene.
-- **Cards are single-language files with no suffix**: entity cards, simple entities,
-  and section or quest overviews. The app doesn't pair them. A translated copy next
-  to an entity card is invisible, and `mira.ru.md` plus `mira.en.md` at category
-  level show up as two separate entities. Put a card's names in both languages into
-  its aliases line instead (§5.1). The exception is `promotion/` posts: they are
-  paired files by decision, and the app simply lists both.
-- The app's own "New entity" button creates simple entities as `<slug>.ru.md`. Those
-  files work too; leave them as they are.
+- **Cards are never paired.** Entity cards and section or quest overviews are
+  single-language files with no suffix. A simple entity may carry a suffix, but the
+  app doesn't pair it either. A translated copy next to an entity card is
+  invisible, and `mira.ru.md` plus `mira.en.md` at category level show up as two
+  separate entities. Put a card's names in both languages into its aliases line
+  instead (§5.1). The exception is `promotion/` posts: they are paired files by
+  decision, and the app simply lists both.
+- The app's own "New entity" button creates simple entities as `<slug>.ru.md`.
+  Leave those files as they are; when one is promoted, the suffix is dropped
+  (§2.5).
 
 ### 4.1 Translating
 
@@ -461,7 +475,7 @@ Don't edit these unless the author asks.
 ## 9. Checklist before you finish
 
 - [ ] New files are in the right place (§2), with slug names. Sub-entries have a
-      language suffix; cards don't.
+      language suffix; folders and the cards named after them don't.
 - [ ] Every new file starts with `# Title`. New entity cards have an aliases line
       with both Russian and English names.
 - [ ] Each translation is a separate file with the same slug, the same structure,
@@ -489,8 +503,9 @@ Don't edit these unless the author asks.
 | Dangling wikilink | `[[Selina]]` when no entity has that title or alias |
 
 Valid conventions (dialogue, links, placeholders, conditionals) and emphasized
-labels like `**Type:** value` are only highlighted, never flagged. A file this linter passes can still break the placement
-and naming rules in §2–§4, which the app doesn't report; check those yourself.
+labels like `**Type:** value` are only highlighted, never flagged. A file this
+linter passes can still break the placement and naming rules in §2–§4, which the
+app doesn't report; check those yourself.
 
 ---
 

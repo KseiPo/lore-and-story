@@ -132,14 +132,19 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
   final Set<String> _promotingIds = {};
 
   /// Promotes a simple entity (`entry.tree == null`) to an entity folder
-  /// (`<slug>.md` → `<slug>/<slug>.md`, FR26). A single atomic rename — see
-  /// [RepoStorage.movePath] — so the card's bytes are preserved exactly with
-  /// no re-encode step.
+  /// (FR26): a card named `<slug>.md` or `<slug>.<lang>.md` moves to
+  /// `<slug>/<slug>.md`. Folders never carry a language suffix, so the card
+  /// drops it too (Story 5.6, see [promotionTargetOf]). The move itself is a
+  /// single atomic rename (see [RepoStorage.movePath]) that never re-encodes
+  /// the card's bytes. Story 5.1's image-path rewrite, when a card needs one,
+  /// is a separate write after the move has succeeded.
   ///
-  /// The pre-flight guard only refuses an existing **card** at the target
-  /// (`newCardPath`) — not an existing **folder** there (Review fix). Only the
+  /// The pre-flight guard refuses an existing **card** in the target folder:
+  /// `<slug>/<slug>.md`, or `<slug>/index.md` (Story 5.6). The loader prefers
+  /// `index.md`, which would demote the moved card to a stray root overview.
+  /// It does not refuse an existing **folder** there (Review fix). Only the
   /// card colliding is actually dangerous (`movePath` would silently
-  /// overwrite it); refusing on the folder too would mean a single transient
+  /// overwrite it). Refusing on the folder too would mean a single transient
   /// failure between `ensureDir` succeeding and `movePath` failing leaves an
   /// orphaned empty folder that then permanently blocks every retry.
   /// `ensureDir` is idempotent, so proceeding into an existing (possibly
@@ -150,23 +155,34 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
     // silently orphan an existing entity folder's sub-entries (Review fix).
     if (entry.tree != null || _promotingIds.contains(entry.id)) return;
 
-    final confirmed = await _showPromoteConfirmDialog(context, entry.title);
+    final target = promotionTargetOf(entry.id);
+
+    // Story 5.6 (AC8): the walk never descends into a `media/` folder
+    // (`lore_loader.dart`'s `_isSkippedWalkDir`), so an entity promoted into
+    // one would silently vanish. Dropping the language suffix creates this
+    // path (`media.ru.md` used to promote to a visible `media.ru/`). Refused
+    // before the confirm dialog, which should never offer an impossible
+    // promotion. Same guard as the create flows' reserved-name checks.
+    final folderName =
+        target.folderId.substring(target.folderId.lastIndexOf('/') + 1);
+    if (folderName == 'media') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('"media" is reserved and cannot be used as a folder name.'),
+        ),
+      );
+      return;
+    }
+
+    final confirmed =
+        await _showPromoteConfirmDialog(context, entry.title, target.cardId);
     if (confirmed != true || !mounted) return;
 
     setState(() => _promotingIds.add(entry.id));
     try {
-      final lastSlash = entry.id.lastIndexOf('/');
-      final dirId = lastSlash == -1 ? '' : entry.id.substring(0, lastSlash);
-      final fileName =
-          lastSlash == -1 ? entry.id : entry.id.substring(lastSlash + 1);
-      final slug =
-          fileName.endsWith('.md') ? fileName.substring(0, fileName.length - 3) : fileName;
-      final newFolderId = dirId.isEmpty ? slug : '$dirId/$slug';
-      final newCardId = '$newFolderId/$slug.md';
-
       final cardPath = _repoPath(entry.id);
-      final newFolderPath = _repoPath(newFolderId);
-      final newCardPath = _repoPath(newCardId);
+      final newFolderPath = _repoPath(target.folderId);
+      final newCardPath = _repoPath(target.cardId);
 
       // Story 5.1: promotion adds one directory level, which silently breaks
       // any relative local image reference (`![alt](src)`) the card contains
@@ -177,7 +193,8 @@ class _CategoryEntitiesPageState extends State<CategoryEntitiesPage> {
       final rewrittenText = rewriteRelativeImagePaths(entry.text);
 
       try {
-        if (await widget.storage.exists(newCardPath)) {
+        if (await widget.storage.exists(newCardPath) ||
+            await widget.storage.exists('$newFolderPath/index.md')) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('A folder with this name already exists.')),
@@ -317,14 +334,19 @@ Future<String?> _showCreateEntityDialog(BuildContext context) {
   );
 }
 
-Future<bool?> _showPromoteConfirmDialog(BuildContext context, String title) {
+/// [destinationCardId] is the loreDir-relative path the card moves to (e.g.
+/// `characters/frank/frank.md`). It is named in the dialog because promotion
+/// can rename the card as well as move it (Story 5.6 drops a language suffix;
+/// Story 5.1 may rewrite image paths).
+Future<bool?> _showPromoteConfirmDialog(
+    BuildContext context, String title, String destinationCardId) {
   return showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Promote to folder?'),
       content: Text(
         '"$title" will become a folder that can hold events and quests. '
-        'The card itself is unchanged — just moved.',
+        'Its card moves to $destinationCardId.',
       ),
       actions: [
         TextButton(
