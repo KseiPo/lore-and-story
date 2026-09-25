@@ -48,6 +48,7 @@ TextStyle styleForConvention(ConventionKind kind, ColorScheme scheme, TextStyle 
     case ConventionKind.malformedMarkup:
     case ConventionKind.malformedDialogue:
     case ConventionKind.unpairedConditional:
+    case ConventionKind.italicMonologue:
       return base.copyWith(
         color: scheme.error,
         decoration: TextDecoration.underline,

@@ -39,6 +39,10 @@ enum ConventionKind {
   // (`— если …` / `— конец условия —`) with no matching counterpart.
   malformedDialogue,
   unpairedConditional,
+  // Error kind (Story 5.5) — the retired italic inner-monologue form
+  // (`*Thought:* …`; plain `Thought: …` / `Мысль: …` since 2026-08-08), so it
+  // gets an accurate finding instead of a false "missing space".
+  italicMonologue,
 }
 
 /// The [ConventionKind]s that denote suspect/invalid markup (FR9a/FR18). One
@@ -50,6 +54,7 @@ const Set<ConventionKind> errorKinds = {
   ConventionKind.malformedMarkup,
   ConventionKind.malformedDialogue,
   ConventionKind.unpairedConditional,
+  ConventionKind.italicMonologue,
 };
 
 /// Whether [kind] denotes suspect/invalid markup (a member of [errorKinds]).
@@ -110,8 +115,52 @@ final RegExp _dialogue =
 // contains a digit, and a scheme/path separator right after the colon is a
 // URL, not a missing space. Verified against those exact cases in
 // convention_matcher_test.dart.
+//
+// (Story 5.5) A colon inside an emphasized label is not a missing space:
+// `**Role:** value`, `**Secrets:**`, `_Note:_ …`. Entity cards open with
+// exactly such a profile block (ARCHITECTURE.md §3.2b), and every one of those
+// lines used to be flagged. So there's no match when the colon is followed by
+// a closing run of `*`/`_` (any length, mixed allowed — `**_Role:_**` closes
+// with `_**`) that ends the word (see [_afterCloser]), and a delimiter appears
+// before the colon — the opener that run closes (the lookbehind). Without the
+// opener check, a missing space followed by a new emphasis run
+// (`Frank:* sighs* …`, `Frank:** hi`) would pass too (review fix). A closer
+// followed by a letter (`**Role:**value`) is still a missing space. Accepted
+// residual: the lookbehind only asks whether some delimiter precedes the
+// colon, not whether it is still open (`_Note_ Frank:* hi` passes) — a regex
+// can't count balance, and the shape is implausible in prose. This only
+// narrows `(?=[^\s/])`, so the exclusivity with [_dialogue] above still holds.
 final RegExp _malformedDialogue = RegExp(
-    r'^[ \t]*[^\s:.!?\[\d][^\n:.!?\d]{1,39}?(?:\s*\([^)\n]*\))?[ \t]*:(?=[^\s/])');
+    r'^[ \t]*[^\s:.!?\[\d][^\n:.!?\d]{1,39}?(?:\s*\([^)\n]*\))?[ \t]*:(?=[^\s/])'
+    r'(?!(?<=[*_][^\n]*:)[*_]+'
+    '$_afterCloser)');
+// What must follow a closing emphasis run for it to end a label: whitespace,
+// closing punctuation, or end of line — never a letter or digit. Shared by
+// [_malformedDialogue] and [_italicMonologue] so the two stay exact
+// complements on the same colon: a different set in each would let a line
+// fall between them (review fix — `*Thought:*, …` did, and got the
+// missing-space message).
+const String _afterCloser = r'(?:[\s.,;!?)\]"»”’…—–]|$)';
+// Retired italic inner monologue (Story 5.5, decided with KseiPo
+// 2026-09-24): `*Thought:* …` was the EN inner-monologue form until
+// 2026-08-08, when ARCHITECTURE.md §3.3 and the AI prompt conventions switched
+// to plain `Thought: …` (RU was always plain `Мысль: …`). Once
+// [_malformedDialogue] stopped reading a closing emphasis delimiter as a
+// missing space, this shape would lint clean, so it keeps a finding, now with
+// an accurate message. A single `*` or `_` opens it, so `**Thought:**` can't
+// match (the keyword must follow a single delimiter). The closer is any run of
+// them — they needn't match the opener: `*Thought:_` and `*Thought:**` are
+// broken attempts at the same form (review fix). Optional emotion, as in
+// dialogue. Case-insensitive, which works for Cyrillic (see [_condOpen]). No
+// `\b` (ASCII-only in Dart): the colon right after the keyword or emotion
+// already ends the word, so `*Thoughts:*` can't match. The closer must be
+// followed by [_afterCloser], exactly the set [_malformedDialogue]'s exemption
+// uses, so the two never both match and never both miss: `*Thought:*text` is
+// a missing space, `*Thought:*, …` is this.
+final RegExp _italicMonologue = RegExp(
+    r'^[ \t]*[*_](?:Thought|Мысль)(?:\s*\([^)\n]*\))?[ \t]*:[*_]+'
+    '(?=$_afterCloser)',
+    caseSensitive: false);
 
 // Inline patterns (scanned across the line via allMatches).
 final RegExp _wikilink = RegExp(r'\[\[[^\[\]\n]+\]\]');
@@ -305,6 +354,11 @@ void _matchLine(String line, int base, List<ConventionToken> out) {
   if (badDlg != null) {
     cands.add(ConventionToken(0, badDlg.end, ConventionKind.malformedDialogue));
   }
+  final italicThought = _italicMonologue.matchAsPrefix(line);
+  if (italicThought != null) {
+    cands.add(
+        ConventionToken(0, italicThought.end, ConventionKind.italicMonologue));
+  }
 
   // Error candidates (FR9a) — added alongside the valid ones; precedence in
   // _resolveOverlaps lets an error win over the valid kind it shadows (a
@@ -371,10 +425,15 @@ int _priority(ConventionKind k) {
       return 4;
     case ConventionKind.dialogueSpeaker:
       return 5;
-    // Mutually exclusive with dialogueSpeaker on the same colon (see
-    // [_malformedDialogue]'s comment), so this precedence never actually
-    // competes with it in practice — placed here for readability only.
+    // dialogueSpeaker, malformedDialogue, and italicMonologue share a slot:
+    // their patterns are mutually exclusive on the same colon (see
+    // [_malformedDialogue] and [_italicMonologue]). They can only overlap via
+    // a colon inside emotion parens (`Frank (a:b): hi`, `*Thought (a: b):* x`),
+    // where the shorter match stops at that inner colon; all start at 0, so
+    // the longer-first tie-break in [_resolveOverlaps] keeps the full match.
     case ConventionKind.malformedDialogue:
+      return 5;
+    case ConventionKind.italicMonologue:
       return 5;
     // Resolved separately by [_matchConditionalMarkers], never a per-line
     // candidate — priority is irrelevant but every enum value needs a case.

@@ -228,7 +228,9 @@ twee exists only in the final passages.
 
 - Dialogue: `Name (emotion): phrase.` — e.g. `Селена (спокойно): Иногда
 техника чувствует, когда на неё злятся.` Emotion is optional.
-- Inner monologue: `Мысль: …` (RU) / `Thought: …` (EN).
+- Inner monologue: `Мысль: …` (RU) / `Thought: …` (EN) — plain, not italic.
+  The earlier italic `*Thought:* …` form is retired (2026-08-08); the linter
+  flags it.
 - Variable placeholders: readable square brackets — `[имя героя]`,
   `[награда]`, `[станция назначения]` — never `<<=$var>>`.
 - Player choices / passage links — unified bracket form (2026-08-05,

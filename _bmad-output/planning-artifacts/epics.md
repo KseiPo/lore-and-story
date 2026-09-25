@@ -200,7 +200,9 @@ consolidated into one dedicated file. 5.3 — show the resolved connection
 target (endpoint/protocol/model) in Test Connection's own outcome message,
 narrowly amending Story 4.7's AC5 "no display" rule. 5.4 — keep the screen
 awake for the duration of an in-flight AI request, so a slow local model
-isn't cut off by the screen turning off first.
+isn't cut off by the screen turning off first. 5.5 — stop the Story 3.1
+linter flagging emphasized labels (`**Role:** …`) as malformed dialogue, and
+give the retired italic `*Thought:*` monologue form its own accurate finding.
 
 ---
 
@@ -762,7 +764,9 @@ consolidated into one dedicated file. 5.3 — show the resolved connection
 target (endpoint/protocol/model) in Test Connection's own outcome message,
 narrowly amending Story 4.7's AC5 "no display" rule. 5.4 — keep the screen
 awake for the duration of an in-flight AI request, so a slow local model
-isn't cut off by the screen turning off first.
+isn't cut off by the screen turning off first. 5.5 — stop the Story 3.1
+linter flagging emphasized labels (`**Role:** …`) as malformed dialogue, and
+give the retired italic `*Thought:*` monologue form its own accurate finding.
 
 ### Story 5.1: Preserve image paths when promoting an entity to a folder
 
@@ -946,3 +950,50 @@ So that a slow local model (e.g. LM Studio on my LAN, tested in Story 4.8) has t
 - No increase to retry/backoff/timeout budgets, and no change to how many attempts a transient failure gets — this story prevents the OS from severing the connection in the first place; it does not change what happens once a request has genuinely failed.
 - No user-visible indicator that the screen is being held awake (no icon, no toast) — invisible, correct-by-default behavior, consistent with how retry/backoff itself is already invisible to the author.
 - No wake-hold outside the span of an actual `AiClient.sendMessage` call — general app browsing/editing is unaffected; the device's normal screen-timeout behavior is untouched everywhere else.
+
+### Story 5.5: Stop flagging emphasized labels as malformed dialogue
+
+As the author,
+I want the linter to leave bold and italic labels like `**Role:** …` alone, and to tell me accurately when I've used the retired italic `*Thought:*` form,
+So that an ordinary entity card's profile block lints clean and every finding I do get is true.
+
+**Context (KseiPo, 2026-09-24):** Story 3.1's malformed-dialogue check (`_malformedDialogue` in
+`apps/mobile/lib/lore/convention_matcher.dart`) accepts any character except whitespace and `/` right after the colon.
+So when a label's colon sits *inside* its emphasis, the closing `**`/`*`/`_` counts as a "missing space":
+`matchConventions('**Role:** Previous keeper.')` yields `malformedDialogue` over `**Role:`, and the Lint panel says
+"Dialogue line is missing a space after the colon." Cyrillic labels (`**Селена:** Привет.`) behave the same;
+`**Role**: value` (colon outside the bold) and `- **Role:** value` (the list marker wins by priority) are clean. The
+repo's own sample card `lore/characters/mira.md` gets five such findings, one per labeled line (including end-of-line
+labels like `**Secrets:**`), and ARCHITECTURE.md §3.2b describes every entity card as opening with a profile block
+(type, faction, age, …) — so authors can hit this on every profile line. The error token also suppresses the `bold`
+token the editor toolbar's active-state logic reads, so Bold shows as inactive inside such a label. Separately, the
+italic inner-monologue form `*Thought:* …` — retired 2026-08-08, when ARCHITECTURE.md §3.3 and the translate/grammar
+prompt constants (`apps/mobile/lib/ai/`) switched to plain `Thought: …` — is flagged today only by the same accident,
+with a message that is wrong for it (there *is* a space).
+
+**Acceptance Criteria:**
+
+1. **(Emphasized labels are clean)** Given a line with an emphasized label whose colon sits inside the emphasis — bold
+   or italic, `*` or `_` delimiters, at line start or mid-line, followed by a value or by end of line (e.g.
+   `**Role:** …`, `**Селена:** …`, `**Secrets:**`, `_Note:_ …`) — when the matcher runs, then it yields no
+   `malformedDialogue` token, and the emphasis token the error used to suppress (e.g. `bold`) is back.
+2. **(Real missing spaces are still flagged)** Given a genuinely missing space — `Frank:hello`, `Frank:**hi**`, or
+   `**Role:**value` (nothing after the closing emphasis) — when the matcher runs, then it is still `malformedDialogue`;
+   and every existing false-positive guard (digits, `/`, URLs, times like `12:30`, ratios, emoticons) is unchanged.
+3. **(The retired italic monologue gets its own, accurate finding)** Given a line that starts with the retired italic
+   inner-monologue form — `*Thought:* …`, `_Thought:_ …`, or the RU mirror `*Мысль:* …`, with an optional emotion —
+   when I lint the file, then it is reported under a new dedicated error kind whose message says inner monologue is
+   plain `Thought:` / `Мысль:` and the italic form is retired — never as a missing space.
+4. **(Matcher invariants hold)** Given the new and changed patterns, when this story ships, then they stay linear
+   (ReDoS-safe) like every pattern in the file; `_dialogue`, `_malformedDialogue`, and the new pattern are mutually
+   exclusive on the same colon; and the matcher's sorted/non-overlapping, CRLF-safe, never-throws contract is unchanged.
+5. **(Regression coverage)** Given `convention_matcher_test.dart` and `convention_lint_test.dart`, when this story
+   ships, then both cover the cases above, including `mira.md`'s full card linting clean.
+
+**Notes:** Decided with KseiPo 2026-09-24: keep the retired `*Thought:*` form flagged, with its own message — rather
+than unflagging it, or fixing bold labels only (which would leave every italic label, including the `_…_` the
+toolbar's italic button inserts, flagged with the wrong message). Bold monologue labels (`**Thought:**`) were never a
+convention in any version and stay out of scope. A correctness fix to Story 3.1 (FR18), no new FR; like every
+`convention_matcher.dart` change, it never touches the JS reference or the golden fixtures. Follow-up outside the
+repo's tracked files: `docs/agent-writing-rules.md` currently tells external agents to avoid the `**Type:** value`
+form because of this false positive — update it once this ships.

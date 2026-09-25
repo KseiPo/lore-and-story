@@ -304,6 +304,164 @@ void main() {
     });
   });
 
+  group('matchConventions — emphasized labels are not malformed dialogue '
+      '(Story 5.5)', () {
+    test('a profile label whose colon sits inside the bold is just bold — '
+        'the reported false positive; the bold token it used to hide (which '
+        'the toolbar\'s Bold active state reads) is back', () {
+      expect(matchConventions('**Role:** Previous keeper of Saltmere Light.'),
+          [const ConventionToken(0, 9, ConventionKind.bold)]);
+      expect(kindsOf('**Селена:** Привет.'), {ConventionKind.bold});
+    });
+
+    test('the label may end the line (e.g. heading the list below it), '
+        'including under CRLF', () {
+      expect(matchConventions('**Secrets:**'),
+          [const ConventionToken(0, 12, ConventionKind.bold)]);
+      expect(kindsOf('**Secrets:**\r\n- Knew the Light burns memories.'),
+          {ConventionKind.bold, ConventionKind.listMarker});
+    });
+
+    test('italic, underscore, and nested emphasis closers are recognized too',
+        () {
+      expect(kindsOf('*Note:* see arc.md'), {ConventionKind.italic});
+      // Exactly what the toolbar's italic button inserts around a selection.
+      expect(kindsOf('_Note:_ see arc.md'), {ConventionKind.italic});
+      // Toolbar bold, then italic, on the same label — it closes with `_**`.
+      expect(kindsOf('**_Role:_** value'), {ConventionKind.bold});
+      // The matcher doesn't model `__bold__` or bold-italic as `bold`, so
+      // only the absence of an error is asserted for these two.
+      expect(kindsOf('__Role:__ value').where(isError), isEmpty);
+      expect(kindsOf('***Role:*** value').where(isError), isEmpty);
+    });
+
+    test('other label shapes the old pattern also tripped on', () {
+      expect(kindsOf('**Voice / writing style:** Terse, precise.'),
+          {ConventionKind.bold});
+      expect(kindsOf('**Age:** 42'), {ConventionKind.bold});
+      expect(kindsOf('  **Indented:** value'), {ConventionKind.bold});
+      expect(kindsOf('Note that **the key:** matters'), {ConventionKind.bold});
+    });
+
+    test('a closer followed by punctuation, or a longer delimiter run, still '
+        'closes the label (review fix)', () {
+      expect(kindsOf('**Role:**, value'), {ConventionKind.bold});
+      expect(kindsOf('**Role:**.'), {ConventionKind.bold});
+      expect(kindsOf('(**Note:**) see arc.md'), {ConventionKind.bold});
+      // A doubled `****` is what pressing Bold on a label produced while the
+      // old false positive hid the bold token from the toolbar.
+      expect(kindsOf('****Role:**** value').where(isError), isEmpty);
+      expect(kindsOf('**__Role:__** value').where(isError), isEmpty);
+    });
+
+    test('a genuinely missing space is still flagged — including one right '
+        'after the closing emphasis', () {
+      expect(matchConventions('**Role:**value').first,
+          const ConventionToken(0, 7, ConventionKind.malformedDialogue));
+      expect(kindsOf('Frank:**hello**'),
+          contains(ConventionKind.malformedDialogue));
+      expect(kindsOf('Frank:_hello_'),
+          contains(ConventionKind.malformedDialogue));
+      expect(kindsOf('*Note:*text'), {ConventionKind.malformedDialogue});
+      // The retired monologue form with no space after it is a missing
+      // space, never also an italicMonologue (the two are disjoint).
+      expect(kindsOf('*Thought:*text'), {ConventionKind.malformedDialogue});
+    });
+
+    test('an emphasis run that opens right after the colon is no closer — '
+        'nothing was opened before the colon (review fix)', () {
+      expect(kindsOf('Frank:* sighs heavily* Look.'),
+          contains(ConventionKind.malformedDialogue));
+      expect(kindsOf('Selena:** frowns** Careful.'),
+          contains(ConventionKind.malformedDialogue));
+      expect(kindsOf('Note:_ дальше по тексту_ пояснение.'),
+          contains(ConventionKind.malformedDialogue));
+      expect(kindsOf('Frank:** hi'), {ConventionKind.malformedDialogue});
+    });
+
+    test('emphasis-delimiter runs after a colon stay linear (ReDoS guard)', () {
+      final sw = Stopwatch()..start();
+      matchConventions('ab:${'*' * 50000}');
+      matchConventions('**ab:${'_' * 50000}x');
+      matchConventions('_${'_' * 50000}:');
+      // The opener check looks back across the whole emotion group.
+      matchConventions('a (${'x' * 50000}):* x');
+      sw.stop();
+      expect(sw.elapsedMilliseconds, lessThan(500),
+          reason: 'the emphasis-closer lookahead must stay bounded');
+    });
+  });
+
+  group('matchConventions — retired italic inner monologue (Story 5.5)', () {
+    test('the retired `*Thought:*` form is its own error kind, spanning the '
+        'whole emphasized label', () {
+      expect(matchConventions('*Thought:* She knew.'),
+          [const ConventionToken(0, 10, ConventionKind.italicMonologue)]);
+      expect(isError(ConventionKind.italicMonologue), isTrue);
+      expect(errorKinds, contains(ConventionKind.italicMonologue));
+    });
+
+    test('underscore italics, the RU mirror, an emotion, end of line, and CRLF',
+        () {
+      expect(kindsOf('_Thought:_ She knew.'), {ConventionKind.italicMonologue});
+      expect(kindsOf('*Мысль:* Она знала.'), {ConventionKind.italicMonologue});
+      expect(kindsOf('*Thought (tired):* Not again.'),
+          {ConventionKind.italicMonologue});
+      expect(kindsOf('*Мысль (устало):* Опять.'),
+          {ConventionKind.italicMonologue});
+      expect(kindsOf('*Thought:*'), {ConventionKind.italicMonologue});
+      expect(kindsOf('*Thought:*\r\nnext'), {ConventionKind.italicMonologue});
+    });
+
+    test('punctuation after the closer, or a mismatched closer run, is still '
+        'the retired form — never a "missing space" or silence (review fix)',
+        () {
+      expect(kindsOf('*Thought:*, she thought.'),
+          {ConventionKind.italicMonologue});
+      expect(kindsOf('*Мысль:*.'), {ConventionKind.italicMonologue});
+      expect(kindsOf('*Thought:** value'), {ConventionKind.italicMonologue});
+      expect(kindsOf('*Thought:**'), {ConventionKind.italicMonologue});
+    });
+
+    test('is case-insensitive', () {
+      expect(kindsOf('*thought:* x'), {ConventionKind.italicMonologue});
+      expect(kindsOf('*МЫСЛЬ:* x'), {ConventionKind.italicMonologue});
+    });
+
+    test('the current plain form stays valid and is never flagged', () {
+      expect(matchConventions('Thought: She knew.').first,
+          const ConventionToken(0, 8, ConventionKind.dialogueSpeaker));
+      expect(kindsOf('Мысль (устало): Опять.'), {ConventionKind.dialogueSpeaker});
+    });
+
+    test('only the retired shape is flagged — never other emphasized labels',
+        () {
+      // Bold monologue was never a convention in any version (out of scope).
+      expect(kindsOf('**Thought:** x'), {ConventionKind.bold});
+      expect(kindsOf('*Thoughts:* x'), {ConventionKind.italic});
+      // Line-anchored, like dialogue: a mid-line italic "thought:" is prose.
+      expect(kindsOf('He had one *thought:* only.').where(isError), isEmpty);
+    });
+
+    test('an emotion containing a colon still yields one italicMonologue '
+        'token — it outranks the dialogue patterns that stop at the inner '
+        'colon (same priority, longer span wins)', () {
+      expect(matchConventions('*Thought (a: b):* x'),
+          [const ConventionToken(0, 17, ConventionKind.italicMonologue)]);
+    });
+
+    test('stays linear on adversarial input (ReDoS guard)', () {
+      final sw = Stopwatch()..start();
+      matchConventions('*Thought (${'x' * 50000}');
+      matchConventions('*Thought${' ' * 50000}x');
+      matchConventions('_Мысль${'\t' * 50000}:');
+      matchConventions('*Thought:${'*' * 50000}x');
+      sw.stop();
+      expect(sw.elapsedMilliseconds, lessThan(500),
+          reason: 'the italic-monologue pattern must stay linear');
+    });
+  });
+
   group('matchConventions — unpaired conditional markers (Story 3.1, FR18)', () {
     test('the exact ARCHITECTURE.md example, fully paired, is never flagged', () {
       const text = '— если игрок знаком с доктором Джулией — что-то — '
