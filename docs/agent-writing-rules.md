@@ -265,10 +265,10 @@ same kind of output:
   mention detection, and the AI translation glossary.
 - **Body**: free markdown. A typical card has a profile block followed by `## `
   sections (Character, Past, Memories, Portrait prompt…).
-- In a profile block, write `**Type**: value` (colon outside the bold) or use a list
-  item (`- **Type:** value`). The app's linter flags a line that starts with
-  `**Type:** value` as a dialogue line missing a space. Don't mass-rewrite existing
-  cards just for this.
+- In a profile block, write each field as a bold label with the colon inside the
+  bold, like the existing cards: `**Type:** value`. A label can also end its line
+  (`**Secrets:**` above a list). Leave a space after the closing `**`: the linter
+  flags `**Type:**value` as a missing space.
 - Titles and aliases must not contain `[[`, `]]`, `->`, `<-` or `|`, because a name
   containing them can't be wikilinked.
 
@@ -333,7 +333,8 @@ Carrie: Last call!
 ```
 
 - The speaker name starts the line as plain text: not bold, not italic, not a
-  wikilink. Those forms lose the dialogue highlight, and `**Name:**` is flagged.
+  wikilink. Those forms lose the dialogue highlight, and the linter doesn't flag
+  them, so check this yourself.
 - Keep names to 40 characters or fewer, with no `.`, `!`, `?` or `:` inside. For
   example, `Dr. Julia:` isn't recognized as dialogue.
 - **A space after the colon is required.** `Frank:hello` is flagged.
@@ -342,7 +343,7 @@ Carrie: Last call!
 
 Write `Мысль: …` in Russian files and `Thought: …` in English files, the same way as
 a dialogue line. An emotion is allowed (`Мысль (устало): …`). Don't use italics: the
-old `*Thought:*` form is flagged by the app.
+linter flags the retired `*Thought:*` form, and `_Thought:_` and `*Мысль:*` too.
 
 ### 6.3 Variable placeholders
 
@@ -482,15 +483,16 @@ Don't edit these unless the author asks.
 | Twee in prose | `<<set $x to 1>>`, `<<=$name>>` |
 | HTML tag | `<br>` |
 | Unclosed wikilink | `[[Selena` |
-| Dialogue colon without a space | `Frank:hello`, `**Селена:** …`, `*Thought:* …` |
+| Dialogue colon without a space | `Frank:hello`, `**Type:**value` |
+| Italic inner monologue (retired form) | `*Thought:* …`, `_Thought:_ …`, `*Мысль:* …` |
 | Unpaired conditional | a `— если … —` with no `— конец условия —` (checked only once the file contains at least one closer) |
 | Dangling wikilink | `[[Selina]]` when no entity has that title or alias |
 
-Valid conventions (dialogue, links, placeholders, conditionals) are only
-highlighted, never flagged. A file this linter passes can still break the placement
+Valid conventions (dialogue, links, placeholders, conditionals) and emphasized
+labels like `**Type:** value` are only highlighted, never flagged. A file this linter passes can still break the placement
 and naming rules in §2–§4, which the app doesn't report; check those yourself.
 
 ---
 
 _Source of truth: the Lore & Story app repo (ARCHITECTURE.md §3.2–3.3, the app's
-convention matcher and linter). Last synced with the app: 2026-09-24._
+convention matcher and linter). Last synced with the app: 2026-09-25._
