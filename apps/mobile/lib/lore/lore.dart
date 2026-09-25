@@ -13,3 +13,4 @@ export 'lore_browse.dart';
 export 'lore_loader.dart';
 export 'lore_model.dart';
 export 'project_config.dart';
+export 'promotion.dart';

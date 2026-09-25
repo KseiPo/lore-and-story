@@ -33,18 +33,26 @@ class _SlowMoveStorage extends FakeRepoStorage {
   }
 }
 
-/// A `characters/` category with one simple entity (`frank.md`) and, when
-/// [withExistingCard] is set, a pre-existing `frank/frank.md` — a genuine
-/// collision with what promoting Frank would create. [withOrphanedFolder]
-/// seeds an *empty* `frank/` folder with no card inside — simulating the
-/// aftermath of a previous failed promotion (Review fix scenario) — which
-/// must NOT block a retry.
+/// A `characters/` category with one simple entity, `characters/<fileName>`
+/// (default `frank.md`; Story 5.6 also seeds `frank.ru.md` / `frank.en.md` /
+/// `media.ru.md`), titled `# Frank`. When [withExistingCard] is set, a
+/// pre-existing `frank/frank.md` exists — a genuine collision with what
+/// promoting Frank would create; [withExistingIndexCard] seeds
+/// `frank/index.md` instead, the loader's other card name (Story 5.6 AC3).
+/// [withOrphanedFolder] seeds an *empty* `frank/` folder with no card inside
+/// — simulating the aftermath of a previous failed promotion (Review fix
+/// scenario) — which must NOT block a retry.
 FakeRepoStorage _repo({
+  String fileName = 'frank.md',
   bool withExistingCard = false,
+  bool withExistingIndexCard = false,
   bool withOrphanedFolder = false,
   bool failMove = false,
 }) {
-  assert(!(withExistingCard && withOrphanedFolder));
+  assert(!(withExistingCard && withExistingIndexCard));
+  final hasExistingCard = withExistingCard || withExistingIndexCard;
+  assert(!(hasExistingCard && withOrphanedFolder));
+  final existingCardName = withExistingIndexCard ? 'index.md' : 'frank.md';
   return FakeRepoStorage(
     '/storage/emulated/0/repo',
     dirEntries: {
@@ -52,27 +60,38 @@ FakeRepoStorage _repo({
         RepoEntry(name: 'characters', path: 'characters', isDirectory: true),
       ],
       'characters': [
-        const RepoEntry(
-            name: 'frank.md', path: 'characters/frank.md', isDirectory: false),
-        if (withExistingCard || withOrphanedFolder)
+        RepoEntry(
+            name: fileName,
+            path: 'characters/$fileName',
+            isDirectory: false),
+        if (hasExistingCard || withOrphanedFolder)
           const RepoEntry(
               name: 'frank', path: 'characters/frank', isDirectory: true),
       ],
-      if (withExistingCard)
-        'characters/frank': const [
+      if (hasExistingCard)
+        'characters/frank': [
           RepoEntry(
-              name: 'frank.md',
-              path: 'characters/frank/frank.md',
+              name: existingCardName,
+              path: 'characters/frank/$existingCardName',
               isDirectory: false),
         ],
       if (withOrphanedFolder) 'characters/frank': const [],
     },
     fileContents: {
-      'characters/frank.md': '# Frank\n',
-      if (withExistingCard) 'characters/frank/frank.md': '# Existing Frank\n',
+      'characters/$fileName': '# Frank\n',
+      if (hasExistingCard)
+        'characters/frank/$existingCardName': '# Existing Frank\n',
     },
     failMove: failMove,
   );
+}
+
+/// Taps the (only) promote button, then confirms the dialog.
+Future<void> _promoteAndConfirm(WidgetTester tester) async {
+  await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('promote-entity-confirm')));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _pumpReady(WidgetTester tester, FakeRepoStorage storage) async {
@@ -414,6 +433,116 @@ void main() {
 
       expect(await storage.read('characters/frank/frank.md'), original);
       expect(storage.writeCalls, isEmpty);
+    });
+  });
+
+  group('Drop the language suffix on promotion (Story 5.6, FR26)', () {
+    for (final fileName in ['frank.ru.md', 'frank.en.md']) {
+      testWidgets(
+          'promoting $fileName drops the suffix from both the folder and the '
+          'card (AC1) — one move, no extra write', (tester) async {
+        final storage = _repo(fileName: fileName);
+        await _pumpReady(tester, storage);
+        await _navigateToCategory(tester, 'characters');
+
+        await _promoteAndConfirm(tester);
+
+        expect(storage.moveCalls, [
+          ('characters/$fileName', 'characters/frank/frank.md'),
+        ]);
+        expect(storage.ensureDirCalls, ['characters/frank']);
+        expect(await storage.exists('characters/$fileName'), isFalse);
+        expect(await storage.read('characters/frank/frank.md'), '# Frank\n');
+        expect(storage.writeCalls, isEmpty);
+      });
+    }
+
+    testWidgets(
+        'after promoting a suffixed card, the loader recognizes the new '
+        'folder: tapping the row opens the detail-tree outline (AC4)',
+        (tester) async {
+      final storage = _repo(fileName: 'frank.ru.md');
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await _promoteAndConfirm(tester);
+      await tester.tap(find.text('Frank'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EntityDetailPage), findsOneWidget);
+      expect(find.byType(EditorPage), findsNothing);
+    });
+
+    testWidgets(
+        'a suffixed card whose suffix-free target card already exists is '
+        'refused, never touching storage (AC3)', (tester) async {
+      final storage =
+          _repo(fileName: 'frank.ru.md', withExistingCard: true);
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await _promoteAndConfirm(tester);
+
+      expect(find.text('A folder with this name already exists.'),
+          findsOneWidget);
+      expect(storage.ensureDirCalls, isEmpty);
+      expect(storage.moveCalls, isEmpty);
+      expect(await storage.read('characters/frank.ru.md'), '# Frank\n');
+    });
+
+    testWidgets(
+        'an existing index.md card in the target folder is a collision too '
+        '(AC3) — index.md would win over the moved card', (tester) async {
+      final storage = _repo(withExistingIndexCard: true);
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await _promoteAndConfirm(tester);
+
+      expect(find.text('A folder with this name already exists.'),
+          findsOneWidget);
+      expect(storage.ensureDirCalls, isEmpty);
+      expect(storage.moveCalls, isEmpty);
+      expect(await storage.exists('characters/frank.md'), isTrue);
+    });
+
+    testWidgets(
+        'a card whose suffix-free folder name would be "media" is refused '
+        'before anything is created (AC8) — the walk skips media/ folders',
+        (tester) async {
+      final storage = _repo(fileName: 'media.ru.md');
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+      await tester.pumpAndSettle();
+
+      expect(
+          find.text('"media" is reserved and cannot be used as a folder name.'),
+          findsOneWidget);
+      expect(storage.ensureDirCalls, isEmpty);
+      expect(storage.moveCalls, isEmpty);
+      expect(await storage.read('characters/media.ru.md'), '# Frank\n');
+    });
+
+    testWidgets(
+        'a suffixed card with a relative image promotes with both the suffix '
+        'dropped and the image path rewritten (AC1 + Story 5.1)',
+        (tester) async {
+      const original = '# Frank\n\n![Frank](media/frank.jpg)\n';
+      final storage = _repo(fileName: 'frank.en.md');
+      await storage.writeAtomic('characters/frank.en.md', original);
+      storage.writeCalls.clear();
+      await _pumpReady(tester, storage);
+      await _navigateToCategory(tester, 'characters');
+
+      await _promoteAndConfirm(tester);
+
+      expect(storage.moveCalls, [
+        ('characters/frank.en.md', 'characters/frank/frank.md'),
+      ]);
+      expect(await storage.read('characters/frank/frank.md'),
+          '# Frank\n\n![Frank](../media/frank.jpg)\n');
     });
   });
 }

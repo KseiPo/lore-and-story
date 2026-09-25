@@ -150,6 +150,10 @@ a `server.js` route + a `<script>` tag — never an `import`.
   that file is the entity *card*; every other `.md` inside (recursively) is a
   **sub-entry**. A sub-entry's *group* is its subfolder path (`quests/`, …).
 - A folder without such an index file is just a (sub)category — the walk descends.
+- **Entity-folder names and their cards never carry a language suffix**
+  (2026-09-24): promotion turns `frank.md` *or* `frank.ru.md` into `frank/frank.md`.
+  A folder whose only card candidate is `frank.ru.md` is not an entity folder —
+  the walk treats it as a sub-category.
 - **`media/` folders are skipped by the walker** and served as static assets.
 - The entity card is **not** among its own `children[]` — it is not a sub-entry of
   itself (§3.2). Preserve this when touching the model.
