@@ -212,13 +212,14 @@ Rejected alternatives (don't re-litigate):
   - [x] 4.3 `npm test` from the repo root → 4/4.
   - [x] 4.4 Contract git-clean: `git status --porcelain lib/lore.js test/fixtures/ scripts/ apps/mobile/lib/lore/lore_loader.dart apps/mobile/lib/lore/lore_model.dart` → empty.
 
-- [ ] **Task 5: Device check — KseiPo, after installing the build** (AC: 1–4)
-  - [ ] 5.1 Long file, preview, scroll to the end → the last line is above the buttons.
-  - [ ] 5.2 Edit mode, keyboard hidden → the toolbar is above the buttons and every button responds.
-  - [ ] 5.3 Tap into the text → the toolbar sits flush on the keyboard, no gap.
-  - [ ] 5.4 RU/EN pair, both tabs; a file on the undetermined-language page.
-  - [ ] 5.5 Rotate to landscape → nothing is under the side bar.
-  - [ ] 5.6 Home screen (portrait) → "Change folder" is fully above the buttons.
+- [x] **Task 5: Device check — KseiPo, after installing the build** (AC: 1–4, 6)
+  - [x] 5.1 Long file, preview, scroll to the end → the last line is above the buttons.
+  - [x] 5.2 Edit mode, keyboard hidden → the toolbar is above the buttons and every button responds.
+  - [x] 5.3 Tap into the text → the toolbar sits flush on the keyboard, no gap.
+  - [x] 5.4 RU/EN pair, both tabs; a file on the undetermined-language page.
+  - [x] 5.5 Rotate to landscape → nothing is under the side bar.
+  - [x] 5.6 Home screen (portrait) → "Change folder" is fully above the buttons.
+  - Confirmed by KseiPo on 2026-10-02 on a Pixel 6 Pro (Android 17), release build `a1b2e47` installed over wireless adb: "everything works". This also closes the engine-side half of AC3 that the framework probes could not cover.
 
 - [x] **Task 6: Keep the Home screen's bottom buttons clear of the bar** (AC: 6; added after review round 2, option A chosen by KseiPo 2026-10-02)
   - [x] 6.1 `apps/mobile/lib/app/home_page.dart:368`: wrap the body `Padding` in
@@ -457,7 +458,7 @@ Probe gotcha, for the next layout probe: the whole preview is one tall paragraph
 - **Task 6 (Home screen, review round 2, option A):** `home_page.dart`'s body is now `SafeArea(top: false, child: Padding(24, ...))`, with a comment. No other line of that file changed. The probe failed before and passes after (see Debug Log); gates re-run green (`flutter analyze` clean, `flutter test` 834/834, `npm test` 4/4, contract git-clean).
   - The wrap also stops the padding-less `ListView` above the buttons from adding a bar-height of dead space at its own end.
   - Two pre-existing Home-screen items surfaced and are deferred: the FAB covers the right end of "Change folder", and the landscape overflow.
-- **Task 5 (device check) is open and belongs to KseiPo.** It needs the built APK on a real phone, which is the only place the engine side is verified: Android reporting `padding.bottom = 0` while the keyboard is up.
+- **Task 5 (device check) is done:** KseiPo verified the release build `a1b2e47` on a Pixel 6 Pro (Android 17) on 2026-10-02 and reported that everything works, including the keyboard case that only a real phone can prove (Android reporting `padding.bottom = 0` while the keyboard is up).
 
 ### File List
 
@@ -476,3 +477,4 @@ Probe gotcha, for the next layout probe: the whole preview is one tall paragraph
 - 2026-10-01: Code review (cross-model, Sonnet 5.5): 0 decision-needed, 1 patch (applied: the edge-to-edge rule in project-context.md reworded), 1 defer (landscape side insets on the `ListView` screens), 12 dismissed. Status → done; Task 5 (on-device check) is still open for KseiPo.
 - 2026-10-02: Review round 2 (Sonnet 5.5) found the Home screen's "Change folder" button partly under the bar; KseiPo chose option A. Task 6 added and done (`home_page.dart` body wrapped in `SafeArea(top: false)`), AC6 added, survey row / Non-goal / `epics.md` corrected. Status → in-progress while the five documentation patches from round 2 are still open.
 - 2026-10-02: Applied the five documentation patches from review round 2 (the `maintainBottomViewPadding` rationale, `persistentFooterButtons`, the deferral entry, the Stage list, the Task 3.1 note). All decision-needed and patch findings are resolved; Status → done. Task 5 (on-device check, now including the Home screen) is still open for KseiPo.
+- 2026-10-02: Task 5 (on-device check, including the Home screen) confirmed by KseiPo on a Pixel 6 Pro: "everything works". No open tasks remain; Status stays done.
