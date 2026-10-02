@@ -424,92 +424,103 @@ class FileEditorState extends State<FileEditor> with WidgetsBindingObserver {
           ),
         );
       case _LoadState.ready:
-        return Column(
-          children: [
-            if (_isConflictCopy)
-              Container(
-                key: const Key('editor-conflict-banner'),
-                width: double.infinity,
-                color: Theme.of(context).colorScheme.errorContainer,
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'This is a Syncthing conflict copy — not the original file. '
-                  'Resolve it with your syncer on the desktop.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
-            if (_lossyLoad)
-              Container(
-                width: double.infinity,
-                color: Theme.of(context).colorScheme.errorContainer,
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'This file is not valid UTF-8. It is shown best-effort and '
-                  'cannot be saved — saving would corrupt the original bytes.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
-            if (_previewing)
-              // Read-only rendered view of the CURRENT buffer (FR10). Display
-              // only — the buffer is untouched, so Save/dirty still apply.
-              Expanded(
-                child: MarkdownPreview(
-                  text: _controller.text,
-                  storage: widget.storage,
-                  filePath: widget.path,
-                  onWikilinkTap: _handleWikilinkTap,
-                ),
-              )
-            else ...[
-              Expanded(
-                child: Padding(
+        // The app is edge-to-edge (targetSdk 36; Android 15+ enforces it), so
+        // the body extends under the system navigation bar, and `Scaffold`
+        // leaves that bottom inset to its body. Without this, the preview's
+        // last lines and the toolbar sit under the bar (Story 5.8). One spot
+        // covers every host (single, paired and undetermined-language pages).
+        // With the keyboard up, `padding.bottom` collapses to 0, so no gap
+        // opens between the toolbar and the keyboard; the AppBar already
+        // consumes the top inset.
+        return SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              if (_isConflictCopy)
+                Container(
+                  key: const Key('editor-conflict-banner'),
+                  width: double.infinity,
+                  color: Theme.of(context).colorScheme.errorContainer,
                   padding: const EdgeInsets.all(12),
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    maxLines: null,
-                    expands: true,
-                    keyboardType: TextInputType.multiline,
-                    style: kMonospaceTextStyle,
-                    decoration: const InputDecoration(border: InputBorder.none),
+                  child: Text(
+                    'This is a Syncthing conflict copy — not the original file. '
+                    'Resolve it with your syncer on the desktop.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
                   ),
                 ),
-              ),
-              // `[[` autocomplete suggestion row (Story 3.2, FR19) — docked
-              // between the text and the toolbar, not a caret-positioned
-              // floating overlay (see the story's Context for why).
-              if (_activeQuery != null && _suggestions.isNotEmpty)
-                SizedBox(
-                  height: 44,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    children: [
-                      for (final entry in _suggestions)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                          child: ActionChip(
-                            // (Review fix) Keyed by id, not title — two
-                            // entities can share a title (this codebase
-                            // supports that, see CategoryEntitiesPage), and a
-                            // title-only key would make two chips
-                            // indistinguishable.
-                            key: Key('wikilink-suggestion-${entry.id}'),
-                            label: Text(entry.title),
-                            onPressed: () => _completeWikilink(entry),
+              if (_lossyLoad)
+                Container(
+                  width: double.infinity,
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'This file is not valid UTF-8. It is shown best-effort and '
+                    'cannot be saved — saving would corrupt the original bytes.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              if (_previewing)
+                // Read-only rendered view of the CURRENT buffer (FR10). Display
+                // only — the buffer is untouched, so Save/dirty still apply.
+                Expanded(
+                  child: MarkdownPreview(
+                    text: _controller.text,
+                    storage: widget.storage,
+                    filePath: widget.path,
+                    onWikilinkTap: _handleWikilinkTap,
+                  ),
+                )
+              else ...[
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      maxLines: null,
+                      expands: true,
+                      keyboardType: TextInputType.multiline,
+                      style: kMonospaceTextStyle,
+                      decoration: const InputDecoration(border: InputBorder.none),
+                    ),
+                  ),
+                ),
+                // `[[` autocomplete suggestion row (Story 3.2, FR19) — docked
+                // between the text and the toolbar, not a caret-positioned
+                // floating overlay (see the story's Context for why).
+                if (_activeQuery != null && _suggestions.isNotEmpty)
+                  SizedBox(
+                    height: 44,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      children: [
+                        for (final entry in _suggestions)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                            child: ActionChip(
+                              // (Review fix) Keyed by id, not title — two
+                              // entities can share a title (this codebase
+                              // supports that, see CategoryEntitiesPage), and a
+                              // title-only key would make two chips
+                              // indistinguishable.
+                              key: Key('wikilink-suggestion-${entry.id}'),
+                              label: Text(entry.title),
+                              onPressed: () => _completeWikilink(entry),
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              // Helper toolbar above the keyboard (FR8) — editing only.
-              EditorToolbar(controller: _controller),
+                // Helper toolbar above the keyboard (FR8) — editing only.
+                EditorToolbar(controller: _controller),
+              ],
             ],
-          ],
+          ),
         );
     }
   }

@@ -248,6 +248,19 @@ a `server.js` route + a `<script>` tag — never an `import`.
 - Run `npm test` after any change to `lib/lore.js` or the model shape; regenerate
   goldens with `npm run goldens` and review the diff.
 - Naming stays consistent with the terminology above across code and docs.
+- **Android edge-to-edge (targetSdk 36):** every screen draws under the system
+  navigation bar, which Flutter reports as `MediaQuery.padding.bottom`; `Scaffold`
+  leaves it to the body unless it has a `bottomNavigationBar` or
+  `persistentFooterButtons`. Bottom-anchored content must consume it — wrap the
+  layout in `SafeArea(top: false)`. A `ListView`/`GridView` with no `padding` adds
+  the inset itself, but only along its scroll axis (a vertical list does not inset
+  left/right). Anything else — `SingleChildScrollView` (with or without
+  `padding`), a plain `Column` — never does; that was the Story 5.8 bug, and the
+  Home screen's bottom buttons were a second instance.
+  `SafeArea.maintainBottomViewPadding` has no effect in a `Scaffold` body (the
+  `Scaffold` already removes the keyboard inset); a gap above the keyboard appears
+  only where it does not (`resizeToAvoidBottomInset: false`, or a `SafeArea`
+  above the `Scaffold`).
 
 **Testing emphasis (v0.1, deliberate):** Cover **business logic** well — the pure
 model/loader/matcher (pinned by golden fixtures), write/save correctness, and

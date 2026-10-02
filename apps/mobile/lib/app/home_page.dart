@@ -365,9 +365,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Center(child: _buildStage()),
+      // Edge-to-edge (targetSdk 36): the body extends under the system
+      // navigation bar and `Scaffold` leaves that inset to it, so the ready
+      // view's bottom buttons need this to stay clear of it (Story 5.8).
+      body: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(child: _buildStage()),
+        ),
       ),
       floatingActionButton: _stage == _Stage.ready
           ? FloatingActionButton(

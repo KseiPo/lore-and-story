@@ -208,6 +208,8 @@ give the retired italic `*Thought:*` monologue form its own accurate finding.
 extends FR26, reverses a Story 2.17 non-goal). 5.7 — translate dialogue
 emotions and conditional keywords (EN `— if … — else — … — end if —`), with
 the linter recognizing the English markers (extends FR18/FR21/FR23/FR30).
+5.8 — keep the read/edit screen clear of the Android navigation bar
+(edge-to-edge since targetSdk 36 hid the last lines and the toolbar under it; also the Home screen's bottom buttons).
 
 ---
 
@@ -777,6 +779,8 @@ give the retired italic `*Thought:*` monologue form its own accurate finding.
 extends FR26, reverses a Story 2.17 non-goal). 5.7 — translate dialogue
 emotions and conditional keywords (EN `— if … — else — … — end if —`), with
 the linter recognizing the English markers (extends FR18/FR21/FR23/FR30).
+5.8 — keep the read/edit screen clear of the Android navigation bar
+(edge-to-edge since targetSdk 36 hid the last lines and the toolbar under it; also the Home screen's bottom buttons).
 
 ### Story 5.1: Preserve image paths when promoting an entity to a folder
 
@@ -1042,3 +1046,22 @@ So that an English scene reads fully in English while keeping the authoring conv
 5. **Given** ARCHITECTURE.md §3.3, project-context.md and `docs/agent-writing-rules.md`, **When** this ships, **Then** they document the English keywords and the translated-emotion rule.
 
 **Notes:** Existing English files that still carry Russian markers (e.g. produced by the old prompt) are migrated by the author with find/replace regexes delivered with the story — no in-repo migration tooling (Story 2.15 precedent). An author-supplied `ai-prompts.md` `# Conventions` override still wins over the new defaults (unchanged Story 4.4 mechanism); an author who has one updates its text themselves. Runs in parallel with Story 5.5 (linter false positive on emphasized labels), which also edits `convention_matcher.dart` — different patterns, merge carefully.
+
+### Story 5.8: Keep the editor clear of the Android navigation bar
+
+As the author,
+I want the read/edit screen to stop above Android's on-screen navigation buttons,
+So that I can read the last lines of a file and reach every button of the editing toolbar.
+
+**Context (KseiPo, 2026-10-01):** the on-screen navigation buttons cover the bottom of the read/edit screen, so the last two lines can't be read. The app targets SDK 36 (Flutter 3.44's default), and Android 15+ forces such apps edge-to-edge — Android 16 removes the opt-out — so the window extends under the navigation bar. Flutter reports the bar as `MediaQuery.padding.bottom`, and `Scaffold` leaves it to the body. `FileEditor` never consumes it: the preview's `SingleChildScrollView` has an explicit padding, and the raw editor's `Column` ends with the toolbar at the physical bottom. The other screens use a padding-less `ListView` (fine in portrait) or an existing `SafeArea` — except the Home screen, whose bottom "Refresh" and "Change folder" buttons also sat partly under the bar (found in code review, fixed in this story).
+
+**Acceptance Criteria:**
+
+1. **Given** a file open in the preview on a device with an on-screen navigation bar, **When** I scroll to the end, **Then** the last line rests fully above the bar — on all three `FileEditor` hosts (single-file editor, both tabs of a RU/EN pair, the undetermined-language page).
+2. **Given** the raw editor with the keyboard hidden, **When** I look at the bottom of the screen, **Then** the helper toolbar (and the `[[` suggestion row) sits fully above the bar and every toolbar button is tappable.
+3. **Given** the keyboard is open, **When** the layout settles, **Then** the toolbar sits directly on top of the keyboard with no extra gap, as before. *(FR8)*
+4. **Given** landscape with the navigation bar on a side edge, **When** the editor or preview is shown, **Then** no content runs under that bar.
+5. **Given** this change, **When** the existing editor behaviors and other screens are used, **Then** nothing else changes (the Home screen's bottom buttons aside, AC6); the existing test suite passes unedited.
+6. **Given** the Home screen in its ready state on a device with an on-screen navigation bar (portrait), **When** I look at the bottom of the screen, **Then** the "Refresh" and "Change folder" buttons sit fully above the bar.
+
+**Notes:** Agreed fix (option A): wrap `FileEditor`'s ready-state `Column` in `SafeArea(top: false)` — one seam for all three hosts; the keyboard collapses `padding.bottom` to 0, so no gap opens above it. Rejected: true edge-to-edge (text scrolling behind the bar — two seams, and worse to read under 3-button navigation), the `windowOptOutEdgeToEdgeEnforcement` flag (disabled at targetSdk 36), and a global `SafeArea` in `MaterialApp.builder` (touches screens that are already correct). The rule goes into project-context.md so the next bottom-anchored screen doesn't repeat the bug. The Home screen's buttons were added to the scope after code review found them under the bar too: the same wrapper (`SafeArea(top: false)`) around `HomePage`'s body.
